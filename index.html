@@ -687,6 +687,18 @@ const store = (()=>{
   }catch(e){ return { get:k=>mem[k]??null, set:(k,v)=>{mem[k]=v}, ok:false }; }
 })();
 
+/* preset dropdown options for each League Rule (current value is preserved even if not listed) */
+const RULE_OPTIONS = {
+  "Playoff teams": ["2","4","6","8","10","12"],
+  "Playoff weeks": ["15, 16 & 17 (1 week per matchup)","14, 15, 16 & 17 (1 week per matchup)","15 & 16 (1 week per matchup)","16 & 17 (2-week championship)","17 only (1-week championship)"],
+  "Keepers": ["0 (none)","1 player","2 players","3 players","4 players"],
+  "Waivers": ["1 day, resets to inverse standings","2 days, resets to inverse standings","Continuous rolling waivers","FAAB (free-agent budget)","First come, first served"],
+  "Trade review": ["League vote, 2-day reject window","League vote, 1-day reject window","Commissioner approval","No review (instant)"],
+  "Trade deadline": ["None","Week 10","Week 11","Week 12","Week 13","Week 14"],
+  "Standings tiebreaker": ["Head-to-head record","Total points for","Division record","Coin flip"],
+  "Matchup tiebreaker": ["Kicker points","Bench points","Highest-scoring starter","Most total yards","Tie stands (no tiebreaker)"],
+  "Fractional / negative points": ["Yes / Yes","Yes / No","No / Yes","No / No"]
+};
 const SCORING_GROUPS = {
   "Offense": ["Passing yards (per yd)","Passing TD","Interception thrown","Sacked","400+ pass yds bonus","50+ yd pass TD bonus","Rushing attempt","Rushing yards (per yd)","Rushing TD","50+ yd rush TD bonus","100-199 rush yds bonus","200+ rush yds bonus","Reception","Receiving yards (per yd)","Receiving TD","50+ yd rec TD bonus","200+ rec yds bonus","Kick/punt return TD","Fumble recovered for TD","Fumble lost","2-pt conversion"],
   "Kicking": ["PAT made","PAT missed","FG 0-19","FG 20-29","FG 30-39","FG 40-49","FG 50+","FG missed 0-19","FG missed 20-29"],
@@ -2444,9 +2456,30 @@ function renderSettings(){
     Object.entries(SCORING_GROUPS).map(([t,keys])=>groupHTML(t,keys)).join('') + groupHTML('Other', other);
   // league rules
   const rulesEl = document.getElementById('rulesInputs');
-  if(rulesEl) rulesEl.innerHTML = Object.keys(S.rules||{}).map(k=>`
-    <div class="setrow"><label>${esc(k)}</label>
-      <input type="text" style="min-width:220px" value="${esc(S.rules[k])}" onchange="S.rules['${esc(k)}']=this.value;saveState()"></div>`).join('');
+  if(rulesEl) rulesEl.innerHTML = Object.keys(S.rules||{}).map((k,idx)=>{
+    const cur = S.rules[k];
+    const opts = RULE_OPTIONS[k];
+    const control = opts
+      ? `<select style="min-width:240px" onchange="setRule(${idx}, this.value)">${
+          opts.map(o=>`<option value="${esc(o)}"${o===cur?' selected':''}>${esc(o)}</option>`).join('') +
+          (cur && !opts.includes(cur) ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '') +
+          `<option value="__custom__">Custom…</option>`
+        }</select>`
+      : `<input type="text" style="min-width:240px" value="${esc(cur)}" onchange="setRule(${idx}, this.value)">`;
+    return `<div class="setrow"><label>${esc(k)}</label>${control}</div>`;
+  }).join('');
+}
+function setRule(idx, val){
+  const key = Object.keys(S.rules||{})[idx];
+  if(key==null) return;
+  if(val==='__custom__'){
+    const v = window.prompt(`${key}:`, S.rules[key]||'');
+    if(v===null){ renderSettings(); return; }   // cancelled — revert the select
+    S.rules[key] = v.trim();
+    saveState(); renderSettings(); return;
+  }
+  S.rules[key] = val;
+  saveState();
 }
 function renderTrades(){
   const list = document.getElementById('tradeList');
