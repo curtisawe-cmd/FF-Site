@@ -605,6 +605,8 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
       <label style="color:var(--chalk-dim)">Draft rounds</label>
       <input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()">
       <label style="color:var(--chalk-dim)"><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"> Keeper round</label>
+      <label style="color:var(--chalk-dim)" title="Total draft picks (including keeper) any one manager may hold. 0 = no limit. Usually set at or above the number of rounds.">Max picks / manager</label>
+      <input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()">
     </div>
   </div>
 
@@ -710,7 +712,7 @@ const DEFAULTS = {
     {name:"Jerry had a little Lamb", manager:""}
   ],
   roster: {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DEF:1, BN:8, IR:1},  /* 9 starters + 8 bench = 17 = keeper + 16 rounds; IR extra, no draft round */
-  draftCfg: { rounds:16, keeper:true },
+  draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -1414,6 +1416,14 @@ const N = () => S.teams.length;
 const KR = () => (S.draftCfg&&S.draftCfg.keeper) ? 1 : 0;
 function snakeRounds(){ return Math.max(1, +(S.draftCfg&&S.draftCfg.rounds)||16); }
 function totalRounds(){ return snakeRounds() + KR(); }
+function maxPicks(){ return Math.max(0, +(S.draftCfg&&S.draftCfg.maxPicks)||0); }
+/* total draft picks a team currently holds: base (one per round + keeper) adjusted by pick trades */
+function picksHeld(i){
+  const name = S.teams[i] ? S.teams[i].name : '';
+  let n = snakeRounds() + KR();
+  (S.pickTrades||[]).forEach(t=>{ if(t.from===name) n--; if(t.to===name) n++; });
+  return n;
+}
 function totalPicks(){ return totalRounds()*N(); }
 function teamForPick(idx){ // keeper pre-round is straight order; snake starts fresh after it
   if(KR() && idx < N()) return idx;
@@ -2401,6 +2411,7 @@ function renderSettings(){
   document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
   document.getElementById('setRounds').value = snakeRounds();
   document.getElementById('setKeeper').checked = !!KR();
+  document.getElementById('setMaxPicks').value = maxPicks() || '';
   // master manager roster
   renderManagers();
   // teams
@@ -2439,24 +2450,41 @@ function renderSettings(){
 }
 function renderTrades(){
   const list = document.getElementById('tradeList');
-  list.innerHTML = (S.pickTrades||[]).map((t,i)=>`
+  const cap = maxPicks();
+  let tally = '';
+  if(cap){
+    const over = S.teams.map((t,i)=>({name:t.name, n:picksHeld(i)})).filter(x=>x.n>cap);
+    tally = `<div class="notice" style="margin:0 0 12px">Pick limit: <b>${cap}</b> per manager. ` +
+      (over.length
+        ? `<span style="color:var(--danger)">Over the limit: ${over.map(o=>`${esc(o.name)} (${o.n})`).join(', ')}</span>`
+        : `Every manager is within the limit.`) + `</div>`;
+  }
+  const trades = (S.pickTrades||[]).map((t,i)=>`
     <div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
       <span style="font-family:'IBM Plex Mono',monospace;min-width:70px">Round ${t.round}</span>
       <span>${esc(t.from)} <span style="color:var(--chalk-dim)">→</span> ${esc(t.to)}</span>
       <span class="spacer"></span>
       <button class="btn danger" style="padding:3px 10px;font-size:13px" onclick="S.pickTrades.splice(${i},1);saveState();renderTrades();refreshDraftUI()">Remove</button>
     </div>`).join('') || `<p style="color:var(--chalk-dim)">No traded picks.</p>`;
+  list.innerHTML = tally + trades;
   const rounds = snakeRounds();
   document.getElementById('trRound').innerHTML = Array.from({length:rounds},(_,i)=>`<option value="${i+1}">Round ${i+1}</option>`).join('');
-  const opts = S.teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
-  document.getElementById('trFrom').innerHTML = opts;
-  document.getElementById('trTo').innerHTML = opts;
+  document.getElementById('trFrom').innerHTML = S.teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+  document.getElementById('trTo').innerHTML = S.teams.map((t,i)=>{
+    const full = cap && picksHeld(i) >= cap;
+    return `<option value="${esc(t.name)}"${full?' disabled':''}>${esc(t.name)}${full?' — full':''}</option>`;
+  }).join('');
 }
 function addTrade(){
   const round = +document.getElementById('trRound').value;
   const from = document.getElementById('trFrom').value, to = document.getElementById('trTo').value;
   if(from===to){ toast("A team can't trade a pick to itself."); return; }
   if((S.pickTrades||[]).some(t=>+t.round===round && t.from===from)){ toast(`${from} already traded their Round ${round} pick.`); return; }
+  const cap = maxPicks();
+  if(cap){
+    const ti = S.teams.findIndex(t=>t.name===to);
+    if(ti>=0 && picksHeld(ti) + 1 > cap){ toast(`${to} is at the ${cap}-pick limit — can't take on more.`); return; }
+  }
   S.pickTrades = S.pickTrades||[];
   S.pickTrades.push({round, from, to});
   saveState(); renderTrades(); refreshDraftUI();
@@ -2467,6 +2495,7 @@ function saveFromInputs(){
   S.draftCfg = S.draftCfg||{};
   S.draftCfg.rounds = Math.max(1, +document.getElementById('setRounds').value || 16);
   S.draftCfg.keeper = document.getElementById('setKeeper').checked;
+  S.draftCfg.maxPicks = Math.max(0, +document.getElementById('setMaxPicks').value || 0);
   saveState(); renderHome(); renderTrades(); refreshDraftUI();
 }
 function moveTeam(i,d){
