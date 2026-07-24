@@ -2194,6 +2194,31 @@ function seasonStandings(){
   });
   return rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
 }
+function standingsRowHTML(r, rank, leader){
+  return `<tr${leader?' class="top"':''}><td style="font-family:'IBM Plex Mono',monospace">${rank}</td>`+
+    `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
+    `<td style="text-align:center;font-family:'IBM Plex Mono',monospace">${r.w}-${r.l}-${r.t}</td>`+
+    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pf.toFixed(2)}</td>`+
+    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pa.toFixed(2)}</td></tr>`;
+}
+/* standings: one table when no divisions, or grouped per division (sorted within each) */
+function standingsHTML(rows, anyScores){
+  const header = `<tr><th style="width:36px">#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>`;
+  const divs = +S.divisions||0;
+  if(divs>0){
+    let out = '';
+    for(let d=1; d<=divs; d++){
+      const drows = rows.filter(r=>(+S.teams[r.i].div||1)===d);
+      out += `<div class="eyebrow" style="margin:16px 0 6px">Division ${d}</div>`+
+        `<table class="plain">${header}${
+          drows.length ? drows.map((r,idx)=>standingsRowHTML(r, idx+1, anyScores && idx===0)).join('')
+                       : `<tr><td colspan="5" style="color:var(--chalk-dim)">No teams assigned.</td></tr>`
+        }</table>`;
+    }
+    return out;
+  }
+  return `<table class="plain">${header}${rows.map((r,i)=>standingsRowHTML(r, i+1, false)).join('')}</table>`;
+}
 function renderMatchups(){
   const el = document.getElementById('matchupsView');
   if(!S.season){
@@ -2246,11 +2271,8 @@ function renderMatchups(){
     </div>
     <div class="card">
       <h2>2026 Standings</h2>
-      <p class="sub" style="margin-bottom:10px">${anyScores? 'Sorted by wins, then points for. Your official tiebreaker is head-to-head \u2014 the commissioner has final say on ties.' : 'Fills in as weekly scores get entered.'}</p>
-      <table class="plain">
-        <tr><th style="width:36px">#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>
-        ${rows.map((r,i)=>`<tr><td style="font-family:'IBM Plex Mono',monospace">${i+1}</td><td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(r.manager)}</span>`:''}</span></span></td><td style="text-align:center;font-family:'IBM Plex Mono',monospace">${r.w}-${r.l}-${r.t}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pf.toFixed(2)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pa.toFixed(2)}</td></tr>`).join('')}
-      </table>
+      <p class="sub" style="margin-bottom:10px">${(+S.divisions>0?'Grouped by division. ':'') + (anyScores? 'Sorted by wins, then points for. Official tiebreaker is head-to-head \u2014 commissioner has final say on ties.' : 'Fills in as weekly scores get entered.')}</p>
+      ${standingsHTML(rows, anyScores)}
     </div>`;
 }
 
