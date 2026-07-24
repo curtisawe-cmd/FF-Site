@@ -331,6 +331,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .mgr-add input{flex:1;max-width:300px}
 .team-card .team-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .teamcard .divsel{flex:0 0 auto;max-width:82px;min-width:72px}
+.teamcard .tnamesel{flex:1 1 150px;min-width:120px}
 .divtag{display:inline-block;vertical-align:middle;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--turf);background:var(--turf-wash);border:1px solid var(--turf);border-radius:20px;padding:1px 9px;margin-left:6px}
 .team-card .team-head .sub{margin:0}
 .statpill{
@@ -2451,7 +2452,7 @@ function renderSettings(){
         ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
         <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
       </label>${t.logo?`<button class="logo-rm" title="Remove logo" onclick="clearTeamLogo(${i})">✕</button>`:''}
-      <input type="text" value="${esc(t.name)}" placeholder="Team name" onchange="S.teams[${i}].name=this.value;saveState();renderHome()">
+      <select class="tnamesel" title="Team name" onchange="setTeamName(${i}, this.value)">${teamNameOptions(t.name)}</select>
       ${(+S.divisions>0) ? `<select class="divsel" title="Division" onchange="S.teams[${i}].div=+this.value;saveState();renderHome();if(window.currentView==='teams')renderTeams()">${Array.from({length:+S.divisions},(_,d)=>`<option value="${d+1}"${(+t.div||1)===d+1?' selected':''}>Div ${d+1}</option>`).join('')}</select>` : ''}
       <select style="max-width:150px" title="Assign manager (each person once)" onchange="setTeamManager(${i}, this.value)">${managerOptions(t.manager)}</select>
       <label style="color:${t.auto?'var(--turf)':'var(--chalk-dim)'};font-size:12px;white-space:nowrap"><input type="checkbox" ${t.auto?'checked':''} onchange="S.teams[${i}].auto=this.checked;saveState();renderSettings();refreshDraftUI();maybeAutoFlagged()" style="width:auto"> auto</label>
@@ -2627,6 +2628,43 @@ function ensureManagers(){
   if(!Array.isArray(S.managers)) S.managers = [];
   if(!S.managers.length){ S.managers = allManagerNames(); saveState(); }
 }
+/* every team name ever used (history archive) + current names, for the team-name dropdown */
+function allTeamNames(){
+  const set = new Map();  /* lower -> display */
+  const add = n => { n=String(n||'').trim(); if(n) set.set(n.toLowerCase(), n); };
+  Object.values((S.history&&S.history.managers)||{}).forEach(yr=>Object.keys(yr).forEach(add));
+  (S.teams||[]).forEach(t=>add(t.name));
+  return [...set.values()].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+/* the team name a given manager most recently owned (from history), for the auto-fill link */
+function latestTeamNameFor(mgr){
+  mgr = String(mgr||'').trim().toLowerCase(); if(!mgr) return '';
+  const mgrs = (S.history&&S.history.managers)||{};
+  const years = Object.keys(mgrs).map(Number).sort((a,b)=>b-a);   /* newest first */
+  for(const y of years){
+    const yr = mgrs[String(y)];
+    for(const teamName in yr){ if(String(yr[teamName]).trim().toLowerCase()===mgr) return teamName; }
+  }
+  return '';
+}
+function teamNameOptions(cur){
+  cur = String(cur||'');
+  const names = allTeamNames();
+  let html = `<option value=""${cur?'':' selected'}>— team name —</option>`;
+  html += names.map(n=>`<option value="${esc(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('');
+  if(cur && !names.includes(cur)) html += `<option value="${esc(cur)}" selected>${esc(cur)}</option>`;
+  html += `<option value="__custom__">Custom…</option>`;
+  return html;
+}
+function setTeamName(i, val){
+  if(val==='__custom__'){
+    const v = window.prompt('Team name:', S.teams[i].name||'');
+    if(v===null){ renderSettings(); return; }
+    val = v.trim();
+  }
+  S.teams[i].name = val;
+  saveState(); renderSettings(); renderHome();
+}
 /* ---- avatar helpers (monogram chips, photo-inspired) ---- */
 function mgrColor(name){
   const pal = ['#00338d','#c60c30','#1fa463','#2f7ff0','#9b55e6','#f0891d','#e23b4e','#0d7d8c','#7a4fd0','#0a7d5a'];
@@ -2743,6 +2781,8 @@ function setTeamManager(i, val){
     renderSettings(); return;
   }
   S.teams[i].manager = val;
+  // link: drop in this manager's most-recent team name from history (still editable below)
+  if(val){ const suggested = latestTeamNameFor(val); if(suggested) S.teams[i].name = suggested; }
   saveState(); renderSettings(); renderHome();
 }
 
