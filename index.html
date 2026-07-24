@@ -2492,7 +2492,7 @@ function renderSettings(){
     if(!present.length) return '';
     return `<div class="eyebrow" style="grid-column:1/-1;margin-top:8px">${esc(title)}</div>` + present.map(k=>`
       <div class="setrow"><label>${esc(k)}</label>
-        <input type="number" step="0.01" value="${S.scoring[k]}" onchange="S.scoring['${esc(k)}']=+this.value;saveState()"></div>`).join('');
+        <input type="number" step="0.1" value="${S.scoring[k]}" onchange="S.scoring['${esc(k)}']=+this.value;saveState()"></div>`).join('');
   };
   document.getElementById('scoringInputs').innerHTML =
     Object.entries(SCORING_GROUPS).map(([t,keys])=>groupHTML(t,keys)).join('') + groupHTML('Other', other);
