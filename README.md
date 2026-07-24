@@ -14,7 +14,6 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin marketplace.
 
 | Plugin | Description | Source |
 | --- | --- | --- |
-| `hello-world` | Example plugin with a single `/hello` command. Replace with your own. | local (`./plugins/hello-world`) |
 | `taste-skill` | Frontend design taste skills (brutalist, minimalist, soft, redesign, stitch, and more) by [leonxlnx](https://github.com/Leonxlnx/taste-skill). | git (`https://github.com/Leonxlnx/taste-skill.git`) |
 
 ## Install a plugin
@@ -27,5 +26,4 @@ A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin marketplace.
 
 ```
 .claude-plugin/marketplace.json   # marketplace manifest
-plugins/hello-world/              # local example plugin
 ```
