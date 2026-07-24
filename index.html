@@ -1,0 +1,2680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bitch Boy League — Fantasy Football</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Graduate&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script>/* set theme before paint to avoid flash */try{var _t=localStorage.getItem('ffl_theme')||((window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light');document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
+<style>
+:root{
+  /* ============ BUFFALO BILLS — DAY GAME (light) ============ */
+  --bg:#e9eff8;          /* cool bright sky */
+  --bg-2:#dbe6f4;
+  --panel:#ffffff;
+  --panel-2:#e9f1fb;
+  --line:#ccdaee;
+  --line-strong:#adc2e0;
+  --chalk:#0a1b3d;       /* Bills navy ink (name kept for compatibility) */
+  --chalk-dim:#586a88;
+
+  /* primary = Bills Royal Blue (interactive: buttons, nav, links, focus) */
+  --turf:#00338d;        /* royal blue (name kept for compatibility) */
+  --turf-bright:#2f6bd8; /* lighter royal: underlines, eyebrows, glow */
+  --turf-deep:#012169;   /* hover / pressed (darker navy) */
+  --turf-wash:rgba(0,51,141,.09);
+
+  /* charge = Bills Red (energy: live clock, alerts, the top stripe) */
+  --charge:#c60c30;
+  --charge-wash:rgba(198,12,48,.10);
+
+  /* neon (electric-blue tunnel glow — subtle on light, electric on dark) */
+  --neon:#2f6bd8;
+  --neon-soft:rgba(47,107,216,.40);
+
+  --gold:#e8a200;        /* trophies & champions only */
+
+  /* position encodings */
+  --qb:#e23b4e; --rb:#1fa463; --wr:#2f7ff0; --te:#f0891d; --k:#9b55e6; --def:#8a6a44;
+  --danger:#c60c30;
+
+  /* locked radius scale: cards 14 · controls 10 · chips 8 */
+  --r-card:14px; --r-ctrl:10px; --r-chip:8px;
+  --radius:14px;         /* compat */
+
+  /* theme-aware surfaces */
+  --panel-grad-a:#ffffff; --panel-grad-b:#e8f0fb;
+  --hero-grad-a:#ffffff;  --hero-grad-b:#d7e6f8;
+  --board-bg:#d8e6f6;
+  --clock-bg:#0a1b3d;     /* navy scoreboard */
+  --yard:rgba(10,27,61,.06);
+
+  /* tinted shadows (carry the navy hue, never pure black) */
+  --sh-1:0 1px 2px rgba(10,27,61,.06), 0 2px 8px rgba(10,27,61,.07);
+  --sh-2:0 8px 24px rgba(10,27,61,.14);
+  --sh-pop:0 8px 22px rgba(0,51,141,.26);
+}
+
+:root[data-theme="dark"]{
+  /* ============ BUFFALO BILLS — UNDER THE LIGHTS (dark) ============ */
+  --bg:#04122b;          /* deep navy night */
+  --bg-2:#071a38;
+  --panel:#0b2247;
+  --panel-2:#123063;
+  --line:#1c3a6e;
+  --line-strong:#2c5090;
+  --chalk:#eaf1ff;       /* light text */
+  --chalk-dim:#9fb4d6;
+
+  --turf:#3d7bff;        /* brightened royal so it reads on navy */
+  --turf-bright:#77a4ff;
+  --turf-deep:#5c92ff;   /* hover: lighter (bg is dark) */
+  --turf-wash:rgba(61,123,255,.16);
+
+  --charge:#ff4a5f;      /* Bills red, brightened for night */
+  --charge-wash:rgba(255,74,95,.16);
+
+  /* neon really lights up on the dark "under the lights" theme */
+  --neon:#5aa0ff;
+  --neon-soft:rgba(90,160,255,.60);
+
+  --gold:#ffca3a;
+
+  --qb:#f0596a; --rb:#2fc482; --wr:#5b9bff; --te:#ff9f3a; --k:#b47bff; --def:#b08a5a;
+  --danger:#ff5a5a;
+
+  --panel-grad-a:#0c2650; --panel-grad-b:#071a38;
+  --hero-grad-a:#0e2c5c;  --hero-grad-b:#051530;
+  --board-bg:#061c3d;
+  --clock-bg:#010c1f;
+  --yard:rgba(120,160,230,.08);
+
+  --sh-1:0 1px 2px rgba(0,0,0,.42), 0 2px 10px rgba(0,0,0,.34);
+  --sh-2:0 10px 30px rgba(0,0,0,.5);
+  --sh-pop:0 8px 22px rgba(61,123,255,.42);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--chalk);
+  font-family:'Barlow',system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  scroll-behavior:smooth;
+  transition:background-color .25s ease,color .25s ease;
+  /* yard lines + soft ambient wash from the top */
+  background-image:
+    radial-gradient(1200px 460px at 82% -8%, var(--turf-wash), transparent 70%),
+    repeating-linear-gradient(to right, transparent 0 79px, var(--yard) 79px 80px);
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:14px;color:var(--chalk);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--r-ctrl);padding:8px 11px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
+input:focus,select:focus{border-color:var(--turf);box-shadow:0 0 0 3px var(--turf-wash)}
+input[type=number]{width:72px;font-family:'IBM Plex Mono',monospace}
+
+/* ---------- shell ---------- */
+header.top{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:14px 22px;border-bottom:1px solid var(--line);border-top:4px solid var(--charge);
+  background:linear-gradient(180deg,var(--panel-grad-a),var(--panel-grad-b));
+  box-shadow:var(--sh-1);position:sticky;top:0;z-index:20;
+}
+.wordmark{font-family:'Anton',sans-serif;font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--chalk);line-height:1}
+.wordmark .yr{color:var(--charge);-webkit-text-stroke:0}
+nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+nav.tabs button{
+  font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
+  padding:8px 15px;border-radius:var(--r-chip);color:var(--chalk-dim);transition:color .15s ease,background .15s ease;
+}
+nav.tabs button:hover{color:var(--chalk);background:var(--panel-2)}
+nav.tabs button.active{background:var(--turf-wash);color:var(--turf-deep);box-shadow:inset 0 -3px 0 var(--turf)}
+main{padding:14px 16px;max-width:1800px;margin:0 auto}
+section.view{display:none}
+section.view.active{display:block}
+h1{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(34px,4.4vw,46px);letter-spacing:.005em;text-transform:uppercase;line-height:.98;margin-bottom:6px}
+h2{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;letter-spacing:.04em;text-transform:uppercase;color:var(--chalk);margin:0 0 12px}
+.sub{color:var(--chalk-dim);margin-bottom:20px;max-width:70ch;text-wrap:pretty}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--turf);margin-bottom:8px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);padding:20px;box-shadow:var(--sh-1)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.btn{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
+  background:var(--turf);color:#fff;padding:10px 20px;border-radius:var(--r-ctrl);
+  box-shadow:var(--sh-pop);transition:background .15s ease,transform .08s ease,box-shadow .15s ease;
+}
+.btn:hover{background:var(--turf-deep);transform:translateY(-1px);box-shadow:var(--sh-pop)}
+.btn:active{transform:translateY(1px) scale(.985);box-shadow:var(--sh-1)}
+.btn.ghost{background:var(--panel);border:1px solid var(--line-strong);color:var(--chalk-dim);box-shadow:var(--sh-1)}
+.btn.ghost:hover{color:var(--chalk);border-color:var(--chalk-dim);background:var(--panel-2)}
+.btn.danger{background:var(--panel);border:1px solid var(--danger);color:var(--danger);box-shadow:var(--sh-1)}
+.btn.danger:hover{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;transform:none}
+.btn:focus-visible,nav.tabs button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--turf-wash),var(--sh-1)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+table.plain{width:100%;border-collapse:collapse}
+table.plain th{font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:13px;color:var(--chalk-dim);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.plain th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+table.plain th.sortable:hover{color:var(--chalk)}
+table.plain th.sortable.on{color:var(--turf)}
+table.plain tr.top td{background:var(--turf-wash)}
+table.plain tbody tr:hover td{background:var(--panel-2)}
+table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
+
+/* ---------- position colors ---------- */
+.pos-QB{--pc:var(--qb)} .pos-RB{--pc:var(--rb)} .pos-WR{--pc:var(--wr)}
+.pos-TE{--pc:var(--te)} .pos-K{--pc:var(--k)} .pos-DEF{--pc:var(--def)}
+.postag{
+  display:inline-block;min-width:34px;text-align:center;
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:.05em;
+  background:var(--pc,#555);color:#0e1114;border-radius:4px;padding:1px 5px;
+}
+
+/* ---------- draft room ---------- */
+.draftwrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px}
+@media(max-width:1020px){.draftwrap{grid-template-columns:1fr}}
+.clockbar{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px 18px;margin-bottom:16px;
+}
+.clock{
+  font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:36px;letter-spacing:.02em;font-variant-numeric:tabular-nums;
+  color:#fff;min-width:104px;text-align:center;
+  background:var(--clock-bg);border:1px solid var(--clock-bg);border-radius:var(--r-ctrl);padding:3px 12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),var(--sh-1);
+}
+.clock.warn{color:var(--gold)}
+.clock.crit{color:var(--charge);animation:blink 1s steps(2,start) infinite}
+@keyframes blink{50%{opacity:.35}}
+.onclock{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.onclock small{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;color:var(--turf-bright);font-weight:500}
+
+/* the wall board — signature element */
+.boardscroll{border:1px solid var(--line);border-radius:var(--radius);background:var(--board-bg);padding:5px}
+.board{display:grid;gap:2px}
+.board .bhead{
+  font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:clamp(10px,1.15vw,15px);letter-spacing:.03em;text-transform:uppercase;
+  color:var(--chalk-dim);text-align:center;padding:3px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+}
+.board .rnd{
+  font-family:'IBM Plex Mono',monospace;font-size:clamp(8px,0.8vw,11px);color:var(--chalk-dim);
+  display:flex;align-items:center;justify-content:center;
+}
+.slot{
+  height:clamp(42px,5.8vw,60px);border-radius:4px;background:var(--panel);border:1px dashed var(--line);
+  position:relative;overflow:hidden;min-width:0;
+}
+.slot.next{border:1px solid var(--turf-bright);box-shadow:0 0 0 1px var(--turf-bright)}
+.sticker{
+  position:absolute;inset:0;border-radius:5px;
+  background:var(--pc,#555);color:#0e1114;
+  padding:2px 6px;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:1px;
+  transform:rotate(-.6deg);
+  animation:slap .18s ease-out;
+  box-shadow:0 2px 5px rgba(30,50,70,.28);
+}
+.sticker:nth-child(odd){transform:rotate(.6deg)}
+@keyframes slap{from{transform:scale(1.25) rotate(-3deg);opacity:0}to{transform:scale(1) rotate(-.6deg);opacity:1}}
+.sticker .nm{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(12px,1.4vw,18px);line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sticker .mt{font-family:'IBM Plex Mono',monospace;font-size:clamp(8px,0.85vw,12px);opacity:.75;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:980px){.sticker .mt{display:none}}
+@media (prefers-reduced-motion: reduce){.sticker{animation:none}}
+
+/* player pool panel */
+.pool{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;max-height:680px}
+.pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
+.posfilters{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+.posfilters button{
+  font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:13px;letter-spacing:.04em;
+  padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--chalk-dim);
+}
+.posfilters button.on{background:var(--panel-2);color:var(--chalk);border-color:var(--chalk-dim)}
+.poollist{overflow-y:auto;flex:1}
+.prow{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line)}
+.prow:hover{background:var(--turf-wash)}
+.prow .pname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.prow .pmeta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--chalk-dim)}
+.prow .pick{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;
+  background:var(--turf);color:#fff;border-radius:var(--r-chip);padding:4px 12px;transition:background .12s ease,transform .08s ease;
+}
+.prow .pick:hover{background:var(--turf-deep);transform:translateY(-1px)}
+.prow .pick:active{transform:translateY(1px) scale(.97)}
+.roster-mini{padding:10px 12px;border-top:1px solid var(--line);font-size:13px;max-height:180px;overflow-y:auto}
+.roster-mini .rr{display:flex;gap:8px;padding:2px 0;color:var(--chalk-dim)}
+.roster-mini .rr b{color:var(--chalk);font-weight:500}
+
+/* settings */
+.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 18px}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}
+.setrow label{color:var(--chalk-dim);font-size:14px}
+.teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.teamcard{display:flex;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.teamcard .num{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--turf-bright);min-width:20px}
+.teamcard input{flex:1;min-width:0}
+
+/* playoff bracket */
+.bracket{display:flex;gap:26px;align-items:stretch;overflow-x:auto;padding:4px 2px}
+.bround{display:flex;flex-direction:column;flex:1;min-width:190px}
+.bround .rlabel{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--chalk-dim);text-align:center;margin-bottom:8px}
+.bpairs{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:14px}
+.bpair{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:14px;position:relative}
+.bround:not(:last-child) .bpair.linked::after{content:'';position:absolute;right:-14px;top:25%;height:50%;width:2px;background:var(--line)}
+.bgame{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;position:relative}
+.bround:not(:last-child) .bpair.linked .bgame::after{content:'';position:absolute;right:-13px;top:50%;width:13px;height:2px;background:var(--line)}
+.bround:not(:first-child) .bgame::before{content:'';position:absolute;left:-14px;top:50%;width:14px;height:2px;background:var(--line)}
+.bgame .brow{display:flex;justify-content:space-between;gap:10px;padding:7px 10px;color:var(--chalk-dim)}
+.bgame .brow + .brow{border-top:1px solid var(--line)}
+.bgame .brow.win{color:var(--chalk);font-weight:700;background:var(--turf-wash);box-shadow:inset 3px 0 0 var(--turf)}
+.bgame .brow .bseed{color:var(--chalk-dim);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:400;margin-right:5px}
+.bgame .brow .bpts{font-family:'IBM Plex Mono',monospace;font-weight:500}
+.consgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.consgrid .bgame .clabel{font-size:11px;color:var(--chalk-dim);padding:5px 10px 0;font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+
+/* home */
+.hero{
+  position:relative;overflow:hidden;
+  border:1px solid var(--line);border-radius:var(--r-card);
+  background:
+    radial-gradient(900px 380px at 88% -20%, var(--turf-wash), transparent 65%),
+    repeating-linear-gradient(to bottom, transparent 0 47px, var(--yard) 47px 48px),
+    linear-gradient(160deg,var(--hero-grad-a),var(--hero-grad-b));
+  padding:44px 34px;margin-bottom:22px;box-shadow:var(--sh-2);
+}
+.hero::after{content:'';position:absolute;top:0;bottom:0;right:0;width:12px;background:var(--charge)}
+.hero .big{font-family:'Anton',sans-serif;font-weight:400;font-size:clamp(38px,7vw,80px);line-height:.9;letter-spacing:.005em;text-transform:uppercase;text-wrap:balance}
+.phase{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px dashed var(--line)}
+.phase:last-child{border-bottom:none}
+.phase .tag{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;min-width:86px;color:var(--turf-bright)}
+.phase.dim .tag{color:var(--chalk-dim)}
+.phase.dim{color:var(--chalk-dim)}
+.notice{background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--turf-bright);border-radius:6px;padding:10px 14px;margin:14px 0;color:var(--chalk-dim);font-size:14px}
+.toast{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+  background:var(--panel);color:var(--chalk);border:1px solid var(--turf);border-left:4px solid var(--charge);border-radius:var(--r-ctrl);
+  padding:11px 20px;font-size:14px;font-weight:500;z-index:50;display:none;box-shadow:var(--sh-2);
+}
+
+/* ---------- avatars + manager master list (photo-inspired) ---------- */
+.avatar{
+  flex:none;display:inline-grid;place-items:center;border-radius:50%;color:#fff;
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.02em;line-height:1;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.20), 0 2px 7px rgba(10,27,61,.30);
+}
+.managers-card{position:relative;overflow:hidden}
+.managers-card::before{
+  content:'ROSTER';position:absolute;right:-6px;top:-18px;pointer-events:none;
+  font-family:'Anton',sans-serif;font-size:clamp(64px,12vw,150px);line-height:1;
+  color:var(--turf);opacity:.05;letter-spacing:.02em;z-index:0;
+}
+.managers-card > *{position:relative;z-index:1}
+.mgr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.mgr{
+  display:flex;align-items:center;gap:10px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--r-ctrl);padding:7px 8px 7px 9px;
+  transition:border-color .15s ease,box-shadow .15s ease,transform .1s ease;
+}
+.mgr:hover{border-color:var(--line-strong);box-shadow:var(--sh-1);transform:translateY(-1px)}
+.mgr[data-on] .avatar{box-shadow:inset 0 0 0 2px rgba(255,255,255,.22), 0 0 0 2px var(--turf), 0 2px 7px rgba(10,27,61,.3)}
+.mgr input{flex:1;min-width:0;background:transparent;border:1px solid transparent;padding:5px 7px;font-weight:600}
+.mgr input:hover{border-color:var(--line-strong);background:var(--panel)}
+.mgr input:focus{border-color:var(--turf);background:var(--panel);box-shadow:0 0 0 3px var(--turf-wash)}
+.mgr .mgr-rm{padding:4px 9px;font-size:12px;line-height:1;border-radius:var(--r-chip);box-shadow:none}
+.mgr-add{display:flex;gap:8px;align-items:center;margin-top:14px}
+.mgr-add input{flex:1;max-width:300px}
+.team-card .team-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.team-card .team-head .sub{margin:0}
+.statpill{
+  display:inline-flex;align-items:center;justify-content:center;min-width:46px;padding:2px 11px;
+  border-radius:999px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;
+  color:#06210f;background:var(--rb);
+}
+.statpill.hot{background:var(--charge);color:#fff}
+
+/* team logos */
+.team-logo{border-radius:9px;object-fit:cover;flex:none;box-shadow:var(--sh-1);background:var(--panel-2)}
+.team-logo-up{
+  position:relative;flex:none;width:40px;height:40px;border-radius:9px;overflow:hidden;
+  border:1px dashed var(--line-strong);background:var(--panel);display:grid;place-items:center;cursor:pointer;
+  transition:border-color .15s ease}
+.team-logo-up:hover{border-color:var(--turf)}
+.team-logo-up img{width:100%;height:100%;object-fit:cover}
+.team-logo-up .ph{font:700 9px/1 'Barlow Condensed',sans-serif;letter-spacing:.06em;color:var(--chalk-dim)}
+.team-logo-up input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.logo-rm{flex:none;width:18px;height:18px;margin-left:-6px;align-self:flex-start;border-radius:50%;
+  background:var(--danger);color:#fff;font-size:10px;line-height:1;display:grid;place-items:center;box-shadow:var(--sh-1)}
+.logo-rm:hover{filter:brightness(1.1)}
+
+/* matchup rows */
+.mu-team{display:flex;align-items:center;gap:9px;flex:1;min-width:0}
+.mu-team.r{flex-direction:row-reverse;text-align:right}
+.mu-team.win .mu-name{color:var(--turf)}
+.mu-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wk-date{display:flex;flex-direction:column;line-height:1.15;margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--chalk-dim)}
+@media(max-width:620px){.wk-date{display:none}}
+
+/* glassy cards + ambient glow — leans into the dark "under the lights" look */
+:root[data-theme="dark"] .card{
+  background:linear-gradient(180deg, rgba(122,162,247,.06), rgba(122,162,247,0) 130px), var(--panel);
+}
+:root[data-theme="dark"] .hero{box-shadow:var(--sh-2), inset 0 0 120px -40px rgba(61,123,255,.55)}
+:root[data-theme="dark"] .managers-card::before{color:var(--turf-bright);opacity:.09}
+:root[data-theme="dark"] .avatar{box-shadow:inset 0 0 0 2px rgba(255,255,255,.16), 0 3px 12px rgba(0,0,0,.55)}
+
+/* ---------- neon accents (electric-blue tunnel glow) ---------- */
+/* glowing hairline along the bottom of the sticky header */
+header.top::after{
+  content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--neon);box-shadow:0 0 10px var(--neon-soft),0 0 22px var(--neon-soft);
+  opacity:.35;pointer-events:none;
+}
+/* active tab: neon underline + glow */
+nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px var(--neon-soft)}
+/* draft board — the slot on the clock breathes with neon */
+.slot.next{box-shadow:0 0 0 1px var(--neon), 0 0 14px var(--neon-soft)}
+@keyframes neonPulse{0%,100%{box-shadow:0 0 0 1px var(--neon),0 0 10px var(--neon-soft)}50%{box-shadow:0 0 0 1px var(--neon),0 0 20px var(--neon-soft),0 0 34px var(--neon-soft)}}
+.slot.next{animation:neonPulse 1.8s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.slot.next{animation:none}}
+/* a thin neon light-strip under the hero headline */
+.hero .big{position:relative;display:inline-block}
+.hero .big::after{
+  content:'';position:absolute;left:2px;bottom:-10px;width:min(240px,60%);height:3px;border-radius:3px;
+  background:linear-gradient(90deg,var(--neon),transparent);
+  box-shadow:0 0 12px var(--neon-soft),0 0 24px var(--neon-soft);
+}
+
+/* dark mode: crank the neon like the reference tunnel */
+:root[data-theme="dark"] header.top::after{opacity:.95}
+:root[data-theme="dark"] .btn{box-shadow:0 0 0 1px rgba(90,160,255,.30), var(--sh-pop)}
+:root[data-theme="dark"] .btn:hover{box-shadow:0 0 0 1px var(--neon), 0 0 18px var(--neon-soft), 0 8px 22px rgba(61,123,255,.5)}
+:root[data-theme="dark"] .clock{box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(90,160,255,.30), 0 0 20px rgba(90,160,255,.35)}
+:root[data-theme="dark"] .clock.crit{box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px var(--charge), 0 0 22px var(--charge-wash)}
+:root[data-theme="dark"] .hero{box-shadow:var(--sh-2), inset 0 0 120px -40px rgba(61,123,255,.55), 0 0 0 1px rgba(90,160,255,.22)}
+:root[data-theme="dark"] .eyebrow{text-shadow:0 0 14px var(--neon-soft)}
+:root[data-theme="dark"] .wordmark .yr{text-shadow:0 0 16px rgba(255,74,95,.6)}
+:root[data-theme="dark"] .team-logo,:root[data-theme="dark"] .avatar{box-shadow:inset 0 0 0 2px rgba(255,255,255,.14), 0 0 0 1px rgba(90,160,255,.35), 0 3px 12px rgba(0,0,0,.55)}
+:root[data-theme="dark"] .postag{box-shadow:0 0 10px -2px var(--pc)}
+:root[data-theme="dark"] .statpill{box-shadow:0 0 14px -3px currentColor}
+:root[data-theme="dark"] nav.tabs button.active{background:var(--turf-wash);color:var(--neon);text-shadow:0 0 12px var(--neon-soft)}
+:root[data-theme="dark"] .btn:focus-visible,:root[data-theme="dark"] nav.tabs button:focus-visible{box-shadow:0 0 0 3px var(--neon-soft),0 0 16px var(--neon-soft)}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line-strong);
+  border-radius:999px;padding:6px 14px;box-shadow:var(--sh-1);
+  transition:color .15s ease,border-color .15s ease,background .15s ease,transform .08s ease;
+}
+.theme-toggle:hover{color:var(--chalk);border-color:var(--turf);background:var(--turf-wash)}
+.theme-toggle:active{transform:scale(.96)}
+.theme-toggle .dot{width:11px;height:11px;border-radius:50%;background:var(--charge);box-shadow:0 0 0 3px var(--charge-wash)}
+:root[data-theme="dark"] .theme-toggle .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.18)}
+
+/* ---------- global polish ---------- */
+::selection{background:var(--turf);color:#fff}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:20px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--chalk-dim)}
+.notice{box-shadow:var(--sh-1)}
+.hero .btn.ghost{backdrop-filter:saturate(1.1)}
+/* team roster / card lift for interactive tiles */
+.teamcard{transition:border-color .15s ease,box-shadow .15s ease,transform .1s ease}
+.teamcard:hover{border-color:var(--line-strong);box-shadow:var(--sh-1)}
+@media (prefers-reduced-motion: reduce){
+  *{scroll-behavior:auto !important}
+  .btn,.prow .pick,.teamcard{transition:none}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wordmark"><span id="wmName">Bitch Boy League</span> <span class="yr">'26</span></div>
+  <nav class="tabs">
+    <button data-view="home" class="active">Home</button>
+    <button data-view="draft">Draft Room</button>
+    <button data-view="mock">Mock Draft</button>
+    <button data-view="matchups">Matchups</button>
+    <button data-view="trades">Trades</button>
+    <button data-view="teams">Teams</button>
+    <button data-view="chat">Chat</button>
+    <button data-view="stats">Stats</button>
+    <button data-view="recaps">Recaps</button>
+    <button data-view="history">History</button>
+    <button data-view="settings">Settings</button>
+  </nav>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
+</header>
+
+<main>
+
+<!-- ============ HOME ============ -->
+<section class="view active" id="view-home">
+  <div class="hero">
+    <div class="eyebrow">Your league. Your rules.</div>
+    <div class="big" id="homeLeagueName">Bitch Boy League</div>
+    <p class="sub" style="margin-top:8px">The league's own turf — off NFL.com, fully customizable.</p>
+    <div class="row">
+      <button class="btn" onclick="showView('draft')">Enter Draft Room</button>
+      <button class="btn ghost" onclick="showView('settings')">League Settings</button>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Season Roadmap</h2>
+      <div class="phase"><span class="tag">Live now</span><span>Draft room — live 12-team snake board with pick clock and auto-pick</span></div>
+      <div class="phase"><span class="tag">Live now</span><span>Custom scoring editor and roster structure</span></div>
+      <div class="phase"><span class="tag">Live now</span><span>League History record book (2012–2025 points leaders)</span></div>
+      <div class="phase dim"><span class="tag">Next</span><span>Online logins so every manager drafts from their own device</span></div>
+      <div class="phase dim"><span class="tag">Week 1</span><span>Matchups, auto-updated scoring and standings</span></div>
+      <div class="phase dim"><span class="tag">Season</span><span>Photo wall, trash talk board, trades and waivers</span></div>
+    </div>
+    <div class="card">
+      <h2>League Snapshot</h2>
+      <div id="homeSnapshot"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DRAFT ============ -->
+<section class="view" id="view-draft">
+  <h1 id="draftTitle">Draft Room</h1>
+  <p class="sub" id="draftSub">Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.</p>
+
+  <div class="clockbar">
+    <div class="clock" id="clock">--</div>
+    <div class="onclock"><small id="pickLabel">Pre-draft</small><span id="onClockTeam">Ready when you are</span></div>
+    <div class="spacer"></div>
+    <span id="mockCtrls" style="display:none;align-items:center;gap:8px">
+      <label style="color:var(--chalk-dim);font-size:13px">You control</label>
+      <select id="mockTeam" onchange="S.mock.team=+this.value;saveState()"></select>
+      <label style="color:var(--chalk-dim);font-size:13px"><input type="checkbox" id="mockAuto" onchange="S.mock.auto=this.checked;saveState();maybeAutoOthers()" style="width:auto"> auto-pick others</label>
+    </span>
+    <select id="clockSel" onchange="S.timerSec=+this.value;saveState()" title="Pick clock (applies from the next pick)">
+      <option value="60">1 min clock</option>
+      <option value="180">3 min clock</option>
+      <option value="300">5 min clock</option>
+      <option value="600">10 min clock</option>
+    </select>
+    <button class="btn" id="btnStart" onclick="startDraft()">Start Draft</button>
+    <button class="btn ghost" id="btnPause" onclick="togglePause()" disabled>Pause</button>
+    <button class="btn ghost" id="btnUndo" onclick="undoPick()" disabled>Undo Pick</button>
+    <button class="btn danger" onclick="resetDraft()">Reset</button>
+  </div>
+
+  <div class="draftwrap">
+    <div>
+      <div class="boardscroll"><div class="board" id="board"></div></div>
+    </div>
+    <div class="pool">
+      <div class="poolhead">
+        <input type="text" id="poolSearch" placeholder="Search players…" style="width:100%" oninput="renderPool()">
+        <div class="posfilters" id="posFilters"></div>
+        <div id="poolStatus" style="font-size:12px;color:var(--chalk-dim);margin-top:6px">Loading player pool…</div>
+      </div>
+      <div class="poollist" id="poolList"></div>
+      <div class="roster-mini" id="rosterMini"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MATCHUPS ============ -->
+<section class="view" id="view-matchups">
+  <h1>Matchups</h1>
+  <p class="sub">The 2026 regular season — Weeks 1–14, then your 8-team playoff takes over in Weeks 15–17. Scores are entered by hand until live scoring goes online.</p>
+  <div id="matchupsView"></div>
+</section>
+
+<!-- ============ TEAMS ============ -->
+<section class="view" id="view-teams">
+  <h1>Teams</h1>
+  <div class="row" style="margin-bottom:14px">
+    <button class="btn ghost" id="subMy" onclick="window.teamsSub='my';renderTeams()">My Team</button>
+    <button class="btn ghost" id="subAll" onclick="window.teamsSub='all';renderTeams()">All Teams</button>
+  </div>
+  <div id="myTeamView"></div>
+  <div id="teamsView" class="grid2"></div>
+</section>
+
+<!-- ============ TRADES ============ -->
+<section class="view" id="view-trades">
+  <h1>Trade Center</h1>
+  <p class="sub">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
+  <div id="tradesView"></div>
+</section>
+
+<!-- ============ CHAT ============ -->
+<section class="view" id="view-chat">
+  <h1>League Chat</h1>
+  <p class="sub" id="chatBanner">Trash talk lives here.</p>
+  <div class="card" style="max-width:760px">
+    <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
+    <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
+      <input type="text" id="chatName" placeholder="Your name" style="max-width:130px" onchange="store.set('ffl_chat_name', this.value)">
+      <input type="text" id="chatMsg" placeholder="Say something regrettable\u2026" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="btn" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section class="view" id="view-stats">
+  <h1>All-Time Stats</h1>
+  <p class="sub">Fourteen years, every manager, every record — computed straight from the verified NFL.com archive.</p>
+  <div id="statsView"></div>
+</section>
+
+<!-- ============ RECAPS ============ -->
+<section class="view" id="view-recaps">
+  <h1>Season Recaps</h1>
+  <p class="sub">Fourteen years of glory, robbery, and 2-12 seasons — one year at a time.</p>
+  <div id="recapsView"></div>
+</section>
+
+<!-- ============ HISTORY ============ -->
+<section class="view" id="view-history">
+  <h1>League History</h1>
+  <p class="sub">The record book — 2012 to today. More gets added as we pull each season off NFL.com.</p>
+  <div id="historyView"></div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="view" id="view-settings">
+  <h1>League Settings</h1>
+  <p class="sub">Everything here is yours to change — this is the whole point of leaving NFL.com.</p>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>League</h2>
+    <div class="row">
+      <label style="color:var(--chalk-dim)">League name</label>
+      <input type="text" id="setLeagueName" style="min-width:240px" onchange="saveFromInputs()">
+      <label style="color:var(--chalk-dim)">Pick clock</label>
+      <select id="setTimer" onchange="saveFromInputs()">
+        <option value="60">1 min</option><option value="180">3 min</option>
+        <option value="300">5 min</option><option value="600">10 min</option>
+      </select>
+      <label style="color:var(--chalk-dim)">Draft rounds</label>
+      <input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()">
+      <label style="color:var(--chalk-dim)"><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"> Keeper round</label>
+    </div>
+  </div>
+
+  <div class="card managers-card" style="margin-bottom:18px">
+    <div class="row" style="align-items:baseline">
+      <h2 style="margin:0">League Managers</h2>
+      <span id="mgrCount" class="eyebrow" style="margin:0"></span>
+    </div>
+    <p class="sub" style="margin:6px 0 14px">The master roster of everyone who manages a team. Edit a name to fix it everywhere; remove someone to free them up. This list fills the manager dropdown on each team below.</p>
+    <div class="mgr-list" id="managerList"></div>
+    <div class="mgr-add">
+      <input type="text" id="mgrNew" placeholder="Add a manager…" onkeydown="if(event.key==='Enter')addManager()">
+      <button class="btn" onclick="addManager()">Add Manager</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>Teams &amp; Draft Order</h2>
+    <p class="sub" style="margin-bottom:10px">Order below = round 1 pick order (snakes every round). Check <b>auto</b> for any manager who can\u2019t attend \u2014 auto teams draft themselves: starters first (QB, 2 RB, 2 WR, TE, flex, K, DEF), then best available. The commissioner still makes auto teams\u2019 keeper-round picks.</p>
+    <div class="teamgrid" id="teamInputs"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ghost" onclick="randomizeOrder()">Randomize Draft Order</button>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <h2>Roster Structure</h2>
+      <div id="rosterInputs"></div>
+    </div>
+    <div class="card">
+      <h2>Custom Scoring</h2>
+      <p class="sub" style="margin-bottom:10px">Set any value — decimals and negatives allowed.</p>
+      <div class="setgrid" id="scoringInputs"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>League Rules</h2>
+    <p class="sub" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
+    <div id="rulesInputs"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>Traded Draft Picks</h2>
+    <p class="sub" style="margin-bottom:10px">Picks that changed hands before the draft. The draft room honors these automatically — the 2026 deadline deals are preloaded. (Trades are matched by team name, so finish renaming teams before adding trades.)</p>
+    <div id="tradeList"></div>
+    <div class="row" style="margin-top:10px">
+      <select id="trRound"></select>
+      <select id="trFrom"></select>
+      <span style="color:var(--chalk-dim)">pick goes to</span>
+      <select id="trTo"></select>
+      <button class="btn ghost" onclick="addTrade()">Add Trade</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Save / Share League File</h2>
+    <p class="sub" style="margin-bottom:10px">Your settings save automatically in this browser. Export a league file as a backup or to move to another computer — it also captures draft results.</p>
+    <div class="row">
+      <button class="btn" onclick="exportLeague()">Export League File</button>
+      <button class="btn ghost" onclick="document.getElementById('importFile').click()">Import League File</button>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importLeague(event)">
+    </div>
+  </div>
+</section>
+
+</main>
+<div class="toast" id="toast"></div>
+<script>
+/* =====================================================
+   State & storage (safe wrapper — works even if localStorage is blocked)
+===================================================== */
+const store = (()=>{ 
+  let mem={};
+  try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t');
+    return { get:k=>localStorage.getItem(k), set:(k,v)=>localStorage.setItem(k,v), ok:true };
+  }catch(e){ return { get:k=>mem[k]??null, set:(k,v)=>{mem[k]=v}, ok:false }; }
+})();
+
+const SCORING_GROUPS = {
+  "Offense": ["Passing yards (per yd)","Passing TD","Interception thrown","Sacked","400+ pass yds bonus","50+ yd pass TD bonus","Rushing attempt","Rushing yards (per yd)","Rushing TD","50+ yd rush TD bonus","100-199 rush yds bonus","200+ rush yds bonus","Reception","Receiving yards (per yd)","Receiving TD","50+ yd rec TD bonus","200+ rec yds bonus","Kick/punt return TD","Fumble recovered for TD","Fumble lost","2-pt conversion"],
+  "Kicking": ["PAT made","PAT missed","FG 0-19","FG 20-29","FG 30-39","FG 40-49","FG 50+","FG missed 0-19","FG missed 20-29"],
+  "Defense / Special Teams": ["DST sack","DST interception","DST fumble recovered","DST fumble forced","DST safety","DST TD","DST kick/punt return TD","Points allowed 0","Points allowed 1-6","Points allowed 7-13","Points allowed 14-20","Points allowed 21-27","Points allowed 28-34","Points allowed 35+","Under 100 total yds allowed","100-199 yds allowed","500+ yds allowed","DST 2-pt return"],
+  "Extra rules from other platforms (off until you want them)": ["TE premium (per reception)","Rushing first down","Receiving first down","Completion","Incompletion","300-399 pass yds bonus","40+ yd TD bonus","Pick-six thrown"]
+};
+const DEFAULTS = {
+  leagueName: "Bitch Boy League",
+  timerSec: 60,
+  managers: [],          /* master roster of league managers — seeded from history on first boot */
+  teams: [
+    {name:"JK Ramandrew Skatabers IV", manager:""},
+    {name:"Bill Cosbys Sleepers", manager:""},
+    {name:"This is my Last year", manager:""},
+    {name:"Nut buster", manager:""},
+    {name:"uncle skips ribs", manager:""},
+    {name:"WiFi is Down", manager:""},
+    {name:"Saquon Bacher", manager:""},
+    {name:"Prater's Leg", manager:""},
+    {name:"MaddaMafia", manager:""},
+    {name:"Brown Bag Boy", manager:""},
+    {name:"Allen's Assholes", manager:""},
+    {name:"Jerry had a little Lamb", manager:""}
+  ],
+  roster: {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DEF:1, BN:8, IR:1},  /* 9 starters + 8 bench = 17 = keeper + 16 rounds; IR extra, no draft round */
+  draftCfg: { rounds:16, keeper:true },
+  mock: { team:0, auto:true },
+  playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
+  season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
+  lineups: {},          /* teamIndex -> { playerId: slot } */
+  trades: [],           /* executed player trades log */
+  rules: {
+    "Playoff teams": "8",
+    "Playoff weeks": "15, 16 & 17 (1 week per matchup)",
+    "Keepers": "1 player",
+    "Waivers": "1 day, resets to inverse standings",
+    "Trade review": "League vote, 2-day reject window",
+    "Trade deadline": "None",
+    "Standings tiebreaker": "Head-to-head record",
+    "Matchup tiebreaker": "Kicker points",
+    "Fractional / negative points": "Yes / Yes"
+  },
+  pickTrades: [
+    {round:1, from:"Nut buster", to:"Jerry had a little Lamb"},
+    {round:2, from:"Nut buster", to:"Prater's Leg"},
+    {round:3, from:"Nut buster", to:"Jerry had a little Lamb"},
+    {round:5, from:"Jerry had a little Lamb", to:"Nut buster"},
+    {round:7, from:"Jerry had a little Lamb", to:"Nut buster"},
+    {round:9, from:"Prater's Leg", to:"Nut buster"}
+  ],
+  scoring: {
+    "Passing yards (per yd)":0.1, "Passing TD":6, "Interception thrown":-3, "Sacked":-1,
+    "400+ pass yds bonus":5, "50+ yd pass TD bonus":5,
+    "Rushing attempt":0.2, "Rushing yards (per yd)":0.1, "Rushing TD":6,
+    "50+ yd rush TD bonus":5, "100-199 rush yds bonus":5, "200+ rush yds bonus":5,
+    "Reception":1, "Receiving yards (per yd)":0.1, "Receiving TD":6,
+    "50+ yd rec TD bonus":5, "200+ rec yds bonus":5,
+    "Kick/punt return TD":6, "Fumble recovered for TD":6, "Fumble lost":-2, "2-pt conversion":2,
+    "PAT made":1, "PAT missed":-1,
+    "FG 0-19":1, "FG 20-29":2, "FG 30-39":3, "FG 40-49":4, "FG 50+":5,
+    "FG missed 0-19":-2, "FG missed 20-29":-1,
+    "DST sack":1, "DST interception":2, "DST fumble recovered":2, "DST fumble forced":1,
+    "DST safety":2, "DST TD":6, "DST kick/punt return TD":6,
+    "Points allowed 0":10, "Points allowed 1-6":7, "Points allowed 7-13":4, "Points allowed 14-20":1,
+    "Points allowed 21-27":0, "Points allowed 28-34":-1, "Points allowed 35+":-2,
+    "Under 100 total yds allowed":10, "100-199 yds allowed":5, "500+ yds allowed":-5, "DST 2-pt return":2,
+    "TE premium (per reception)":0, "Rushing first down":0, "Receiving first down":0,
+    "Completion":0, "Incompletion":0, "300-399 pass yds bonus":0,
+    "40+ yd TD bonus":0, "Pick-six thrown":0
+  },
+  history: {
+    v: 39,
+    pointsLeaders: [
+      {year:2025, team:"WiFi is Down", pts:2499.9, fid:6},
+      {year:2024, team:"Bill Cosbys Sleepers", pts:2596.1, fid:2},
+      {year:2023, team:"Brown Bag Boy", pts:2295.2, fid:10},
+      {year:2022, team:"The Heavy Favorite", pts:2326.0, fid:11},
+      {year:2021, team:"MaddaMafia", pts:2358.2, fid:9},
+      {year:2020, team:"Stutterin Pricks", pts:2421.8, fid:2},
+      {year:2019, team:"Little Halas Urban Achievers", pts:2383.4, fid:2},
+      {year:2018, team:"Frans Fur Trappers", pts:2388.9, fid:7},
+      {year:2017, team:"Bears Rule Boyz Drool", pts:2092.6, fid:9},
+      {year:2016, team:"Cleavland Steamers", pts:2168.1, fid:3},
+      {year:2015, team:"Super Sized McFlippout", pts:2010.0, fid:1},
+      {year:2014, team:"BearsForLife", pts:2236.1, fid:8},
+      {year:2013, team:"BearsForLife", pts:1736.4, fid:8},
+      {year:2012, team:"Team Awesome", pts:1792.8, fid:3}
+    ],
+    teamWeeks: [
+      {year:2025, week:15, team:"Nut buster", pts:235.0, fid:4},
+      {year:2024, week:10, team:"Bill Cosbys Sleepers", pts:252.8, fid:2},
+      {year:2023, week:14, team:"ShitBirds", pts:222.0, fid:6},
+      {year:2022, week:2, team:"Brown Bag Boy", pts:241.8, fid:10},
+      {year:2021, week:11, team:"MaddaMafia", pts:231.7, fid:9},
+      {year:2020, week:12, team:"Stutterin Pricks", pts:226.8, fid:2},
+      {year:2019, week:5, team:"Little Halas Urban Achievers", pts:246.1, fid:2},
+      {year:2018, week:10, team:"Frans Fur Trappers", pts:242.9, fid:7},
+      {year:2017, week:2, team:"bYrdSLaNgers", pts:234.8, fid:10},
+      {year:2016, week:16, team:"Bears Rule Boyz Drool", pts:227.9, fid:9},
+      {year:2015, week:3, team:"Halas' Homeboys", pts:199.7, fid:2},
+      {year:2014, week:14, team:"bYrdSLaNgers", pts:219.2, fid:10},
+      {year:2013, week:4, team:"HotCakes24", pts:195.2, fid:11},
+      {year:2012, week:17, team:"Team Awesome", pts:197.0, fid:3}
+    ],
+    playerWeeks: [
+      {year:2025, week:15, team:"Prater's Leg", player:"Trevor Lawrence", pos:"QB", nfl:"JAX", pts:75.1, fid:8},
+      {year:2024, week:15, team:"uncle skips ribs", player:"Jared Goff", pos:"QB", nfl:"DET", pts:88.1, fid:5},
+      {year:2023, week:9, team:"Wet Otters Pocket", player:"C.J. Stroud", pos:"QB", nfl:"HOU", pts:87.0, fid:1},
+      {year:2022, week:5, team:"Brown Bag Boy", player:"Josh Allen", pos:"QB", nfl:"BUF", pts:83.6, fid:10},
+      {year:2021, week:16, team:"Odell Fuckum Jr", player:"Joe Burrow", pos:"QB", nfl:"CIN", pts:85.0, fid:6},
+      {year:2020, week:4, team:"Brown Bag Boy", player:"Dak Prescott", pos:"QB", nfl:"DAL", pts:76.8, fid:10},
+      {year:2019, week:7, team:"uncle skips ribs", player:"Aaron Rodgers", pos:"QB", nfl:"GB", pts:88.9, fid:5},
+      {year:2018, week:4, team:"Death To Smoochy", player:"Jared Goff", pos:"QB", nfl:"LA", pts:86.6, fid:4},
+      {year:2017, week:8, team:"French Fur Trappers", player:"Deshaun Watson", pos:"QB", nfl:"HOU", pts:73.5, fid:7},
+      {year:2016, week:6, team:"Death To Smoochy", player:"Drew Brees", pos:"QB", nfl:"NO", pts:81.5, fid:4},
+      {year:2015, week:8, team:"SnatchSlappers", player:"Drew Brees", pos:"QB", nfl:"NO", pts:96.8, fid:6},
+      {year:2014, week:8, team:"bYrdSLaNgers", player:"Ben Roethlisberger", pos:"QB", nfl:"PIT", pts:93.6, fid:10},
+      {year:2013, week:1, team:"TheHitMen", player:"Peyton Manning", pos:"QB", nfl:"DEN", pts:95.0, fid:6},
+      {year:2012, week:11, team:"B Town Boom", player:"Matt Schaub", pos:"QB", nfl:"HOU", pts:79.7, fid:1}
+    ],
+    champions: [
+      {year:2025, team:"Brown Bag Boy", fid:10},
+      {year:2024, team:"MaddaMafia", fid:9},
+      {year:2023, team:"Wet Otters Pocket", fid:1},
+      {year:2022, team:"Some Guy Named Shad", fid:8},
+      {year:2021, team:"SHOW ME YOUR TDS", fid:7},
+      {year:2020, team:"king shit of turd mtn", fid:12},
+      {year:2019, team:"Little Halas Urban Achievers", fid:2},
+      {year:2018, team:"Jens Pocket", fid:9},
+      {year:2017, team:"Death To Smoochy", fid:4},
+      {year:2016, team:"BearsForLife", fid:8},
+      {year:2015, team:"Halas' Homeboys", fid:2},
+      {year:2014, team:"SnatchSlappers", fid:6},
+      {year:2013, team:"Cleavland Steamers", fid:3},
+      {year:2012, team:"Team Awesome", fid:3}
+    ],
+    managers: {
+      "2012": {
+        "Grinnin' Bear It":"Big Matt", "GO JAGUARS":"Tom", "B Town Boom":"Ben",
+        "Death To Smoochy":"Matthew", "team gilligan":"stanley", "PROJECT RECLINER":"Mark",
+        "Jimmy's Jammers":"James", "Pitt Stop":"Janice", "Go Balls Deep":"sean",
+        "Team Awesome":"Curtis"
+      },
+      "2013": {
+        "Grinnin' Bear It":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "B Town BOOM":"Ben", "Death To Smoochy":"Matthew", "team gilligan":"stanley",
+        "OMG FOOTBALL":"Mark", "Cleavland Steamers":"Curtis",
+        "TheHitMen":"brian", "HotCakes24":"Adam", "THE CAPTAIN CHIEF BOSSES":"Dean",
+        "Tonawanda T-Bags":"Tony"
+      },
+      "2014": {
+        "Halas' Homeboys":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "Super sized Mc flippout":"Ben", "Death To Smoochy":"Matthew", "team gilligan":"stanley",
+        "Cleavland Steamers":"Curtis", "HotCakes24":"Adam",
+        "SnatchSlappers":"jeff", "Show me ur td's":"Garrett",
+        "Bears Rule Boyz Drool":"Jennifer", "Laybomb":"Jeff"
+      },
+      "2015": {
+        "Halas' Homeboys":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "Super Sized McFlippout":"Ben", "Death To Smoochy":"Matthew", "team gilligan":"stanley",
+        "Cleavland Steamers":"Curtis", "HotCakes24":"Adam",
+        "SnatchSlappers":"jeff", "Show me ur td's":"Garrett",
+        "Bears Rule Boyz Drool":"Jennifer", "Dirty Pants":"Jim"
+      },
+      "2016": {
+        "Halas' Homeboys":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "Super Sized McFlippout":"Ben", "Death To Smoochy":"Matthew", "team gilligan":"stanley",
+        "Cleavland Steamers":"Curtis", "HotCakes24":"Adam",
+        "SnatchSlappers":"jeff", "Bears Rule Boyz Drool":"Jennifer",
+        "Dirty Pants":"Jim", "French Fur Trappers":"shawn"
+      },
+      "2017": {
+        "Halas' Homeboys":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "Super Sized McFlippout":"Ben", "Death To Smoochy":"Matthew", "team gilligan":"stanley",
+        "Cleavland Steamers":"Curtis", "HotCakes24":"Adam",
+        "SnatchSlappers":"jeff", "Bears Rule Boyz Drool":"Jennifer",
+        "Dirty Pants":"Jim", "French Fur Trappers":"shawn"
+      },
+      "2018": {
+        "Halas' Homeboys":"Big Matt", "bYrdSLaNgers":"colt", "BearsForLife":"Dean",
+        "Super Sized McFlippout":"Ben", "Death To Smoochy":"Matthew",
+        "Cleavland Steamers":"Curtis", "SnatchSlappers":"jeff",
+        "Show me your tds":"Garrett", "Jens Pocket":"Jennifer", "Dirty Pants":"Jim",
+        "Rollin' With Mahomes":"Dung", "Frans Fur Trappers":"shawn"
+      },
+      "2019": {
+        "Little Halas Urban Achievers":"Big Matt", "BearsForLife":"Dean", "Notorious BiG":"Ben",
+        "Death To Smoochy":"Matthew", "uncle skips ribs":"stanley",
+        "Alabama Hot Pockets":"Curtis", "TradingWithBriggs":"jeff",
+        "Jennifer":"Jennifer", "king shit of turd mtn":"Jim", "football tits":"mike",
+        "Brown Bag Boy":"TJ", "JustMyLuck":"shawn"
+      },
+      "2020": {
+        "WET OTTERS POCKET":"Ben", "Death To Smoochy":"Matthew", "uncle skips ribs":"stanley",
+        "Alabama Hot Pockets":"Curtis", "MyBallZackErtz":"jeff",
+        "SHOW ME YOUR TDS":"Garrett", "Cobra Kai":"Chad with a S",
+        "king shit of turd mtn":"Jim", "Brown Bag Boy":"TJ", "MaddaMafia":"Adam",
+        "Stutterin Pricks":"Patrick", "Major usurper":"Major"
+      },
+      "2021": {
+        "Tenacious DST":"Big Matt", "Wet Otters Pocket":"Ben", "uncle skips ribs":"stanley",
+        "Alabama Hot Pockets":"Curtis", "Odell Fuckum Jr":"jeff",
+        "SHOW ME YOUR TDS":"Garrett", "Some Guy Named Shad":"Chad with a S",
+        "king shit of turd mtn":"Jim", "Brown Bag Boy":"TJ", "MaddaMafia":"Adam",
+        "Stutterin Pricks":"Patrick", "Nut buster":"Misty"
+      },
+      "2022": {
+        "The Heavy Favorite":"Big Matt", "Time to Collide With Matt":"Ben", "uncle skips ribs":"stanley",
+        "Not Curtis":"Curtis", "TradeEveryone":"jeff",
+        "SHOW ME YOUR TDS":"Garrett", "Some Guy Named Shad":"Chad with a S",
+        "Brown Bag Boy":"TJ", "MaddaMafia":"Adam", "ELTON JOHNS KID":"Andrew",
+        "Nut buster":"Misty", "ILuvTds":"Kahlyb"
+      },
+      "2023": {
+        "Mongo of the Midway":"Big Matt", "Wet Otters Pocket":"Ben", "uncle skips ribs":"stanley",
+        "Alabama Hot Pockets":"Curtis", "ShitBirds":"jeff",
+        "SHOW ME YOUR TDS":"Garrett", "Some Guy Named Shad":"Chad with a S",
+        "Brown Bag Boy":"TJ", "MaddaMafia":"Adam", "ELTON JOHNS KID":"Andrew",
+        "Nut buster":"Misty", "Bill Cosbys Sleepers":"Kahlyb"
+      },
+      "2024": {
+        "Slap My Bear Ass":"Big Matt", "Wet Otters Pocket":"Ben", "uncle skips ribs":"stanley",
+        "San Francisco Steam Train":"Curtis", "Team Injured Reserve":"jeff",
+        "Saquon Bacher":"Garrett", "Frozen Meatballs":"Chad with a S",
+        "Brown Bag Boy":"TJ", "Team Feltersnatch":"Jeremy", "MaddaMafia":"Adam",
+        "Nut buster":"Misty", "Bill Cosbys Sleepers":"Kahlyb"
+      },
+      "2025": {
+        "JK Ramandrew Skatabers IV":"Ben", "uncle skips ribs":"stanley",
+        "This is my Last year":"Curtis", "WiFi is Down":"jeff",
+        "Saquon Bacher":"Garrett", "Prater's Leg":"Chad with a S", "Brown Bag Boy":"TJ",
+        "Jerry had a little Lamb":"Jeremy", "MaddaMafia":"Adam", "Nut buster":"Misty",
+        "Bill Cosbys Sleepers":"Kahlyb", "Allen's Assholes":"Mateo El Guapo"
+      }
+    },
+    recaps: {
+      "2012": { title:"The Founding",
+        story:["Ten teams, two divisions \u2014 AFC BOYS and NFC BOYS \u2014 and one perfect champion. Curtis's Team Awesome went 9-5, led the league in scoring, and took the inaugural title in a sweep the league wouldn't see again for seven years. The NFC BOYS finished with a three-way 9-5 logjam at the top; the AFC belonged to Janice's Pitt Stop at 8-6.",
+        "Matt Schaub's 79.70-point Week 11 for Ben's B Town Boom set the first player-week record, and Team Awesome closed the year with a 197-point Week 17 exclamation mark."],
+        facts:["The league was only 10 teams \u2014 the sole season before expanding to 12.",
+        "Curtis won the title under the manager name 'Dont ask me to come back' \u2014 then came back for 13 straight years.",
+        "James's Jimmy's Jammers took the first-ever last place at 4-10."] },
+      "2013": { title:"The Repeat Nobody Noticed",
+        story:["The league grew to 12 teams, and Curtis renamed Team Awesome to Cleavland Steamers \u2014 then won it all again from a 7-7 record and 7th overall, the league's first (and still only) back-to-back. Because of the rename, the repeat hid in plain sight for a decade.",
+        "Dean's BearsForLife went 10-4 and led the league with 1,736.40 \u2014 the lowest points-leader total in league history \u2014 and got nothing, the first bite of a curse that would feed for years. Peyton Manning hung 95.00 in Week 1 for brian's TheHitMen, a player-week mark that stood until 2015."],
+        facts:["FIVE different teams finished exactly 7-7 \u2014 the most .500 league ever.",
+        "A manager named Dean ran both the #1 overall team (BearsForLife) and the #12 last-place team (THE CAPTAIN CHIEF BOSSES) in the same season.",
+        "The champion finished 7th of 12 in the regular season."] },
+      "2014": { title:"The 13-1 Robbery",
+        story:["Dean's BearsForLife went 13-1, led the league in scoring with 2,236.10, and lost the title to jeff's SnatchSlappers \u2014 10-4, fourth overall. It was the most lopsided robbery the league had seen, and it set the template: the best regular-season team goes home empty.",
+        "Ben Roethlisberger's 93.60 in Week 8 for colt's bYrdSLaNgers took the weekly crown, while two teams \u2014 Matthew's Death To Smoochy and Jeff's Laybomb \u2014 face-planted to 2-12."],
+        facts:["Big Matt's Halas' Homeboys ALSO went 11-3 and won nothing \u2014 two 11-plus-win teams, zero rings between them.",
+        "jeff's 2014 title is why the 2025 division 'jeff wins' reads like prophecy.",
+        "Death To Smoochy went 2-12 three years before winning it all."] },
+      "2015": { title:"Big Matt Breaks Through",
+        story:["Fourth year, first summit: Big Matt's Halas' Homeboys went 10-4 and took the title from the 2-seed while Ben's Super Sized McFlippout led the league in scoring and joined the empty-handed club. The divisions got their first real names \u2014 Legal Needles and Over The Counter.",
+        "Drew Brees dropped 96.80 in Week 8 for jeff's SnatchSlappers \u2014 a player-week record that has never been broken. Ten seasons and counting."],
+        facts:["Brees's 96.80 is still the all-time single-week player record.",
+        "Halas' Homeboys' 199.70 is the LOWEST team-week crown of any season \u2014 a down year for fireworks.",
+        "Adam's HotCakes24 went 3-11 and finished dead last nine years before winning the 2024 title as MaddaMafia."] },
+      "2016": { title:"The Hot Hand",
+        story:["Dean's BearsForLife limped to 8-6, fourth overall \u2014 then won seven straight through the playoffs to take the title. Curtis's Cleavland Steamers led the league in scoring and went home with nothing, robbed by the very award he'd twice won.",
+        "The Legal Needles division was a meat grinder: five of its six teams finished .571 or better, while Over The Counter sent exactly one team above .500."],
+        facts:["Dean's title run: a seven-game win streak that started in the regular season and never stopped.",
+        "Drew Brees took a second straight player-week crown \u2014 this time for Matthew's Death To Smoochy.",
+        "stanley's team gilligan went 3-11 \u2014 rock bottom of a 13-year ringless odyssey."] },
+      "2017": { title:"Five-Way Pileup",
+        story:["The league scrapped divisions for one flat 12-team table, and chaos obliged: FIVE teams tied at 9-5. Jennifer's Bears Rule Boyz Drool finished #1 overall, led the league in scoring, closed on a seven-game heater \u2014 and lost the title to Matthew's Death To Smoochy, seeded second.",
+        "Deshaun Watson's 73.50 for shawn's French Fur Trappers took the weekly crown \u2014 the lowest winning player-week of any season."],
+        facts:["Five teams at 9-5 \u2014 the tightest top of the table in league history.",
+        "Matthew's title came three years after his 2-12 disaster.",
+        "Ben went from points leader (2015) to 2-12 dead last in two seasons."] },
+      "2018": { title:"The First Heist",
+        story:["The divisions were named Champsplus1 and Everyone Else \u2014 and the title came from Everyone Else. Jennifer renamed her team Jens Pocket, finished 6-8, sixth overall, and became the league's first losing-record champion.",
+        "shawn's rebranded Frans Fur Trappers went 10-4 with the league's best offense (2,388.90) AND the best single week (242.90) \u2014 and won nothing. Jared Goff's 86.60 took the player crown for Matthew's Death To Smoochy."],
+        facts:["Jennifer: 6-8, sixth seed, champion. The heist blueprint was written here.",
+        "shawn held the season scoring title, the team-week record, AND a 10-4 record \u2014 and got zero hardware.",
+        "The division literally named 'Champsplus1' produced neither finalist."] },
+      "2019": { title:"The Great Masquerade",
+        story:["Half the league changed names and it looked like a mass exodus \u2014 but the manager pages tell the truth: almost everyone just changed costumes. Big Matt became Little Halas Urban Achievers, went 11-3, led the league in scoring, and won his second title \u2014 only the second points-leader sweep ever.",
+        "Jim's newly-christened king shit of turd mtn finished #1 overall at 11-3 and lost the title game by 2.0 points \u2014 but his year would come. Aaron Rodgers's 88.90 for stanley's returning uncle skips ribs took the weekly crown. And Jennifer, defending her championship, renamed her team simply 'Jennifer' and went 2-12."],
+        facts:["Divisions: FOOK U and FOOK Me.",
+        "Defending champ Jennifer finished 2-12 under her own name \u2014 champion to eponymous last place.",
+        "Only two real newcomers all year: mike, and TJ \u2014 whose Brown Bag Boy would win it all in 2025."] },
+      "2020": { title:"King of the Mountain",
+        story:["Jim's king shit of turd mtn climbed from 8-6 (seeded 3rd in the edited bracket) to the title, while Patrick's Stutterin Pricks put up 2,421.80 \u2014 then the second-best season ever \u2014 went 10-4, and joined the long line of scoring champions with empty hands.",
+        "Dak Prescott's 76.80 for TJ's Brown Bag Boy took the weekly crown. And at the very bottom, Adam's MaddaMafia went 3-11 and finished dead last \u2014 remember that name."],
+        facts:["The champ's team name finally matched the accomplishment.",
+        "MaddaMafia: last place in 2020, champions in 2024.",
+        "Patrick's 2,421.80 stood as the #2 season total ever at the time."] },
+      "2021": { title:"Collusion Wins",
+        story:["The divisions were named COLLUSION and FAIR PLAY, and COLLUSION delivered the second losing-record champion in league history: Garrett's SHOW ME YOUR TDS at 6-8, sixth overall. Curtis's Alabama Hot Pockets went a league-best 12-2 as the top seed and got nothing.",
+        "Adam's MaddaMafia led the league in scoring \u2014 the middle chapter of his last-place-to-champion arc \u2014 and Joe Burrow's 85.00 for jeff's Odell Fuckum Jr took the weekly crown. At the bottom: Big Matt, two titles in the trophy case, went 3-11 as Tenacious DST."],
+        facts:["The champion was the 8-seed \u2014 and his first victim was the 12-2 #1 seed, in the quarterfinals.",
+        "Misty debuted with Nut buster \u2014 the future record-week holder.",
+        "Garrett's title came in his second stint after leaving the league twice."] },
+      "2022": { title:"Shad Does It Clean",
+        story:["Chad with a S \u2014 the man who built a franchise on one letter \u2014 won the title the honest way: Some Guy Named Shad went 11-3, best record in the league, and closed on a six-game streak. Big Matt named his team The Heavy Favorite, led the league in scoring, and proved the name a curse.",
+        "Ben named his team 'Time to Collide With Matt', rode a NINE-game win streak into the playoffs, and still didn't win. Josh Allen's 83.60 for TJ's Brown Bag Boy took the weekly crown."],
+        facts:["A team named 'Not Curtis', managed by Curtis, finished 3-11 and dead last.",
+        "Ben's nine-game win streak is the longest in the standings archive \u2014 and bought him nothing.",
+        "Shad had the league's best record but was seeded 3rd in a commissioner-edited bracket \u2014 and won it anyway."] },
+      "2023": { title:"Ben, Finally",
+        story:["Twelve seasons after B Town Boom, Ben's Wet Otters Pocket won it from 8-6 and the 5-seed \u2014 with C.J. Stroud's league-best 87.00 week along the way, the rare champion who also owned the weekly record. TJ's Brown Bag Boy went 11-3 with the league's best offense AND best defense and got nothing.",
+        "jeff's ShitBirds hung the year's best team week (222.00). The defending champ, Some Guy Named Shad, crashed to 4-10 \u2014 the title defense curse claiming another."],
+        facts:["Ben's ring came with the league's most last-place finishes (three) already on his card.",
+        "Brown Bag Boy's 1,700.10 points against was the stingiest in the league \u2014 and it didn't matter.",
+        "Kahlyb quietly renamed ILuvTds to Bill Cosbys Sleepers. Loading\u2026"] },
+      "2024": { title:"14-0 Means Nothing",
+        story:["Kahlyb's Bill Cosbys Sleepers went undefeated. Fourteen straight wins. The all-time season scoring record (2,596.10). The all-time single-week record (252.80). The best defense in the league. And then Adam's MaddaMafia \u2014 9-5, nearly 700 points behind them \u2014 knocked them out in the playoffs and took the ring.",
+        "It was the completion of the greatest redemption arc in league history: Adam, dead last at 3-11 in 2020, champion in 2024. Jared Goff's 88.10 for stanley's uncle skips ribs took the weekly player crown."],
+        facts:["The Sleepers are the only undefeated regular season ever \u2014 and it bought them nothing.",
+        "jeff renamed his team 'Team Injured Reserve' and went 2-12. The name was the prophecy.",
+        "Jeremy debuted with Team Feltersnatch and also went 2-12 \u2014 the league's rudest welcome."] },
+      "2025": { title:"The 1.9-Point Heist",
+        story:["The championship game was a 7-seed against an 8-seed, and it ended 113.70 to 111.80. TJ's Brown Bag Boy \u2014 6-8, NINTH overall \u2014 beat stanley's uncle skips ribs by 1.9 points for the most improbable title in league history, avenging TJ's 2023 robbery in the process.",
+        "The wreckage above them: jeff's WiFi is Down went 13-1 with an eight-game closing streak and the season scoring crown, then lost his quarterfinal to the eventual champ. Misty's Nut buster hung the all-time playoff record \u2014 235.00 in the quarters \u2014 then scored 112 and went home. And stanley, thirteen years without a ring, got within 1.9 points of the whole thing."],
+        facts:["The divisions were named 'jeff wins' and 'shitty division'. jeff did not win, and the shitty division produced the champion.",
+        "Back-to-back years the league's best team (14-0, then 13-1) was eliminated before the final.",
+        "Trevor Lawrence's 75.10 weekly crown (Chad's Prater's Leg) was the lowest since 2017."] }
+    },
+    playoffs: {
+      "2019": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"Little Halas Urban Achievers", pa:215.70, sb:8, tb:"Brown Bag Boy", pb:162.30, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"football tits", pa:118.50, sb:5, tb:"uncle skips ribs", pb:133.90, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"king shit of turd mtn", pa:199.60, sb:6, tb:"Alabama Hot Pockets", pb:116.70, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"JustMyLuck", pa:147.10, sb:7, tb:"Death To Smoochy", pb:164.70, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:1, ta:"Little Halas Urban Achievers", pa:172.60, sb:5, tb:"uncle skips ribs", pb:150.10, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"king shit of turd mtn", pa:149.10, sb:7, tb:"Death To Smoochy", pb:137.60, bracket:"championship"},
+        {week:16, label:"Consolation", sa:8, ta:"Brown Bag Boy", pa:150.30, sb:4, tb:"football tits", pb:138.60, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"Alabama Hot Pockets", pa:142.30, sb:2, tb:"JustMyLuck", pb:78.50, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:1, ta:"Little Halas Urban Achievers", pa:160.80, sb:3, tb:"king shit of turd mtn", pb:158.80, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:5, ta:"uncle skips ribs", pa:140.00, sb:7, tb:"Death To Smoochy", pb:139.60, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:8, ta:"Brown Bag Boy", pa:121.40, sb:6, tb:"Alabama Hot Pockets", pb:92.10, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:4, ta:"football tits", pa:154.70, sb:2, tb:"JustMyLuck", pb:106.70, bracket:"consolation"}
+      ],
+      "2020": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"MyBallZackErtz", pa:159.10, sb:8, tb:"Brown Bag Boy", pb:123.60, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"Stutterin Pricks", pa:168.50, sb:5, tb:"uncle skips ribs", pb:169.40, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"king shit of turd mtn", pa:146.00, sb:6, tb:"WET OTTERS POCKET", pb:104.70, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"Death To Smoochy", pa:145.20, sb:7, tb:"Alabama Hot Pockets", pb:131.40, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:1, ta:"MyBallZackErtz", pa:188.40, sb:5, tb:"uncle skips ribs", pb:198.30, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"king shit of turd mtn", pa:189.50, sb:2, tb:"Death To Smoochy", pb:144.70, bracket:"championship"},
+        {week:16, label:"Consolation", sa:8, ta:"Brown Bag Boy", pa:128.20, sb:4, tb:"Stutterin Pricks", pb:149.70, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"WET OTTERS POCKET", pa:148.20, sb:7, tb:"Alabama Hot Pockets", pb:139.80, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:5, ta:"uncle skips ribs", pa:179.00, sb:3, tb:"king shit of turd mtn", pb:183.90, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:1, ta:"MyBallZackErtz", pa:128.40, sb:2, tb:"Death To Smoochy", pb:129.40, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:4, ta:"Stutterin Pricks", pa:141.60, sb:6, tb:"WET OTTERS POCKET", pb:184.70, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:8, ta:"Brown Bag Boy", pa:100.60, sb:7, tb:"Alabama Hot Pockets", pb:177.70, bracket:"consolation"}
+      ],
+      "2021": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"Alabama Hot Pockets", pa:114.10, sb:8, tb:"SHOW ME YOUR TDS", pb:141.30, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"Wet Otters Pocket", pa:87.50, sb:5, tb:"Some Guy Named Shad", pb:107.00, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"MaddaMafia", pa:187.50, sb:6, tb:"Brown Bag Boy", pb:128.40, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"uncle skips ribs", pa:158.50, sb:7, tb:"Stutterin Pricks", pb:142.10, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:8, ta:"SHOW ME YOUR TDS", pa:144.60, sb:5, tb:"Some Guy Named Shad", pb:119.10, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"MaddaMafia", pa:185.50, sb:2, tb:"uncle skips ribs", pb:154.80, bracket:"championship"},
+        {week:16, label:"Consolation", sa:1, ta:"Alabama Hot Pockets", pa:177.80, sb:4, tb:"Wet Otters Pocket", pb:105.90, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"Brown Bag Boy", pa:142.40, sb:7, tb:"Stutterin Pricks", pb:118.70, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:8, ta:"SHOW ME YOUR TDS", pa:148.70, sb:3, tb:"MaddaMafia", pb:119.10, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:5, ta:"Some Guy Named Shad", pa:145.30, sb:2, tb:"uncle skips ribs", pb:145.90, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:1, ta:"Alabama Hot Pockets", pa:222.30, sb:6, tb:"Brown Bag Boy", pb:94.60, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:4, ta:"Wet Otters Pocket", pa:112.80, sb:7, tb:"Stutterin Pricks", pb:112.30, bracket:"consolation"}
+      ],
+      "2022": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"The Heavy Favorite", pa:160.00, sb:8, tb:"Brown Bag Boy", pb:184.80, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"Time to Collide With Matt", pa:113.00, sb:5, tb:"ELTON JOHNS KID", pb:152.50, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"Some Guy Named Shad", pa:198.10, sb:6, tb:"uncle skips ribs", pb:98.30, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"SHOW ME YOUR TDS", pa:121.00, sb:7, tb:"Nut buster", pb:159.50, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:8, ta:"Brown Bag Boy", pa:127.00, sb:5, tb:"ELTON JOHNS KID", pb:156.30, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"Some Guy Named Shad", pa:183.50, sb:7, tb:"Nut buster", pb:106.70, bracket:"championship"},
+        {week:16, label:"Consolation", sa:1, ta:"The Heavy Favorite", pa:18.40, sb:4, tb:"Time to Collide With Matt", pb:28.00, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"uncle skips ribs", pa:108.10, sb:2, tb:"SHOW ME YOUR TDS", pb:110.30, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:5, ta:"ELTON JOHNS KID", pa:97.10, sb:3, tb:"Some Guy Named Shad", pb:105.90, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:8, ta:"Brown Bag Boy", pa:95.50, sb:7, tb:"Nut buster", pb:161.10, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:4, ta:"Time to Collide With Matt", pa:103.60, sb:2, tb:"SHOW ME YOUR TDS", pb:96.70, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:1, ta:"The Heavy Favorite", pa:216.60, sb:6, tb:"uncle skips ribs", pb:92.60, bracket:"consolation"}
+      ],
+      "2023": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"Alabama Hot Pockets", pa:122.60, sb:8, tb:"uncle skips ribs", pb:140.70, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"Wet Otters Pocket", pa:154.80, sb:5, tb:"MaddaMafia", pb:127.70, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"Brown Bag Boy", pa:186.50, sb:6, tb:"SHOW ME YOUR TDS", pb:152.10, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"Bill Cosbys Sleepers", pa:141.10, sb:7, tb:"ShitBirds", pb:181.50, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:8, ta:"uncle skips ribs", pa:113.40, sb:4, tb:"Wet Otters Pocket", pb:180.00, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"Brown Bag Boy", pa:155.30, sb:7, tb:"ShitBirds", pb:135.10, bracket:"championship"},
+        {week:16, label:"Consolation", sa:1, ta:"Alabama Hot Pockets", pa:126.10, sb:5, tb:"MaddaMafia", pb:159.40, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"SHOW ME YOUR TDS", pa:177.90, sb:2, tb:"Bill Cosbys Sleepers", pb:176.00, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:4, ta:"Wet Otters Pocket", pa:165.60, sb:3, tb:"Brown Bag Boy", pb:149.90, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:8, ta:"uncle skips ribs", pa:118.00, sb:7, tb:"ShitBirds", pb:162.20, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:5, ta:"MaddaMafia", pa:149.70, sb:6, tb:"SHOW ME YOUR TDS", pb:113.30, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:1, ta:"Alabama Hot Pockets", pa:143.10, sb:2, tb:"Bill Cosbys Sleepers", pb:154.60, bracket:"consolation"}
+      ],
+      "2024": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"Bill Cosbys Sleepers", pa:207.00, sb:8, tb:"Frozen Meatballs", pb:209.10, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"uncle skips ribs", pa:130.90, sb:5, tb:"San Francisco Steam Train", pb:107.40, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"Brown Bag Boy", pa:145.10, sb:6, tb:"Wet Otters Pocket", pb:166.20, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"MaddaMafia", pa:171.80, sb:7, tb:"Saquon Bacher", pb:156.10, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:6, ta:"Wet Otters Pocket", pa:136.20, sb:4, tb:"uncle skips ribs", pb:96.40, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:8, ta:"Frozen Meatballs", pa:117.70, sb:2, tb:"MaddaMafia", pb:171.40, bracket:"championship"},
+        {week:16, label:"Consolation", sa:1, ta:"Bill Cosbys Sleepers", pa:169.80, sb:7, tb:"Saquon Bacher", pb:208.30, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:3, ta:"Brown Bag Boy", pa:163.80, sb:5, tb:"San Francisco Steam Train", pb:187.60, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:6, ta:"Wet Otters Pocket", pa:137.90, sb:2, tb:"MaddaMafia", pb:183.80, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:4, ta:"uncle skips ribs", pa:122.10, sb:8, tb:"Frozen Meatballs", pb:158.00, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:7, ta:"Saquon Bacher", pa:83.80, sb:5, tb:"San Francisco Steam Train", pb:218.80, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:1, ta:"Bill Cosbys Sleepers", pa:176.90, sb:3, tb:"Brown Bag Boy", pb:98.80, bracket:"consolation"}
+      ],
+      "2025": [
+        {week:15, label:"Quarterfinal", sa:1, ta:"MaddaMafia", pa:108.30, sb:8, tb:"uncle skips ribs", pb:147.30, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:4, ta:"Saquon Bacher", pa:127.90, sb:5, tb:"Nut buster", pb:235.00, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:3, ta:"Bill Cosbys Sleepers", pa:186.30, sb:6, tb:"This is my Last year", pb:95.50, bracket:"championship"},
+        {week:15, label:"Quarterfinal", sa:2, ta:"WiFi is Down", pa:133.80, sb:7, tb:"Brown Bag Boy", pb:169.80, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:8, ta:"uncle skips ribs", pa:136.80, sb:5, tb:"Nut buster", pb:112.10, bracket:"championship"},
+        {week:16, label:"Semifinal", sa:3, ta:"Bill Cosbys Sleepers", pa:171.30, sb:7, tb:"Brown Bag Boy", pb:181.40, bracket:"championship"},
+        {week:16, label:"Consolation", sa:1, ta:"MaddaMafia", pa:115.50, sb:4, tb:"Saquon Bacher", pb:133.70, bracket:"consolation"},
+        {week:16, label:"Consolation", sa:6, ta:"This is my Last year", pa:193.70, sb:2, tb:"WiFi is Down", pb:203.00, bracket:"consolation"},
+        {week:17, label:"Fantasy Super Bowl", sa:8, ta:"uncle skips ribs", pa:111.80, sb:7, tb:"Brown Bag Boy", pb:113.70, bracket:"championship"},
+        {week:17, label:"3rd Place Game", sa:5, ta:"Nut buster", pa:154.30, sb:3, tb:"Bill Cosbys Sleepers", pb:168.50, bracket:"consolation"},
+        {week:17, label:"5th Place Game", sa:4, ta:"Saquon Bacher", pa:97.50, sb:2, tb:"WiFi is Down", pb:197.20, bracket:"consolation"},
+        {week:17, label:"7th Place Game", sa:1, ta:"MaddaMafia", pa:134.90, sb:6, tb:"This is my Last year", pb:124.50, bracket:"consolation"}
+      ]
+    },
+    standings: {
+      "2012": { divisions: [
+        { name:"AFC BOYS", teams:[
+          {team:"Pitt Stop",        w:8,l:6,t:0, pf:1528.20, pa:1501.70, overall:4},
+          {team:"Go Balls Deep",    w:7,l:7,t:0, pf:1601.60, pa:1696.40, overall:5},
+          {team:"Death To Smoochy", w:7,l:7,t:0, pf:1582.31, pa:1663.30, overall:7},
+          {team:"Grinnin' Bear It", w:6,l:8,t:0, pf:1582.00, pa:1458.00, overall:8},
+          {team:"Jimmy's Jammers",  w:4,l:10,t:0, pf:1280.20, pa:1678.30, overall:10}
+        ]},
+        { name:"NFC BOYS", teams:[
+          {team:"Team Awesome",     w:9,l:5,t:0, pf:1792.80, pa:1488.31, overall:1},
+          {team:"GO JAGUARS",       w:9,l:5,t:0, pf:1690.10, pa:1498.90, overall:2},
+          {team:"B Town Boom",      w:9,l:5,t:0, pf:1645.40, pa:1563.60, overall:3},
+          {team:"PROJECT RECLINER", w:7,l:7,t:0, pf:1507.90, pa:1465.20, overall:6},
+          {team:"team gilligan",    w:4,l:10,t:0, pf:1393.70, pa:1590.50, overall:9}
+        ]}
+      ]},
+      "2013": { divisions: [
+        { name:"Division 1", teams:[
+          {team:"OMG FOOTBALL",       w:8,l:6,t:0, pf:1601.10, pa:1510.50, overall:3},
+          {team:"TheHitMen",          w:7,l:7,t:0, pf:1673.40, pa:1568.30, overall:5},
+          {team:"Death To Smoochy",   w:7,l:7,t:0, pf:1540.50, pa:1488.00, overall:6},
+          {team:"Cleavland Steamers", w:7,l:7,t:0, pf:1521.90, pa:1581.10, overall:7},
+          {team:"team gilligan",      w:7,l:7,t:0, pf:1470.10, pa:1647.20, overall:10},
+          {team:"Grinnin' Bear It",   w:5,l:9,t:0, pf:1473.40, pa:1629.80, overall:11}
+        ]},
+        { name:"Division 2", teams:[
+          {team:"BearsForLife",       w:10,l:4,t:0, pf:1736.40, pa:1457.30, overall:1},
+          {team:"HotCakes24",         w:8,l:6,t:0, pf:1715.50, pa:1576.00, overall:2},
+          {team:"bYrdSLaNgers",       w:7,l:7,t:0, pf:1691.10, pa:1787.60, overall:4},
+          {team:"B Town BOOM",        w:7,l:7,t:0, pf:1507.30, pa:1588.10, overall:8},
+          {team:"Tonawanda T-Bags",   w:7,l:7,t:0, pf:1486.60, pa:1515.70, overall:9},
+          {team:"THE CAPTAIN CHIEF BOSSES", w:4,l:10,t:0, pf:1397.60, pa:1465.30, overall:12}
+        ]}
+      ]},
+      "2014": { divisions: [
+        { name:"Division 1", teams:[
+          {team:"Halas' Homeboys",       w:11,l:3,t:0, pf:2112.10, pa:1693.20, overall:2},
+          {team:"team gilligan",         w:7,l:7,t:0,  pf:1950.40, pa:2009.80, overall:5},
+          {team:"Show me ur td's",       w:7,l:7,t:0,  pf:1923.10, pa:1929.60, overall:6},
+          {team:"Cleavland Steamers",    w:6,l:8,t:0,  pf:1717.50, pa:1901.70, overall:8},
+          {team:"Bears Rule Boyz Drool", w:5,l:9,t:0,  pf:1953.20, pa:2053.70, overall:9},
+          {team:"Death To Smoochy",      w:2,l:12,t:0, pf:1785.50, pa:2100.20, overall:12}
+        ]},
+        { name:"Division 2", teams:[
+          {team:"BearsForLife",          w:13,l:1,t:0, pf:2236.10, pa:1791.50, overall:1},
+          {team:"bYrdSLaNgers",          w:11,l:3,t:0, pf:2099.30, pa:1829.00, overall:3},
+          {team:"SnatchSlappers",        w:10,l:4,t:0, pf:2164.40, pa:1882.20, overall:4},
+          {team:"Super sized Mc flippout", w:6,l:8,t:0, pf:1965.50, pa:2056.60, overall:7},
+          {team:"HotCakes24",            w:4,l:10,t:0, pf:1690.20, pa:2021.80, overall:10},
+          {team:"Laybomb",               w:2,l:12,t:0, pf:1667.20, pa:1995.20, overall:11}
+        ]}
+      ]},
+      "2015": { divisions: [
+        { name:"Legal Needles", teams:[
+          {team:"Halas' Homeboys",        w:10,l:4,t:0, pf:1994.70, pa:1597.20, overall:2},
+          {team:"BearsForLife",           w:8,l:6,t:0,  pf:1909.80, pa:1939.20, overall:4},
+          {team:"Dirty Pants",            w:8,l:6,t:0,  pf:1985.90, pa:1839.80, overall:5},
+          {team:"team gilligan",          w:7,l:7,t:0,  pf:1707.30, pa:1746.10, overall:8},
+          {team:"Show me ur td's",        w:5,l:9,t:0,  pf:1699.30, pa:1796.40, overall:10},
+          {team:"Bears Rule Boyz Drool",  w:4,l:10,t:0, pf:1655.60, pa:1903.90, overall:11}
+        ]},
+        { name:"Over The Counter", teams:[
+          {team:"SnatchSlappers",         w:11,l:3,t:0, pf:1937.40, pa:1754.50, overall:1},
+          {team:"Super Sized McFlippout", w:9,l:5,t:0,  pf:2010.00, pa:1800.70, overall:3},
+          {team:"Death To Smoochy",       w:7,l:7,t:0,  pf:1742.90, pa:1810.90, overall:6},
+          {team:"Cleavland Steamers",     w:7,l:7,t:0,  pf:1722.50, pa:1815.20, overall:7},
+          {team:"bYrdSLaNgers",           w:5,l:9,t:0,  pf:1863.10, pa:1999.40, overall:9},
+          {team:"HotCakes24",             w:3,l:11,t:0, pf:1643.70, pa:1868.90, overall:12}
+        ]}
+      ]},
+      "2016": { divisions: [
+        { name:"Legal Needles", teams:[
+          {team:"Death To Smoochy",       w:10,l:4,t:0, pf:2000.30, pa:1789.70, overall:2},
+          {team:"Cleavland Steamers",     w:8,l:6,t:0,  pf:2168.10, pa:2102.00, overall:3},
+          {team:"BearsForLife",           w:8,l:6,t:0,  pf:2137.90, pa:2040.00, overall:4},
+          {team:"SnatchSlappers",         w:8,l:6,t:0,  pf:2021.00, pa:1906.80, overall:5},
+          {team:"Halas' Homeboys",        w:8,l:6,t:0,  pf:2000.60, pa:1907.40, overall:6},
+          {team:"bYrdSLaNgers",           w:6,l:8,t:0,  pf:2005.40, pa:2063.90, overall:8}
+        ]},
+        { name:"Over The Counter", teams:[
+          {team:"HotCakes24",             w:10,l:4,t:0, pf:2045.70, pa:1831.70, overall:1},
+          {team:"Super Sized McFlippout", w:7,l:7,t:0,  pf:1957.00, pa:1909.90, overall:7},
+          {team:"Bears Rule Boyz Drool",  w:6,l:8,t:0,  pf:2017.40, pa:1952.80, overall:9},
+          {team:"Dirty Pants",            w:5,l:9,t:0,  pf:1856.80, pa:2010.30, overall:10},
+          {team:"French Fur Trappers",    w:5,l:9,t:0,  pf:1848.00, pa:2090.30, overall:11},
+          {team:"team gilligan",          w:3,l:11,t:0, pf:1662.00, pa:2115.40, overall:12}
+        ]}
+      ]},
+      "2017": { divisions: [
+        { name:"", teams:[
+          {team:"Bears Rule Boyz Drool",  w:9,l:5,t:0,  pf:2092.60, pa:1873.80, overall:1},
+          {team:"Death To Smoochy",       w:9,l:5,t:0,  pf:1889.60, pa:1839.90, overall:2},
+          {team:"French Fur Trappers",    w:9,l:5,t:0,  pf:2060.80, pa:1931.90, overall:3},
+          {team:"HotCakes24",             w:9,l:5,t:0,  pf:1827.20, pa:1795.80, overall:4},
+          {team:"bYrdSLaNgers",           w:9,l:5,t:0,  pf:2038.50, pa:1887.20, overall:5},
+          {team:"Halas' Homeboys",        w:7,l:7,t:0,  pf:1992.40, pa:2015.50, overall:6},
+          {team:"team gilligan",          w:7,l:7,t:0,  pf:1964.70, pa:2011.80, overall:7},
+          {team:"Dirty Pants",            w:6,l:8,t:0,  pf:1748.60, pa:1889.30, overall:8},
+          {team:"BearsForLife",           w:6,l:8,t:0,  pf:2009.40, pa:1793.80, overall:9},
+          {team:"SnatchSlappers",         w:6,l:8,t:0,  pf:1800.50, pa:1981.80, overall:10},
+          {team:"Cleavland Steamers",     w:5,l:9,t:0,  pf:1872.80, pa:1916.20, overall:11},
+          {team:"Super Sized McFlippout", w:2,l:12,t:0, pf:1751.80, pa:2111.90, overall:12}
+        ]}
+      ]},
+      "2018": { divisions: [
+        { name:"Champsplus1", teams:[
+          {team:"BearsForLife",           w:9,l:5,t:0,  pf:2248.80, pa:2022.40, overall:2},
+          {team:"SnatchSlappers",         w:9,l:5,t:0,  pf:2281.90, pa:1984.00, overall:3},
+          {team:"Death To Smoochy",       w:8,l:6,t:0,  pf:2097.70, pa:2048.30, overall:5},
+          {team:"Cleavland Steamers",     w:6,l:8,t:0,  pf:2033.10, pa:2108.20, overall:7},
+          {team:"bYrdSLaNgers",           w:6,l:8,t:0,  pf:2014.70, pa:2156.10, overall:9},
+          {team:"Halas' Homeboys",        w:5,l:9,t:0,  pf:2099.50, pa:2294.30, overall:11}
+        ]},
+        { name:"Everyone Else", teams:[
+          {team:"Frans Fur Trappers",     w:10,l:4,t:0, pf:2388.90, pa:2141.10, overall:1},
+          {team:"Rollin' With Mahomes",   w:8,l:6,t:0,  pf:2125.70, pa:2076.60, overall:4},
+          {team:"Jens Pocket",            w:6,l:8,t:0,  pf:1988.50, pa:2213.20, overall:6},
+          {team:"Dirty Pants",            w:6,l:8,t:0,  pf:2104.30, pa:2133.50, overall:10},
+          {team:"Show me your tds",       w:6,l:8,t:0,  pf:1924.00, pa:2022.30, overall:8},
+          {team:"Super Sized McFlippout", w:5,l:9,t:0,  pf:2162.10, pa:2269.20, overall:12}
+        ]}
+      ]},
+      "2019": { divisions: [
+        { name:"FOOK U", teams:[
+          {team:"Little Halas Urban Achievers", w:11,l:3,t:0, pf:2383.40, pa:1894.70, overall:2},
+          {team:"football tits",         w:7,l:7,t:0,  pf:1919.80, pa:1937.30, overall:5},
+          {team:"uncle skips ribs",      w:6,l:8,t:0,  pf:1749.10, pa:1944.20, overall:8},
+          {team:"Brown Bag Boy",         w:6,l:8,t:0,  pf:1790.40, pa:1857.40, overall:10},
+          {team:"TradingWithBriggs",     w:3,l:11,t:0, pf:1696.00, pa:1967.40, overall:11},
+          {team:"Jennifer",              w:2,l:12,t:0, pf:1638.50, pa:2118.30, overall:12}
+        ]},
+        { name:"FOOK Me", teams:[
+          {team:"king shit of turd mtn", w:11,l:3,t:0, pf:2375.00, pa:1985.60, overall:1},
+          {team:"Death To Smoochy",      w:10,l:4,t:0, pf:2286.10, pa:2041.80, overall:3},
+          {team:"JustMyLuck",            w:10,l:4,t:0, pf:2143.60, pa:1953.70, overall:4},
+          {team:"Alabama Hot Pockets",   w:6,l:8,t:0,  pf:2020.60, pa:2179.80, overall:6},
+          {team:"BearsForLife",          w:6,l:8,t:0,  pf:1962.20, pa:2047.70, overall:7},
+          {team:"Notorious BiG",         w:6,l:8,t:0,  pf:2108.80, pa:2145.60, overall:9}
+        ]}
+      ]},
+      "2020": { divisions: [
+        { name:"FOOK U", teams:[
+          {team:"MyBallZackErtz",        w:10,l:4,t:0, pf:2123.90, pa:2011.50, overall:1},
+          {team:"Stutterin Pricks",      w:10,l:4,t:0, pf:2421.80, pa:1923.00, overall:3},
+          {team:"uncle skips ribs",      w:9,l:5,t:0,  pf:2024.30, pa:2010.50, overall:4},
+          {team:"Brown Bag Boy",         w:5,l:9,t:0,  pf:1921.30, pa:2031.00, overall:9},
+          {team:"Major usurper",         w:5,l:9,t:0,  pf:2099.50, pa:2211.10, overall:10},
+          {team:"MaddaMafia",            w:3,l:11,t:0, pf:1829.00, pa:2288.40, overall:12}
+        ]},
+        { name:"FOOK Me", teams:[
+          {team:"Death To Smoochy",      w:10,l:4,t:0, pf:2110.60, pa:1801.30, overall:2},
+          {team:"king shit of turd mtn", w:8,l:6,t:0,  pf:1885.40, pa:1912.80, overall:5},
+          {team:"WET OTTERS POCKET",     w:7,l:7,t:0,  pf:2105.80, pa:2122.10, overall:6},
+          {team:"Alabama Hot Pockets",   w:7,l:7,t:0,  pf:1932.30, pa:1876.60, overall:7},
+          {team:"Cobra Kai",             w:6,l:8,t:0,  pf:2161.10, pa:2083.70, overall:8},
+          {team:"SHOW ME YOUR TDS",      w:4,l:10,t:0, pf:1843.30, pa:2186.30, overall:11}
+        ]}
+      ]},
+      "2021": { divisions: [
+        { name:"COLLUSION", teams:[
+          {team:"Alabama Hot Pockets",   w:12,l:2,t:0, pf:2216.50, pa:1781.60, overall:1},
+          {team:"Some Guy Named Shad",   w:11,l:3,t:0, pf:2096.90, pa:1794.30, overall:2},
+          {team:"Wet Otters Pocket",     w:8,l:6,t:0,  pf:2043.40, pa:1926.00, overall:4},
+          {team:"SHOW ME YOUR TDS",      w:6,l:8,t:0,  pf:1815.00, pa:1890.50, overall:6},
+          {team:"Odell Fuckum Jr",       w:6,l:8,t:0,  pf:1836.30, pa:2023.40, overall:10},
+          {team:"Tenacious DST",         w:3,l:11,t:0, pf:1738.90, pa:2138.10, overall:12}
+        ]},
+        { name:"FAIR PLAY", teams:[
+          {team:"MaddaMafia",            w:9,l:5,t:0,  pf:2358.20, pa:2029.10, overall:3},
+          {team:"uncle skips ribs",      w:7,l:7,t:0,  pf:1995.00, pa:2005.70, overall:5},
+          {team:"Stutterin Pricks",      w:6,l:8,t:0,  pf:1913.90, pa:2132.90, overall:8},
+          {team:"Brown Bag Boy",         w:6,l:8,t:0,  pf:2021.90, pa:1977.00, overall:9},
+          {team:"king shit of turd mtn", w:6,l:8,t:0,  pf:1915.60, pa:2090.20, overall:7},
+          {team:"Nut buster",            w:4,l:10,t:0, pf:2034.80, pa:2197.60, overall:11}
+        ]}
+      ]},
+      "2022": { divisions: [
+        { name:"Colluters", teams:[
+          {team:"The Heavy Favorite",    w:10,l:4,t:0, pf:2326.00, pa:1868.80, overall:2},
+          {team:"ELTON JOHNS KID",       w:10,l:4,t:0, pf:2092.20, pa:1731.60, overall:3},
+          {team:"Time to Collide With Matt", w:9,l:5,t:0, pf:1810.70, pa:1742.90, overall:4},
+          {team:"Brown Bag Boy",         w:8,l:6,t:0,  pf:2113.90, pa:1886.10, overall:5},
+          {team:"TradeEveryone",         w:7,l:7,t:0,  pf:2055.00, pa:2037.20, overall:7},
+          {team:"Not Curtis",            w:3,l:11,t:0, pf:1712.70, pa:2053.60, overall:12}
+        ]},
+        { name:"The other guys", teams:[
+          {team:"Some Guy Named Shad",   w:11,l:3,t:0, pf:2103.90, pa:1934.50, overall:1},
+          {team:"SHOW ME YOUR TDS",      w:8,l:6,t:0,  pf:2084.20, pa:1868.00, overall:6},
+          {team:"Nut buster",            w:6,l:8,t:0,  pf:1962.20, pa:2058.40, overall:8},
+          {team:"uncle skips ribs",      w:4,l:10,t:0, pf:1717.70, pa:2154.00, overall:9},
+          {team:"MaddaMafia",            w:4,l:10,t:0, pf:1581.30, pa:1948.40, overall:10},
+          {team:"ILuvTds",               w:4,l:10,t:0, pf:1778.00, pa:2054.30, overall:11}
+        ]}
+      ]},
+      "2023": { divisions: [
+        { name:"All In The Family", teams:[
+          {team:"Alabama Hot Pockets",   w:9,l:5,t:0,  pf:2050.40, pa:1769.60, overall:3},
+          {team:"Wet Otters Pocket",     w:8,l:6,t:0,  pf:2090.50, pa:1995.90, overall:5},
+          {team:"MaddaMafia",            w:8,l:6,t:0,  pf:1896.10, pa:1919.70, overall:6},
+          {team:"uncle skips ribs",      w:7,l:7,t:0,  pf:2002.00, pa:1837.90, overall:8},
+          {team:"Nut buster",            w:4,l:10,t:0, pf:1870.60, pa:2142.30, overall:11},
+          {team:"ELTON JOHNS KID",       w:3,l:11,t:0, pf:1681.70, pa:2052.90, overall:12}
+        ]},
+        { name:"The other guys", teams:[
+          {team:"Brown Bag Boy",         w:11,l:3,t:0, pf:2295.20, pa:1700.10, overall:1},
+          {team:"Bill Cosbys Sleepers",  w:10,l:4,t:0, pf:1916.10, pa:1775.70, overall:2},
+          {team:"ShitBirds",             w:8,l:6,t:0,  pf:2229.50, pa:1923.20, overall:4},
+          {team:"SHOW ME YOUR TDS",      w:7,l:7,t:0,  pf:1783.50, pa:1946.00, overall:7},
+          {team:"Mongo of the Midway",   w:5,l:9,t:0,  pf:1752.90, pa:2234.00, overall:9},
+          {team:"Some Guy Named Shad",   w:4,l:10,t:0, pf:1924.30, pa:2195.50, overall:10}
+        ]}
+      ]},
+      "2024": { divisions: [
+        { name:"", teams:[
+          {team:"Bill Cosbys Sleepers",      w:14,l:0,t:0, pf:2596.10, pa:1844.70, overall:1},
+          {team:"MaddaMafia",                w:9,l:5,t:0,  pf:1909.30, pa:1875.20, overall:2},
+          {team:"Brown Bag Boy",             w:9,l:5,t:0,  pf:1853.40, pa:1873.40, overall:3},
+          {team:"uncle skips ribs",          w:8,l:6,t:0,  pf:1974.50, pa:1905.90, overall:4},
+          {team:"San Francisco Steam Train", w:8,l:6,t:0,  pf:2029.00, pa:1967.20, overall:5},
+          {team:"Wet Otters Pocket",         w:7,l:7,t:0,  pf:1890.90, pa:1878.80, overall:6},
+          {team:"Saquon Bacher",             w:7,l:7,t:0,  pf:2170.90, pa:2077.00, overall:7},
+          {team:"Frozen Meatballs",          w:6,l:8,t:0,  pf:2008.50, pa:2033.10, overall:8},
+          {team:"Nut buster",                w:6,l:8,t:0,  pf:1920.70, pa:1980.20, overall:9},
+          {team:"Slap My Bear Ass",          w:6,l:8,t:0,  pf:2009.20, pa:2118.00, overall:10},
+          {team:"Team Feltersnatch",         w:2,l:12,t:0, pf:1601.30, pa:2058.40, overall:11},
+          {team:"Team Injured Reserve",      w:2,l:12,t:0, pf:1757.90, pa:2109.80, overall:12}
+        ]}
+      ]},
+      "2025": { divisions: [
+        { name:"jeff wins", teams:[
+          {team:"MaddaMafia",              w:11,l:3,t:0, pf:2149.20, pa:1845.90, overall:2},
+          {team:"Saquon Bacher",           w:8,l:6,t:0,  pf:1866.00, pa:1961.10, overall:4},
+          {team:"Nut buster",              w:8,l:6,t:0,  pf:2030.20, pa:2020.90, overall:5},
+          {team:"uncle skips ribs",        w:6,l:8,t:0,  pf:1778.60, pa:1930.80, overall:7},
+          {team:"Jerry had a little Lamb", w:6,l:8,t:0,  pf:1623.30, pa:1749.00, overall:8},
+          {team:"Allen's Assholes",        w:4,l:10,t:0, pf:1785.50, pa:1962.10, overall:11}
+        ]},
+        { name:"shitty division", teams:[
+          {team:"WiFi is Down",            w:13,l:1,t:0, pf:2499.90, pa:1732.90, overall:1},
+          {team:"Bill Cosbys Sleepers",    w:9,l:5,t:0,  pf:2072.90, pa:1826.70, overall:3},
+          {team:"This is my Last year",    w:6,l:8,t:0,  pf:1674.60, pa:1869.00, overall:6},
+          {team:"Brown Bag Boy",           w:6,l:8,t:0,  pf:2128.30, pa:2105.00, overall:9},
+          {team:"Prater's Leg",            w:4,l:10,t:0, pf:1797.10, pa:1978.20, overall:10},
+          {team:"JK Ramandrew Skatabers IV", w:3,l:11,t:0, pf:1629.50, pa:2053.50, overall:12}
+        ]}
+      ]}
+    }
+  }
+};
+
+let S = loadState();
+function loadState(){
+  try{ const raw = store.get('ffl_state'); if(raw){ const s = JSON.parse(raw); if(s.leagueName==='League HQ') s.leagueName='Bitch Boy League';
+    const h = ((s.history&&s.history.v||0) >= DEFAULTS.history.v) ? {...structuredClone(DEFAULTS.history), ...s.history} : structuredClone(DEFAULTS.history);
+    const teams = (Array.isArray(s.teams) && s.teams.length && !s.teams.every(t=>/^Team \d+$/.test(t.name))) ? s.teams : structuredClone(DEFAULTS.teams);
+    teams.forEach(t=>{ t.auto = !!t.auto; });
+    const pickTrades = Array.isArray(s.pickTrades) ? s.pickTrades : structuredClone(DEFAULTS.pickTrades);
+    if(s.scoring && ('Passing yds (per yd)' in s.scoring)) delete s.scoring; // pre-import placeholder scoring: replace with the league's real rules
+    if(s.roster && !('IR' in s.roster)) s.roster.IR = 1;
+    if(s.roster && +s.roster.BN===9) s.roster.BN = 8; // roster now matches the 17-pick draft exactly
+    s.rules = {...structuredClone(DEFAULTS.rules), ...(s.rules||{})};
+    s.draftCfg = {...structuredClone(DEFAULTS.draftCfg), ...(s.draftCfg||{})};
+    s.mock = {...structuredClone(DEFAULTS.mock), ...(s.mock||{})};
+    s.playoffsCustom = (s.playoffsCustom && typeof s.playoffsCustom==='object') ? s.playoffsCustom : {};
+    if(s.season && (!s.season.schedule || !s.season.scores)) s.season = null;
+    s.lineups = (s.lineups && typeof s.lineups==='object') ? s.lineups : {};
+    s.trades = Array.isArray(s.trades) ? s.trades : [];
+    if(![60,180,300,600].includes(+s.timerSec)) s.timerSec = 60;
+    return {...structuredClone(DEFAULTS), ...s, teams, pickTrades, roster:{...DEFAULTS.roster,...(s.roster||{})}, scoring:{...DEFAULTS.scoring,...(s.scoring||{})}, history:h}; } }catch(e){}
+  return structuredClone(DEFAULTS);
+}
+function saveState(){ store.set('ffl_state', JSON.stringify(S)); }
+
+/* Draft state kept separate so settings changes don't clobber a draft.
+   Two boards: the real draft and a mock sandbox. */
+let draftMode = 'real';
+function draftKey(){ return draftMode==='mock' ? 'ffl_mock' : 'ffl_draft'; }
+function loadDraft(){
+  try{ const raw = store.get(draftKey()); if(raw) return JSON.parse(raw); }catch(e){}
+  return { started:false, paused:false, picks:[], finished:false };
+}
+let D = loadDraft();
+function saveDraft(){ store.set(draftKey(), JSON.stringify(D)); }
+function setDraftMode(m){
+  if(draftMode===m) return;
+  clearInterval(timerId); timerId=null;
+  draftMode = m;
+  D = loadDraft();
+  document.getElementById('draftTitle').textContent = m==='mock' ? 'Mock Draft' : 'Draft Room';
+  document.getElementById('draftSub').textContent = m==='mock'
+    ? 'Practice runs — pick for your team and let the bots handle the rest. The real board is untouched.'
+    : 'Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.';
+  document.getElementById('mockCtrls').style.display = m==='mock' ? 'inline-flex' : 'none';
+  document.getElementById('clock').textContent='--';
+  document.getElementById('btnPause').textContent='Pause';
+  if(D.started && !D.paused && !D.finished) armClock();
+  refreshDraftUI();
+  maybeAutoOthers();
+}
+
+/* =====================================================
+   Derived draft math
+===================================================== */
+const N = () => S.teams.length;
+const KR = () => (S.draftCfg&&S.draftCfg.keeper) ? 1 : 0;
+function snakeRounds(){ return Math.max(1, +(S.draftCfg&&S.draftCfg.rounds)||16); }
+function totalRounds(){ return snakeRounds() + KR(); }
+function totalPicks(){ return totalRounds()*N(); }
+function teamForPick(idx){ // keeper pre-round is straight order; snake starts fresh after it
+  if(KR() && idx < N()) return idx;
+  const j = idx - KR()*N();
+  const r = Math.floor(j/N()), i = j%N();
+  return (r%2===0) ? i : N()-1-i;
+}
+function roundForPick(idx){ // 0 = keeper round
+  if(KR() && idx < N()) return 0;
+  return Math.floor((idx - KR()*N())/N()) + 1;
+}
+function pickLabel(idx){ const rd=roundForPick(idx); if(rd===0) return `Keeper Round · Pick ${idx+1}`; const j=idx-KR()*N(); return `Round ${rd} · Pick ${j%N()+1}  (#${idx+1} overall)`; }
+function ownerForPick(idx){ // pick trades: slot belongs to original team, but another team may own it
+  const orig = teamForPick(idx), round = roundForPick(idx);
+  if(round===0) return orig; // keepers can't change hands
+  const tr = (S.pickTrades||[]).find(t=>+t.round===round && t.from===S.teams[orig].name);
+  if(tr){ const oi = S.teams.findIndex(t2=>t2.name===tr.to); if(oi>=0) return oi; }
+  return orig;
+}
+
+/* =====================================================
+   Player pool — Sleeper public API, cached after first load
+===================================================== */
+let POOL = [];           // [{id,name,pos,team,rank}]
+let poolReady = false;
+const POS_LIST = ["QB","RB","WR","TE","K","DEF"];
+let posFilter = "ALL";
+
+async function loadPool(){
+  const status = document.getElementById('poolStatus');
+  // cached?
+  try{ const c = store.get('ffl_pool_v1'); if(c){ POOL = JSON.parse(c); poolReady=true; status.textContent = `${POOL.length} players loaded (cached)`; renderPool(); return; } }catch(e){}
+  status.textContent = "Downloading current NFL player pool…";
+  try{
+    const res = await fetch('https://api.sleeper.app/v1/players/nfl');
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const all = await res.json();
+    const out = [];
+    for(const id in all){
+      const p = all[id];
+      if(!p || !p.position || !POS_LIST.includes(p.position)) continue;
+      if(p.position!=='DEF' && (p.active===false || !p.search_rank || p.search_rank>600)) continue;
+      out.push({ id, name: p.position==='DEF' ? `${p.first_name||''} ${p.last_name||''}`.trim()+" D/ST" : (p.full_name || `${p.first_name} ${p.last_name}`),
+                 pos: p.position, team: p.team || 'FA',
+                 rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.search_rank });
+    }
+    out.sort((a,b)=>a.rank-b.rank);
+    POOL = out;
+    poolReady = true;
+    try{ store.set('ffl_pool_v1', JSON.stringify(POOL)); }catch(e){}
+    status.textContent = `${POOL.length} players loaded — ranked by consensus`;
+    maybeAutoOthers(); maybeAutoFlagged();
+  }catch(err){
+    status.innerHTML = "Couldn't reach the player feed (needs internet). Retry when connected — the draft board still works.";
+    POOL = []; poolReady = false;
+  }
+  renderPool();
+}
+function draftedIds(){ return new Set(D.picks.map(p=>p.playerId)); }
+function availablePlayers(){
+  const taken = draftedIds();
+  const q = (document.getElementById('poolSearch')?.value||'').toLowerCase().trim();
+  return POOL.filter(p=>!taken.has(p.id))
+             .filter(p=>posFilter==='ALL'||p.pos===posFilter)
+             .filter(p=>!q || p.name.toLowerCase().includes(q) || (p.team||'').toLowerCase().includes(q));
+}
+
+/* =====================================================
+   Draft engine
+===================================================== */
+let timerId=null, timeLeft=0;
+
+function startDraft(){
+  if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
+  D.started = true; D.paused = false; saveDraft();
+  armClock();
+  refreshDraftUI();
+}
+function togglePause(){
+  if(!D.started||D.finished) return;
+  D.paused = !D.paused; saveDraft();
+  document.getElementById('btnPause').textContent = D.paused ? 'Resume' : 'Pause';
+  if(D.paused){ clearInterval(timerId); timerId=null; } else armClock(timeLeft);
+  refreshDraftUI();
+}
+function armClock(carry){
+  clearInterval(timerId);
+  timeLeft = (carry && carry>0) ? carry : (+S.timerSec||60);
+  paintClock();
+  timerId = setInterval(()=>{
+    timeLeft--;
+    paintClock();
+    if(timeLeft<=0){ clearInterval(timerId); autoPick(); }
+  },1000);
+  maybeAutoOthers();
+  maybeAutoFlagged();
+}
+function maybeAutoFlagged(){
+  if(draftMode!=='real' || !D.started || D.paused || D.finished || !poolReady) return;
+  const idx = currentPickIndex();
+  if(KR() && roundForPick(idx)===0) return; // commissioner enters keepers by hand
+  const own = ownerForPick(idx);
+  if(S.teams[own] && S.teams[own].auto){
+    clearInterval(timerId);
+    setTimeout(()=>{
+      if(draftMode!=='real' || !D.started || D.paused || D.finished) return;
+      const i2 = currentPickIndex();
+      if(S.teams[ownerForPick(i2)] && S.teams[ownerForPick(i2)].auto) autoPick();
+    }, 600);
+  }
+}
+function maybeAutoOthers(){
+  if(draftMode!=='mock' || !(S.mock&&S.mock.auto) || !D.started || D.paused || D.finished) return;
+  if(!poolReady) return;
+  const onClock = ownerForPick(currentPickIndex());
+  if(onClock !== +(S.mock.team||0)){
+    clearInterval(timerId);
+    setTimeout(()=>{
+      if(draftMode==='mock' && D.started && !D.paused && !D.finished && ownerForPick(currentPickIndex())!==+(S.mock.team||0)) autoPick();
+    }, 350);
+  }
+}
+function paintClock(){
+  const el = document.getElementById('clock');
+  const m = Math.floor(Math.max(timeLeft,0)/60), s = Math.max(timeLeft,0)%60;
+  el.textContent = `${m}:${String(s).padStart(2,'0')}`;
+  el.className = 'clock' + (timeLeft<=10?' crit':(timeLeft<=30?' warn':''));
+}
+function currentPickIndex(){ return D.picks.length; }
+
+function makePick(playerId){
+  if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
+  const idx = currentPickIndex();
+  const player = POOL.find(p=>p.id===playerId);
+  if(!player || draftedIds().has(playerId)) return;
+  D.picks.push({ pickIndex: idx, teamIndex: ownerForPick(idx), playerId, name:player.name, pos:player.pos, nfl:player.team, auto:false });
+  afterPick();
+}
+function autoPick(){
+  const avail = bestAvailableForClockTeam();
+  if(!avail){ toast("No players available to auto-pick."); return; }
+  const idx = currentPickIndex();
+  D.picks.push({ pickIndex: idx, teamIndex: ownerForPick(idx), playerId: avail.id, name:avail.name, pos:avail.pos, nfl:avail.team, auto:true });
+  toast(`Auto-pick: ${avail.name}`);
+  afterPick();
+}
+function starterReq(){ const r=S.roster; return {QB:+r.QB||0, RB:+r.RB||0, WR:+r.WR||0, TE:+r.TE||0, K:+r.K||0, DEF:+r.DEF||0, FLEX:+r.FLEX||0}; }
+function starterState(teamIdx){
+  const req = starterReq();
+  const counts = {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0};
+  D.picks.filter(p=>p.teamIndex===teamIdx).forEach(p=>{ if(p.pos in counts) counts[p.pos]++; });
+  let surplus = 0; ['RB','WR','TE'].forEach(P=>surplus += Math.max(0, counts[P]-req[P]));
+  const flexFilled = Math.min(req.FLEX, surplus);
+  const open = P => (counts[P] < req[P]) || (['RB','WR','TE'].includes(P) && flexFilled < req.FLEX);
+  const complete = ['QB','RB','WR','TE','K','DEF'].every(P=>counts[P]>=req[P]) && flexFilled >= req.FLEX;
+  return {open, complete};
+}
+function bestAvailableForClockTeam(){
+  // auto strategy: fill the starting lineup first, then take best available
+  const tIdx = ownerForPick(currentPickIndex());
+  const taken = draftedIds();
+  const counts = {}; POS_LIST.forEach(p=>counts[p]=0);
+  D.picks.filter(p=>p.teamIndex===tIdx).forEach(p=>counts[p.pos]++);
+  const caps = positionCaps();
+  const st = starterState(tIdx);
+  if(!st.complete){
+    const fit = POOL.find(p=>!taken.has(p.id) && st.open(p.pos) && counts[p.pos] < caps[p.pos]);
+    if(fit) return fit;
+  }
+  // starters done: best available with positional discipline —
+  // no 2nd QB before Round 10, and never a 2nd K or DEF on auto
+  const rd = roundForPick(currentPickIndex());
+  const allowed = p =>
+    !((p.pos==='QB') && counts.QB>=1 && rd<10) &&
+    !((p.pos==='K'||p.pos==='DEF') && counts[p.pos]>=1);
+  return POOL.find(p=>!taken.has(p.id) && counts[p.pos] < caps[p.pos] && allowed(p))
+      || POOL.find(p=>!taken.has(p.id) && counts[p.pos] < caps[p.pos]);
+}
+function positionCaps(){
+  // hard cap per position = dedicated slots + FLEX (RB/WR/TE) + all bench
+  const r = S.roster, bn = +r.BN||0, fx = +r.FLEX||0;
+  return { QB:(+r.QB||0)+bn, RB:(+r.RB||0)+fx+bn, WR:(+r.WR||0)+fx+bn, TE:(+r.TE||0)+fx+bn, K:(+r.K||0)+bn, DEF:(+r.DEF||0)+bn };
+}
+function afterPick(){
+  if(currentPickIndex() >= totalPicks()){
+    D.finished = true; clearInterval(timerId); timerId=null;
+    document.getElementById('clock').textContent = 'END';
+    toast("That's a wrap — draft complete! 🏈");
+  } else { armClock(); }
+  saveDraft();
+  refreshDraftUI();
+}
+function undoPick(){
+  if(!D.picks.length) return;
+  const last = D.picks.pop();
+  D.finished = false; saveDraft();
+  toast(`Undid: ${last.name}`);
+  if(D.started && !D.paused) armClock();
+  refreshDraftUI();
+}
+function resetDraft(){
+  if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
+  clearInterval(timerId); timerId=null;
+  D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
+  document.getElementById('clock').textContent='--';
+  document.getElementById('btnPause').textContent='Pause';
+  refreshDraftUI();
+}
+
+/* =====================================================
+   Rendering
+===================================================== */
+function showView(v){
+  window.currentView = v;
+  const domView = (v==='mock') ? 'draft' : v;
+  document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
+  document.getElementById('view-'+domView).classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  if(v==='home') renderHome();
+  if(v==='teams') renderTeams();
+  if(v==='matchups') renderMatchups();
+  if(v==='trades') renderTradeCenter();
+  if(v==='history') renderHistory();
+  if(v==='stats') renderStats();
+  if(v==='recaps') renderRecaps();
+  if(v==='chat') initChat();
+  if(v==='draft'){ setDraftMode('real'); refreshDraftUI(); }
+  if(v==='mock'){ setDraftMode('mock'); refreshDraftUI(); }
+}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+
+function renderHome(){
+  document.getElementById('homeLeagueName').textContent = S.leagueName;
+  document.getElementById('wmName').textContent = S.leagueName;
+  const done = D.picks.length;
+  document.getElementById('homeSnapshot').innerHTML = `
+    <table class="plain">
+      <tr><td>Teams</td><td style="text-align:right">${N()}</td></tr>
+      <tr><td>Draft</td><td style="text-align:right">${snakeRounds()} rounds${KR()?' + keeper round':''}</td></tr>
+      <tr><td>Pick clock</td><td style="text-align:right">${S.timerSec}s</td></tr>
+      <tr><td>Draft status</td><td style="text-align:right">${D.finished?'Complete':(D.started? done+' / '+totalPicks()+' picks':'Not started')}</td></tr>
+      <tr><td>Scoring</td><td style="text-align:right">Custom (${Object.keys(S.scoring).length} rules)</td></tr>
+    </table>`;
+}
+
+function renderBoard(){
+  const board = document.getElementById('board');
+  const n = N(), rounds = snakeRounds();
+  board.style.gridTemplateColumns = `clamp(30px,3.5vw,54px) repeat(${n}, minmax(0,1fr))`;
+  let html = `<div></div>`;
+  S.teams.forEach(t=>html+=`<div class="bhead">${esc(t.name)}</div>`);
+  const byIndex = {}; D.picks.forEach(p=>byIndex[p.pickIndex]=p);
+  const nextIdx = currentPickIndex();
+  const rowStarts = [];
+  if(KR()) rowStarts.push({label:'KEEPER', straight:true});
+  for(let r=0;r<rounds;r++) rowStarts.push({label:'R'+(r+1), straight:(r%2===0)});
+  for(let row=0;row<rowStarts.length;row++){
+    const meta = rowStarts[row];
+    html += `<div class="rnd">${meta.label}</div>`;
+    for(let col=0;col<n;col++){
+      const within = meta.straight? col : n-1-col;
+      const idx = row*n + within;
+      const p = byIndex[idx];
+      const isNext = idx===nextIdx && !D.finished && D.started;
+      const own = ownerForPick(idx);
+      const isKeep = KR() && row===0;
+      html += `<div class="slot${isNext?' next':''}">` +
+        (p? `<div class="sticker pos-${p.pos}"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?' → '+esc(S.teams[p.teamIndex]?.name||''):''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div>`:'') +
+        ((!p && own!==teamForPick(idx))? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--chalk-dim);font-family:'IBM Plex Mono',monospace">${esc(S.teams[own].name.slice(0,14))}</div>`:'') + `</div>`;
+    }
+  }
+  board.innerHTML = html;
+}
+
+function renderPool(){
+  const list = document.getElementById('poolList');
+  if(!poolReady){ list.innerHTML=''; return; }
+  const avail = availablePlayers().slice(0,150);
+  list.innerHTML = avail.map(p=>`
+    <div class="prow pos-${p.pos}">
+      <span class="postag">${p.pos}</span>
+      <span class="pname">${esc(p.name)}</span>
+      <span class="pmeta">${p.team||''}</span>
+      <button class="pick" onclick="makePick('${p.id}')">Draft</button>
+    </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
+}
+
+function renderPosFilters(){
+  const el = document.getElementById('posFilters');
+  const opts = ['ALL',...POS_LIST];
+  el.innerHTML = opts.map(p=>`<button class="${posFilter===p?'on':''}" onclick="posFilter='${p}';renderPosFilters();renderPool()">${p}</button>`).join('');
+}
+
+function renderRosterMini(){
+  const el = document.getElementById('rosterMini');
+  if(!D.started){ el.innerHTML = `<span style="color:var(--chalk-dim)">On-the-clock team's roster shows here.</span>`; return; }
+  const tIdx = D.finished ? null : ownerForPick(currentPickIndex());
+  if(tIdx===null){ el.innerHTML = `<b>Draft complete.</b> See the Teams tab for full rosters.`; return; }
+  const picks = D.picks.filter(p=>p.teamIndex===tIdx);
+  el.innerHTML = `<div class="eyebrow" style="margin-bottom:4px">${esc(S.teams[tIdx].name)} so far</div>` +
+    (picks.map(p=>`<div class="rr"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span><b>${esc(p.name)}</b></div>`).join('') || `<span style="color:var(--chalk-dim)">No picks yet.</span>`);
+}
+
+function refreshDraftUI(){
+  const cs = document.getElementById('clockSel'); if(cs) cs.value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
+  const mt = document.getElementById('mockTeam');
+  if(mt){ mt.innerHTML = S.teams.map((t,i)=>`<option value="${i}" ${i===+(S.mock&&S.mock.team||0)?'selected':''}>${esc(t.name)}</option>`).join(''); }
+  const idx = currentPickIndex();
+  const startBtn = document.getElementById('btnStart');
+  startBtn.disabled = D.started && !D.finished;
+  document.getElementById('btnPause').disabled = !D.started || D.finished;
+  document.getElementById('btnUndo').disabled = !D.picks.length;
+  if(D.finished){
+    document.getElementById('pickLabel').textContent = 'Final';
+    document.getElementById('onClockTeam').textContent = 'Draft complete';
+  } else if(D.started){
+    document.getElementById('pickLabel').textContent = pickLabel(idx);
+    document.getElementById('onClockTeam').textContent = S.teams[ownerForPick(idx)].name + ((ownerForPick(idx)!==teamForPick(idx))?` (via ${S.teams[teamForPick(idx)].name})`:'') + (S.teams[ownerForPick(idx)].auto?' \u00B7 AUTO':'') + (D.paused?' (paused)':' is on the clock');
+  } else {
+    document.getElementById('pickLabel').textContent = 'Pre-draft';
+    document.getElementById('onClockTeam').textContent = 'Ready when you are';
+  }
+  renderBoard(); renderPool(); renderRosterMini();
+}
+
+/* =====================================================
+   League chat — shared storage when available (claude.ai
+   artifact), local shoutbox otherwise. Supabase later.
+===================================================== */
+const CHAT_KEY = 'chat:messages';
+const chatShared = !!(window.storage && window.storage.get && window.storage.set);
+let chatMsgs = [], chatTimer = null, chatLoaded = false;
+
+async function chatLoad(){
+  try{
+    if(chatShared){
+      const r = await window.storage.get(CHAT_KEY, true);
+      chatMsgs = r && r.value ? JSON.parse(r.value) : [];
+    } else {
+      const raw = store.get('ffl_chat');
+      chatMsgs = raw ? JSON.parse(raw) : [];
+    }
+  }catch(e){ if(!chatLoaded) chatMsgs = []; }
+  chatLoaded = true;
+  renderChat();
+}
+async function chatSave(){
+  const trimmed = chatMsgs.slice(-300);
+  try{
+    if(chatShared) await window.storage.set(CHAT_KEY, JSON.stringify(trimmed), true);
+    else store.set('ffl_chat', JSON.stringify(trimmed));
+  }catch(e){ toast("Couldn't save that message."); }
+}
+function initChat(){
+  const nm = store.get('ffl_chat_name'); if(nm) document.getElementById('chatName').value = nm;
+  document.getElementById('chatBanner').textContent = chatShared
+    ? 'Trash talk lives here. Messages are visible to everyone who uses this league app.'
+    : 'Local shoutbox for now \u2014 messages save only on this device. League-wide chat arrives with the online backend.';
+  chatLoad();
+  clearInterval(chatTimer);
+  if(chatShared) chatTimer = setInterval(()=>{ if(document.getElementById('view-chat').classList.contains('active')) chatLoad(); }, 6000);
+}
+async function sendChat(){
+  const nameEl = document.getElementById('chatName'), msgEl = document.getElementById('chatMsg');
+  const n = (nameEl.value||'').trim(), m = (msgEl.value||'').trim();
+  if(!n){ toast('Put a name on it \u2014 anonymous trash talk is cowardice.'); nameEl.focus(); return; }
+  if(!m) return;
+  store.set('ffl_chat_name', n);
+  await chatLoad();
+  chatMsgs.push({n, m, t: Date.now()});
+  msgEl.value = '';
+  await chatSave();
+  renderChat();
+}
+function renderChat(){
+  const el = document.getElementById('chatList');
+  if(!el) return;
+  const me = (document.getElementById('chatName')?.value||'').trim();
+  el.innerHTML = chatMsgs.length ? chatMsgs.map(x=>{
+    const mine = me && x.n===me;
+    const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+    return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
+      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(x.n)} \u00B7 ${when}</div>
+      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${esc(x.m)}</div>
+    </div>`;
+  }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function franchiseData(from, to){
+  const H = S.history;
+  const MGR = H.managers||{};
+  const lo = +from || -Infinity, hi = +to || Infinity;
+  const inRange = yr => +yr>=lo && +yr<=hi;
+  const mgrOf = (yr,team)=> (MGR[String(yr)]&&MGR[String(yr)][team])||null;
+  const champs = [...(H.champions||[])].filter(c=>inRange(c.year));
+  const fr = {};
+  Object.keys(MGR).sort().filter(inRange).forEach(yr=>{ Object.entries(MGR[yr]).forEach(([team,mg])=>{
+    (fr[mg]=fr[mg]||{seasons:[],titles:[],w:0,l:0,t:0,pf:0,last:0}).seasons.push({yr:+yr,team});
+  }); });
+  champs.forEach(c=>{ const mg=mgrOf(c.year,c.team); if(mg&&fr[mg]) fr[mg].titles.push(c.year); });
+  Object.entries(H.standings||{}).filter(([yr])=>inRange(yr)).forEach(([yr,sd])=>{
+    const all = sd.divisions.flatMap(d=>d.teams);
+    const maxOv = Math.max(...all.map(t2=>t2.overall));
+    all.forEach(t2=>{ const mg=mgrOf(yr,t2.team); if(mg&&fr[mg]){ fr[mg].w+=t2.w; fr[mg].l+=t2.l; fr[mg].t+=t2.t; fr[mg].pf+=t2.pf; if(t2.overall===maxOv) fr[mg].last++; } });
+  });
+  Object.values(fr).forEach(v=>{ v.titles.sort((a,b)=>a-b); v.seasons.sort((a,b)=>a.yr-b.yr); });
+  const multiMgr = Object.entries(fr).filter(([,v])=>v.titles.length>1).sort((a,b)=>b[1].titles.length-a[1].titles.length);
+  const b2bMgr = Object.entries(fr).filter(([,v])=>v.titles.some((t2,i)=>i>0&&v.titles[i-1]===t2-1));
+  return {MGR, mgrOf, fr, multiMgr, b2bMgr};
+}
+
+function renderRecaps(){
+  const H = S.history;
+  const years = Object.keys(H.recaps||{}).sort((a,b)=>b-a);
+  if(!years.length){ document.getElementById('recapsView').innerHTML='<p class="sub">No recaps yet.</p>'; return; }
+  if(!window.recapYear || !years.includes(String(window.recapYear))) window.recapYear = years[0];
+  const yr = String(window.recapYear);
+  const R = H.recaps[yr];
+  const {mgrOf} = franchiseData();
+  const idx = years.indexOf(yr);
+  const champ = (H.champions||[]).find(c=>String(c.year)===yr);
+  const plr = (H.pointsLeaders||[]).find(r=>String(r.year)===yr);
+  const twr = (H.teamWeeks||[]).find(r=>String(r.year)===yr);
+  const pwr = (H.playerWeeks||[]).find(r=>String(r.year)===yr);
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const strip = [];
+  if(champ) strip.push(`\uD83C\uDFC6 <b>${esc(champ.team)}</b>${mgrOf(yr,champ.team)?` (${esc(mgrOf(yr,champ.team))})`:''}`);
+  if(plr) strip.push(`Points leader: <b>${esc(plr.team)}</b> \u00B7 ${fmt(plr.pts)}`);
+  if(twr) strip.push(`Best week: <b>${esc(twr.team)}</b> \u00B7 ${fmt(twr.pts)} (Wk ${twr.week})`);
+  if(pwr) strip.push(`Top player week: <b>${esc(pwr.player)}</b> \u00B7 ${fmt(pwr.pts)} (Wk ${pwr.week})`);
+  document.getElementById('recapsView').innerHTML = `
+    <div class="card" style="max-width:860px">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <button class="btn ghost" ${idx>=years.length-1?'disabled':''} onclick="window.recapYear='${years[Math.min(idx+1,years.length-1)]}';renderRecaps()">\u25C0 ${idx<years.length-1?years[idx+1]:''}</button>
+        <select onchange="window.recapYear=this.value;renderRecaps()">${years.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Season</option>`).join('')}</select>
+        <button class="btn ghost" ${idx<=0?'disabled':''} onclick="window.recapYear='${years[Math.max(idx-1,0)]}';renderRecaps()">${idx>0?years[idx-1]:''} \u25B6</button>
+      </div>
+      <div class="eyebrow">${yr}</div>
+      <h1 style="margin-bottom:10px">${esc(R.title)}</h1>
+      <p class="sub" style="margin-bottom:14px">${strip.join(' \u2003\u00B7\u2003 ')}</p>
+      ${R.story.map(p2=>`<p style="margin-bottom:12px;max-width:70ch">${esc(p2)}</p>`).join('')}
+      <div class="eyebrow" style="margin-top:16px">Fun facts</div>
+      ${R.facts.map(f2=>`<div class="phase"><span class="tag">\uD83C\uDFC8</span><span>${esc(f2)}</span></div>`).join('')}
+      <div class="row" style="margin-top:14px">
+        <button class="btn ghost" onclick="window.histYear='${yr}';showView('history')">Full ${yr} standings \u2192</button>
+      </div>
+    </div>`;
+}
+
+function renderStats(){
+  const allYears = Object.keys(S.history.managers||{}).map(Number).sort();
+  const rMin = allYears[0]||2012, rMax = allYears[allYears.length-1]||2025;
+  const R = window.statsRange || (window.statsRange = {from:rMin, to:rMax});
+  R.from = Math.min(Math.max(+R.from||rMin, rMin), rMax);
+  R.to = Math.min(Math.max(+R.to||rMax, rMin), rMax);
+  if(R.from > R.to) [R.from, R.to] = [R.to, R.from];
+  const {fr, multiMgr, b2bMgr} = franchiseData(R.from, R.to);
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const rows = Object.entries(fr);
+  const pct = v => { const g=v.w+v.l+v.t; return g? v.w/g : 0; };
+  const lead = (title, pick, val) => { const r=[...rows].sort(pick)[0]; return r? `<div class="card"><div class="eyebrow">${title}</div><h2 style="margin-bottom:2px">${esc(r[0])}</h2><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:var(--turf)">${val(r[1])}</div></div>` : ''; };
+  const ss = window.statsSort || (window.statsSort = {key:'titles', dir:-1});
+  const metric = {
+    mgr:  ([mg])=>mg.toLowerCase(),
+    yrs:  ([,v])=>v.seasons.length,
+    wins: ([,v])=>v.w,
+    pct:  ([,v])=>{const g=v.w+v.l+v.t; return g? v.w/g : -1;},
+    pf:   ([,v])=>v.pf,
+    ppy:  ([,v])=>v.seasons.length? v.pf/v.seasons.length : -1,
+    last: ([,v])=>v.last,
+    titles:([,v])=>v.titles.length + (v.titles.length? (2100-Math.min(...v.titles))/1e6 : 0)
+  }[ss.key] || (([,v])=>v.titles.length);
+  const sorted = [...rows].sort((a,b)=>{
+    const A=metric(a), B=metric(b);
+    const cmp = (typeof A==='string') ? A.localeCompare(B) : A-B;
+    return ss.dir * (cmp===0 ? b[1].w-a[1].w : cmp) * (typeof A==='string'?1:1) || 0;
+  });
+  const yrOpts = sel => allYears.map(y=>`<option value="${y}" ${y===sel?'selected':''}>${y}</option>`).join('');
+  const isAll = R.from===rMin && R.to===rMax;
+  document.getElementById('statsView').innerHTML = `
+    <div class="card" style="margin-bottom:18px">
+      <div class="row">
+        <span class="eyebrow" style="margin:0">Filter by years</span>
+        <select onchange="window.statsRange.from=+this.value;renderStats()">${yrOpts(R.from)}</select>
+        <span style="color:var(--chalk-dim)">to</span>
+        <select onchange="window.statsRange.to=+this.value;renderStats()">${yrOpts(R.to)}</select>
+        ${!isAll?`<button class="btn ghost" onclick="window.statsRange={from:${rMin},to:${rMax}};renderStats()">All time</button>`:''}
+        <span class="spacer"></span>
+        <span class="sub" style="margin:0">${isAll? `All ${allYears.length} seasons` : `${R.from}\u2013${R.to} \u00B7 ${R.to-R.from+1} season${R.to>R.from?'s':''}`}</span>
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:18px">
+      ${lead('Most career wins', (a,b)=>b[1].w-a[1].w, v=>v.w+' wins ('+v.w+'-'+v.l+'-'+v.t+')')}
+      ${lead('Best win percentage (3+ yrs)', (a,b)=>{const A=a[1].seasons.length>=3?pct(a[1]):-1,B=b[1].seasons.length>=3?pct(b[1]):-1;return B-A;}, v=>pct(v).toFixed(3).slice(1)+' ('+v.w+'-'+v.l+')')}
+      ${lead('Most career points', (a,b)=>b[1].pf-a[1].pf, v=>fmt(v.pf)+' pts')}
+      ${lead('Most last-place finishes', (a,b)=>b[1].last-a[1].last, v=>v.last+' \uD83D\uDC80')}
+    </div>
+    <div class="card">
+      <h2>Franchise Trophy Case</h2>
+      <p class="sub" style="margin-bottom:10px">Team names are costumes — managers are the franchise. ${isAll? '2012\u20132025, all time.' : `Showing ${R.from}\u2013${R.to} only.`} Click any column to crown a different king.${multiMgr.length?` Multiple titles: ${multiMgr.map(([mg,v])=>esc(mg)+' ('+v.titles.join(', ')+')').join('; ')}.`:''}${b2bMgr.length?` Back-to-back: ${b2bMgr.map(([mg])=>esc(mg)).join(', ')}.`:''}</p>
+      <div style="overflow-x:auto"><table class="plain" style="min-width:760px">
+        <tr>${[['mgr','Manager','left'],['yrs','Yrs','right'],['wins','W-L-T','right'],['pct','Pct','right'],['pf','Career PF','right'],['ppy','PF / Yr','right'],['last','Lasts','right'],['titles','Titles','right']].map(([k,label,al])=>`<th class="sortable ${ss.key===k?'on':''}" style="text-align:${al}" onclick="setStatsSort('${k}')">${label}${ss.key===k?(ss.dir<0?' \u25BC':' \u25B2'):''}</th>`).join('')}<th>Team history</th></tr>
+        ${sorted.map(([mg,v],i)=>{
+          const names=[...new Set(v.seasons.map(s2=>s2.team))];
+          const nm = names.length>3 ? names.slice(0,2).join(' \u2192 ')+' \u2192 \u2026 \u2192 '+names[names.length-1] : names.join(' \u2192 ');
+          return `<tr class="${i===0?'top':''}"><td>${v.titles.length?'\uD83C\uDFC6'.repeat(v.titles.length)+' ':''}${esc(mg)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${v.seasons.length}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${v.w}-${v.l}-${v.t}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${(v.w+v.l+v.t)?pct(v).toFixed(3).slice(1):'\u2014'}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(v.pf)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${v.seasons.length?fmt(v.pf/v.seasons.length):'\u2014'}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${v.last||'\u2014'}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${v.titles.join(', ')||'\u2014'}</td><td style="color:var(--chalk-dim);font-size:12px">${esc(nm)}</td></tr>`;
+        }).join('')}
+      </table></div>
+    </div>`;
+}
+window.statsSort = window.statsSort || {key:'titles', dir:-1};
+function setStatsSort(key){
+  const ss = window.statsSort;
+  if(ss.key===key) ss.dir = -ss.dir;
+  else { ss.key = key; ss.dir = (key==='mgr') ? 1 : -1; }
+  renderStats();
+}
+
+function renderHistory(){
+  const H = S.history;
+  const {mgrOf} = franchiseData();
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const pl = [...H.pointsLeaders].sort((a,b)=>b.year-a.year);
+  const best = [...pl].sort((a,b)=>b.pts-a.pts)[0];
+  const worst = [...pl].sort((a,b)=>a.pts-b.pts)[0];
+  const tw = [...H.teamWeeks].sort((a,b)=>b.year-a.year);
+  const bestTW = [...tw].sort((a,b)=>b.pts-a.pts)[0];
+  const pw = [...H.playerWeeks].sort((a,b)=>b.year-a.year);
+  const bestPW = [...pw].sort((a,b)=>b.pts-a.pts)[0];
+  const champs = [...H.champions].sort((a,b)=>b.year-a.year);
+  const plByYear = {}; pl.forEach(r=>plByYear[r.year]=r);
+  const stYears = Object.keys(H.standings||{}).sort((a,b)=>b-a);
+  if(!window.histYear || !stYears.includes(String(window.histYear))) window.histYear = stYears[0];
+  const champByYear = {}; champs.forEach(c=>champByYear[c.year]=c.team);
+  const stHTML = !stYears.length ? '' : (()=>{ const yr = String(window.histYear); const sd = H.standings[yr];
+    return `<div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <h2 style="margin:0">Season Standings</h2>
+        <select onchange="window.histYear=this.value;renderHistory()">${stYears.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Season</option>`).join('')}</select>
+      </div>
+      ${sd.divisions.map(d=>`
+        ${d.name?`<div class="eyebrow" style="margin-top:10px">${esc(d.name)}</div>`:''}
+        <table class="plain">
+          <tr><th>Team</th><th style="text-align:center;width:92px">W-L-T</th><th style="text-align:right;width:104px">PF</th><th style="text-align:right;width:104px">PA</th><th style="text-align:right;width:56px">Ovr</th></tr>
+          ${d.teams.map(t2=>{const mg=(H.managers&&H.managers[yr]&&H.managers[yr][t2.team])||'';return `<tr><td style="padding-top:5px;padding-bottom:5px"><div style="line-height:1.2">${esc(t2.team)}${champByYear[+yr]===t2.team?' \uD83C\uDFC6':''}</div>${mg?`<div style="color:var(--chalk-dim);font-size:11px;line-height:1.2">${esc(mg)}</div>`:''}</td><td style="text-align:center;font-family:'IBM Plex Mono',monospace">${t2.w}-${t2.l}-${t2.t}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(t2.pf)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(t2.pa)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${t2.overall}</td></tr>`;}).join('')}
+        </table>`).join('')}
+      <p class="sub" style="margin:10px 0 0">${stYears.length>=14? 'Complete archive: all 14 seasons, 2012–2025, migrated off NFL.com.' : stYears.length+' of 14 seasons loaded.'}</p>
+    </div>`; })();
+  const PO = {...(H.playoffs||{}), ...(S.playoffsCustom||{})};
+  const poYears = Object.keys(PO).sort((a,b)=>b-a);
+  if(!window.histPOYear || !poYears.includes(String(window.histPOYear))) window.histPOYear = poYears[0];
+  const poHTML = (()=>{ const yr = String(window.histPOYear||''); const games = PO[yr]||[];
+    const weeks = [...new Set(games.map(g=>g.week))].sort((a,b)=>a-b);
+    const row = g => { const aWin = g.pa>g.pb, sb = g.label==='Fantasy Super Bowl';
+      const side = (s,t,p,win) => `<td style="${win?'font-weight:600':'color:var(--chalk-dim)'}">${win&&sb?'\uD83C\uDFC6 ':''}(${s}) ${esc(t)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;${win?'font-weight:600':'color:var(--chalk-dim)'}">${(+p).toFixed(2)}</td>`;
+      return `<tr><td style="color:var(--chalk-dim);font-size:12px;white-space:nowrap">${esc(g.label)}</td>${side(g.sa,g.ta,g.pa,aWin)}${side(g.sb,g.tb,g.pb,!aWin)}</tr>`; };
+    const editRow = (g,i) => `
+      <tr>
+        <td style="white-space:nowrap"><input type="number" value="${g.week}" style="width:56px" onchange="poSet(${i},'week',+this.value)"> <input type="text" value="${esc(g.label)}" style="width:130px" onchange="poSet(${i},'label',this.value)"></td>
+        <td><input type="number" value="${g.sa}" style="width:48px" onchange="poSet(${i},'sa',+this.value)"> <input type="text" list="poTeams" value="${esc(g.ta)}" style="width:150px" onchange="poSet(${i},'ta',this.value)"></td>
+        <td><input type="number" step="0.01" value="${g.pa}" style="width:80px" onchange="poSet(${i},'pa',+this.value)"></td>
+        <td><input type="number" value="${g.sb}" style="width:48px" onchange="poSet(${i},'sb',+this.value)"> <input type="text" list="poTeams" value="${esc(g.tb)}" style="width:150px" onchange="poSet(${i},'tb',this.value)"></td>
+        <td><input type="number" step="0.01" value="${g.pb}" style="width:80px" onchange="poSet(${i},'pb',+this.value)"></td>
+        <td><button class="btn danger" style="padding:2px 8px;font-size:12px" onclick="poDelGame(${i})">\u00D7</button></td>
+      </tr>`;
+    const edit = !!window.poEdit;
+    return `<div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:6px">
+        <h2 style="margin:0">Playoff Bracket</h2>
+        <span class="row">
+          ${poYears.length?`<select onchange="window.histPOYear=this.value;renderHistory()">${poYears.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Playoffs</option>`).join('')}</select>`:''}
+          ${yr?`<button class="btn ghost" onclick="window.poEdit=!window.poEdit;renderHistory()">${edit?'Done':'Edit'}</button>`:''}
+          <button class="btn ghost" onclick="poNewBracket()">New bracket\u2026</button>
+        </span>
+      </div>
+      ${!games.length? `<p style="color:var(--chalk-dim)">No bracket yet — hit New bracket to set one up.</p>` :
+        edit
+        ? `<datalist id="poTeams">${S.teams.map(t=>`<option value="${esc(t.name)}">`).join('')}</datalist>
+           <table class="plain"><tr><th>Week / Round</th><th>Team A (seed)</th><th>Pts</th><th>Team B (seed)</th><th>Pts</th><th></th></tr>
+           ${games.map((g,i)=>editRow(g,i)).join('')}</table>
+           <div class="row" style="margin-top:10px"><button class="btn ghost" onclick="poAddGame()">Add game</button><span class="sub" style="margin:0">Edits save automatically${(H.playoffs&&H.playoffs[yr])?' — your version overrides the imported NFL.com bracket':''}.</span></div>`
+        : (()=>{
+          const ch = games.filter(g=>g.bracket!=='consolation');
+          const cons = games.filter(g=>g.bracket==='consolation');
+          const chWeeks = [...new Set(ch.map(g=>g.week))].sort((a,b)=>a-b);
+          const gcard = (g,showLabel) => { const aWin=g.pa>g.pb, sb=g.label==='Fantasy Super Bowl';
+            const brow=(s,t,p,win)=>`<div class="brow ${win?'win':''}"><span><span class="bseed">${s||''}</span>${win&&sb?'\uD83C\uDFC6 ':''}${esc(t||'TBD')}</span><span class="bpts">${(+p).toFixed(2)}</span></div>`;
+            return `<div class="bgame">${showLabel?`<div class="clabel">${esc(g.label)}</div>`:''}${brow(g.sa,g.ta,g.pa,aWin)}${brow(g.sb,g.tb,g.pb,!aWin)}</div>`; };
+          const bracketHTML = `<div class="bracket">` + chWeeks.map((w,wi)=>{
+            const rg = ch.filter(g=>g.week===w);
+            const pairs = []; for(let i=0;i<rg.length;i+=2) pairs.push(rg.slice(i,i+2));
+            const label = rg[0]? rg[0].label + ' \u00B7 Wk '+w : 'Wk '+w;
+            return `<div class="bround"><div class="rlabel">${esc(label)}</div><div class="bpairs">${pairs.map(pr=>`<div class="bpair ${pr.length>1?'linked':''}">${pr.map(g=>gcard(g,false)).join('')}</div>`).join('')}</div></div>`;
+          }).join('') + `</div>`;
+          const consHTML = cons.length? `<div class="eyebrow" style="margin:16px 0 8px">Consolation & Placement</div><div class="consgrid">${cons.map(g=>gcard(g,true)).join('')}</div>` : '';
+          return bracketHTML + consHTML;
+        })()}
+    </div>`; })();
+  document.getElementById('historyView').innerHTML = `
+    <div class="grid2" style="margin-bottom:18px">
+      <div class="card">
+        <div class="eyebrow">All-time best season</div>
+        <h2 style="margin-bottom:2px">${esc(best.team)}</h2>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:26px;color:var(--turf)">${fmt(best.pts)} <span style="font-size:13px;color:var(--chalk-dim)">pts · ${best.year}</span></div>
+      </div>
+      <div class="card">
+        <div class="eyebrow">Greatest single week — player</div>
+        <h2 style="margin-bottom:2px">${esc(bestPW.player)} — ${fmt(bestPW.pts)}</h2>
+        <p class="sub" style="margin:0">Week ${bestPW.week}, ${bestPW.year} · rostered by ${esc(bestPW.team)}</p>
+      </div>
+    </div>
+
+
+    ${stHTML}
+    ${poHTML}
+    <div class="card" style="margin-bottom:18px">
+      <h2>Champions</h2>
+      <p class="sub" style="margin-bottom:10px">${champs.length} seasons, ${new Set(champs.map(c=>mgrOf(c.year,c.team)||c.team)).size} actual champions — the yearly renames were hiding repeats all along. "Swept both" marks the seasons where the champion also led the league in points.</p>
+      <table class="plain"><tr><th style="width:70px">Year</th><th>Champion</th><th style="text-align:right">Points leader that year</th></tr>
+        ${champs.map(c=>{const p=plByYear[c.year];const cm=mgrOf(c.year,c.team),pm=p?mgrOf(c.year,p.team):null;const swept=p&&(cm&&pm? cm===pm : p.team===c.team);return `<tr><td style="font-family:'IBM Plex Mono',monospace">${c.year}</td><td>\uD83C\uDFC6 ${esc(c.team)}${cm?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(cm)}</span>`:''}</td><td style="text-align:right;color:var(--chalk-dim)">${swept?'<b style="color:var(--turf)">swept both</b>':esc(p?p.team:'—')}</td></tr>`;}).join('')}
+      </table>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2>Season Points Leaders</h2>
+      <table class="plain">
+        <tr><th style="width:70px">Year</th><th>Team</th><th style="text-align:right">Pts</th></tr>
+        ${pl.map(r=>`<tr><td style="font-family:'IBM Plex Mono',monospace">${r.year}</td><td>${esc(r.team)}${r.pts===best.pts?' \uD83D\uDC51':''}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(r.pts)}</td></tr>`).join('')}
+      </table>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <h2>Best Single Week — Team</h2>
+      <p class="sub" style="margin-bottom:10px">All-time mark: ${esc(bestTW.team)}, ${fmt(bestTW.pts)} in Week ${bestTW.week} of ${bestTW.year}.</p>
+      <table class="plain">
+        <tr><th style="width:70px">Year</th><th style="width:50px">Wk</th><th>Team</th><th style="text-align:right">Pts</th></tr>
+        ${tw.map(r=>`<tr><td style="font-family:'IBM Plex Mono',monospace">${r.year}</td><td style="font-family:'IBM Plex Mono',monospace">${r.week}</td><td>${esc(r.team)}${r.pts===bestTW.pts?' \uD83D\uDC51':''}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(r.pts)}</td></tr>`).join('')}
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Best Single Week — Player</h2>
+      <p class="sub" style="margin-bottom:10px">All fourteen belong to quarterbacks — no RB or WR has ever taken a season's crown.</p>
+      <table class="plain">
+        <tr><th style="width:70px">Year</th><th style="width:50px">Wk</th><th>Player</th><th>Rostered By</th><th style="text-align:right">Pts</th></tr>
+        ${pw.map(r=>`<tr><td style="font-family:'IBM Plex Mono',monospace">${r.year}</td><td style="font-family:'IBM Plex Mono',monospace">${r.week}</td><td><span class="postag pos-${r.pos}" style="margin-right:6px">${r.pos}</span>${esc(r.player)} <span style="color:var(--chalk-dim);font-size:12px">${r.nfl}</span>${r.pts===bestPW.pts?' \uD83D\uDC51':''}</td><td>${esc(r.team)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${fmt(r.pts)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+}
+
+function poGames(){ // editable copy for the selected year (seeded years are copied on first edit)
+  const yr = String(window.histPOYear);
+  if(!S.playoffsCustom[yr]) S.playoffsCustom[yr] = structuredClone((S.history.playoffs&&S.history.playoffs[yr])||[]);
+  return S.playoffsCustom[yr];
+}
+function poSet(i,f,v){ const g=poGames(); if(g[i]){ g[i][f]=v; saveState(); if(f==='week') renderHistory(); } }
+function poDelGame(i){ const g=poGames(); g.splice(i,1); saveState(); renderHistory(); }
+function poAddGame(){ const g=poGames(); const wk=g.length?Math.max(...g.map(x=>x.week)):15; g.push({week:wk,label:"Game",sa:0,ta:"",pa:0,sb:0,tb:"",pb:0,bracket:"championship"}); saveState(); renderHistory(); }
+function poNewBracket(){
+  const yr = prompt("Season year for the new bracket:", String(new Date().getFullYear()));
+  if(!yr || !/^20\d\d$/.test(yr.trim())) return;
+  const y = yr.trim();
+  const PO = {...(S.history.playoffs||{}), ...S.playoffsCustom};
+  if(PO[y] && !confirm(y+" already has a bracket — start it over?")) return;
+  S.playoffsCustom[y] = [
+    {week:15, label:"Quarterfinal", sa:1, ta:"", pa:0, sb:8, tb:"", pb:0, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:4, ta:"", pa:0, sb:5, tb:"", pb:0, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:3, ta:"", pa:0, sb:6, tb:"", pb:0, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:2, ta:"", pa:0, sb:7, tb:"", pb:0, bracket:"championship"},
+    {week:16, label:"Semifinal", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
+    {week:16, label:"Semifinal", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
+    {week:16, label:"Consolation", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:16, label:"Consolation", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:17, label:"Fantasy Super Bowl", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
+    {week:17, label:"3rd Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:17, label:"5th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:17, label:"7th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"}
+  ];
+  window.histPOYear = y; window.poEdit = true;
+  saveState(); renderHistory();
+  toast("Blank "+y+" bracket ready — your 8-team, Weeks 15\u201317 format.");
+}
+/* =====================================================
+   Matchups — schedule generator, score entry, standings
+===================================================== */
+const REG_WEEKS = 14;
+/* NFL 2026 season: Week 1 kicks off Thu Sep 10, 2026 (Thu after Labor Day). Each week runs Thu–Mon. */
+const NFL_2026_WEEK1 = new Date(2026, 8, 10);
+function nflWeekRange(w){
+  const start = new Date(NFL_2026_WEEK1); start.setDate(start.getDate() + (w-1)*7);
+  const end = new Date(start); end.setDate(end.getDate() + 4);           /* Thu -> Mon */
+  const mon = d => d.toLocaleString('en-US',{month:'short'});
+  const label = start.getMonth()===end.getMonth()
+    ? `${mon(start)} ${start.getDate()}–${end.getDate()}`
+    : `${mon(start)} ${start.getDate()} – ${mon(end)} ${end.getDate()}`;
+  return { label, year: end.getFullYear() };
+}
+function genSchedule(){
+  // circle-method round robin: 11 unique rounds, then rounds 1-3 repeat for weeks 12-14
+  const n = N();
+  const idx = Array.from({length:n},(_,i)=>i);
+  const fixed = idx[0]; let rest = idx.slice(1);
+  const rounds = [];
+  for(let r=0;r<n-1;r++){
+    const arr = [fixed, ...rest];
+    const games = [];
+    for(let i=0;i<n/2;i++) games.push([arr[i], arr[n-1-i]]);
+    rounds.push(games);
+    rest = [rest[rest.length-1], ...rest.slice(0,-1)];
+  }
+  const schedule = {};
+  for(let w=1;w<=REG_WEEKS;w++) schedule[w] = structuredClone(rounds[(w-1)%rounds.length]);
+  S.season = { year: 2026, schedule, scores: {} };
+  saveState();
+}
+function mScore(wk,m){ return (S.season.scores[wk]&&S.season.scores[wk][m]) || [null,null]; }
+function setScore(wk,m,side,val){
+  S.season.scores[wk] = S.season.scores[wk]||{};
+  const cur = S.season.scores[wk][m] = S.season.scores[wk][m]||[null,null];
+  cur[side] = (val===''||val===null)? null : +val;
+  saveState(); renderMatchups();
+}
+function setMatchTeam(wk,m,side,ti){
+  S.season.schedule[wk][m][side] = +ti; saveState(); renderMatchups();
+}
+function seasonStandings(){
+  const rows = S.teams.map((t,i)=>({i, name:t.name, manager:t.manager, w:0,l:0,t:0, pf:0, pa:0}));
+  Object.entries(S.season.schedule).forEach(([wk,games])=>{
+    games.forEach((g,m)=>{
+      const [pa,pb] = mScore(wk,m);
+      if(pa===null||pb===null) return;
+      const A=rows[g[0]], B=rows[g[1]];
+      if(!A||!B) return;
+      A.pf+=pa; A.pa+=pb; B.pf+=pb; B.pa+=pa;
+      if(pa>pb){A.w++;B.l++;} else if(pb>pa){B.w++;A.l++;} else {A.t++;B.t++;}
+    });
+  });
+  return rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
+}
+function renderMatchups(){
+  const el = document.getElementById('matchupsView');
+  if(!S.season){
+    el.innerHTML = `<div class="card" style="max-width:640px">
+      <h2>No schedule yet</h2>
+      <p class="sub" style="margin-bottom:12px">Generate the 2026 regular season: every team plays the other 11 once, then the first three rounds repeat to fill Weeks 12–14. You can edit any matchup after.</p>
+      <button class="btn" onclick="genSchedule();renderMatchups()">Generate 2026 Schedule</button>
+    </div>`;
+    return;
+  }
+  const wk = String(window.muWeek || (window.muWeek = 1));
+  const games = S.season.schedule[wk]||[];
+  const edit = !!window.muEdit;
+  const fmt1 = n => n===null? '' : n;
+  const teamOpts = sel => S.teams.map((t,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(t.name)}</option>`).join('');
+  const rows = seasonStandings();
+  const anyScores = rows.some(r=>r.w+r.l+r.t>0);
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div class="row">
+          <button class="btn ghost" ${+wk<=1?'disabled':''} onclick="window.muWeek=${+wk-1};renderMatchups()">\u25C0</button>
+          <select onchange="window.muWeek=+this.value;renderMatchups()">${Array.from({length:REG_WEEKS},(_,i)=>`<option value="${i+1}" ${i+1===+wk?'selected':''}>Week ${i+1} \u00B7 ${nflWeekRange(i+1).label}</option>`).join('')}</select>
+          <button class="btn ghost" ${+wk>=REG_WEEKS?'disabled':''} onclick="window.muWeek=${+wk+1};renderMatchups()">\u25B6</button>
+          <span class="wk-date"><span class="eyebrow" style="margin:0">NFL Week ${wk}</span>${nflWeekRange(+wk).label}, ${nflWeekRange(+wk).year}</span>
+        </div>
+        <div class="row">
+          <button class="btn ghost" onclick="window.muEdit=!window.muEdit;renderMatchups()">${edit?'Done':'Edit matchups'}</button>
+          <button class="btn danger" onclick="if(confirm('Throw out the whole schedule and all scores?')){S.season=null;saveState();window.muWeek=1;renderMatchups();}">Regenerate</button>
+        </div>
+      </div>
+      ${games.map((g,m)=>{
+        const [pa,pb] = mScore(wk,m);
+        const done = pa!==null && pb!==null;
+        const aWin = done && pa>pb, bWin = done && pb>pa;
+        const side = (ti,win,other,right) => {
+          if(edit) return `<span class="mu-team${right?' r':''}"><select onchange="setMatchTeam('${wk}',${m},${other},+this.value)">${teamOpts(ti)}</select></span>`;
+          const t = S.teams[ti];
+          const nm = `<span class="mu-name"${win?' style="font-weight:700"':''}>${win?'\uD83C\uDFC8 ':''}${esc(t?.name||'?')}${t&&t.manager?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(t.manager)}</span>`:''}</span>`;
+          return `<span class="mu-team${right?' r':''}${win?' win':''}">${teamMarkHTML(t,28)}${nm}</span>`;
+        };
+        return `<div class="row mu-row" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px">
+          ${side(g[0],aWin,0,false)}
+          <input type="number" step="0.01" style="width:82px" value="${fmt1(pa)}" placeholder="\u2014" onchange="setScore('${wk}',${m},0,this.value)">
+          <span style="color:var(--chalk-dim);font-size:12px">vs</span>
+          <input type="number" step="0.01" style="width:82px" value="${fmt1(pb)}" placeholder="\u2014" onchange="setScore('${wk}',${m},1,this.value)">
+          ${side(g[1],bWin,1,true)}
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <h2>2026 Standings</h2>
+      <p class="sub" style="margin-bottom:10px">${anyScores? 'Sorted by wins, then points for. Your official tiebreaker is head-to-head \u2014 the commissioner has final say on ties.' : 'Fills in as weekly scores get entered.'}</p>
+      <table class="plain">
+        <tr><th style="width:36px">#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>
+        ${rows.map((r,i)=>`<tr><td style="font-family:'IBM Plex Mono',monospace">${i+1}</td><td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(r.manager)}</span>`:''}</span></span></td><td style="text-align:center;font-family:'IBM Plex Mono',monospace">${r.w}-${r.l}-${r.t}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pf.toFixed(2)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pa.toFixed(2)}</td></tr>`).join('')}
+      </table>
+    </div>`;
+}
+
+/* =====================================================
+   Trade center — player swaps on the real draft roster
+===================================================== */
+function realDraft(){
+  if(draftMode==='real') return D;
+  try{ const raw = store.get('ffl_draft'); return raw? JSON.parse(raw) : {started:false,paused:false,picks:[],finished:false}; }catch(e){ return {picks:[]}; }
+}
+function saveRealDraft(d){
+  if(draftMode==='real'){ D = d; saveDraft(); }
+  else store.set('ffl_draft', JSON.stringify(d));
+}
+window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set()};
+function tradeToggle(side, pid){
+  const s2 = window.tradeSel[side];
+  if(s2.has(pid)) s2.delete(pid); else s2.add(pid);
+  renderTradeCenter();
+}
+function tradeSetTeam(side, ti){
+  window.tradeSel[side] = +ti;
+  window.tradeSel[side==='a'?'pa':'pb'] = new Set();
+  renderTradeCenter();
+}
+function executeTrade(){
+  const T = window.tradeSel;
+  if(T.a===T.b){ toast("Pick two different teams."); return; }
+  if(!T.pa.size && !T.pb.size){ toast("Select at least one player."); return; }
+  const d = realDraft();
+  const giveA = d.picks.filter(p=>p.teamIndex===T.a && T.pa.has(p.playerId));
+  const giveB = d.picks.filter(p=>p.teamIndex===T.b && T.pb.has(p.playerId));
+  const nmA = S.teams[T.a].name, nmB = S.teams[T.b].name;
+  if(!confirm(`${nmA} sends: ${giveA.map(p=>p.name).join(', ')||'nothing'}\n${nmB} sends: ${giveB.map(p=>p.name).join(', ')||'nothing'}\n\nExecute this trade?`)) return;
+  giveA.forEach(p=>{ p.teamIndex = T.b; if(S.lineups[T.a]) delete S.lineups[T.a][p.playerId]; (S.lineups[T.b]=S.lineups[T.b]||{})[p.playerId]='BN'; });
+  giveB.forEach(p=>{ p.teamIndex = T.a; if(S.lineups[T.b]) delete S.lineups[T.b][p.playerId]; (S.lineups[T.a]=S.lineups[T.a]||{})[p.playerId]='BN'; });
+  saveRealDraft(d);
+  S.trades.push({ t: Date.now(), a: nmA, b: nmB, aGave: giveA.map(p=>p.name), bGave: giveB.map(p=>p.name) });
+  saveState();
+  window.tradeSel.pa = new Set(); window.tradeSel.pb = new Set();
+  toast("Trade executed \uD83E\uDD1D");
+  renderTradeCenter();
+}
+function renderTradeCenter(){
+  const el = document.getElementById('tradesView');
+  const T = window.tradeSel;
+  const d = realDraft();
+  const teamSel = side => `<select onchange="tradeSetTeam('${side}', this.value)">${S.teams.map((t,i)=>`<option value="${i}" ${i===T[side]?'selected':''}>${esc(t.name)}</option>`).join('')}</select>`;
+  const rosterList = (ti, side, selSet) => {
+    const roster = d.picks.filter(p=>p.teamIndex===ti);
+    if(!roster.length) return `<p style="color:var(--chalk-dim)">No players \u2014 roster fills in from the draft.</p>`;
+    return roster.map(p=>`
+      <label class="row" style="padding:4px 0;gap:8px;cursor:pointer">
+        <input type="checkbox" ${selSet.has(p.playerId)?'checked':''} onchange="tradeToggle('${side==='a'?'pa':'pb'}','${p.playerId}')" style="width:auto">
+        <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
+        <span>${esc(p.name)}</span><span style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span>
+      </label>`).join('');
+  };
+  const cnt = ti => d.picks.filter(p=>p.teamIndex===ti).length;
+  const after = side => side==='a' ? cnt(T.a)-T.pa.size+T.pb.size : cnt(T.b)-T.pb.size+T.pa.size;
+  el.innerHTML = `
+    <div class="grid2" style="margin-bottom:14px">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
+        ${rosterList(T.a,'a',T.pa)}
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('b')}<span class="sub" style="margin:0">${cnt(T.b)} \u2192 ${after('b')} players</span></div>
+        ${rosterList(T.b,'b',T.pb)}
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:18px">
+      <button class="btn" onclick="executeTrade()">Execute Trade</button>
+      <span class="sub" style="margin:0">Traded players land on their new team's bench. Future draft picks trade in Settings \u2192 Traded Draft Picks.</span>
+    </div>
+    <div class="card">
+      <h2>Trade History</h2>
+      ${S.trades.length? [...S.trades].reverse().map(tr=>`
+        <div class="phase"><span class="tag">${new Date(tr.t).toLocaleDateString([],{month:'short',day:'numeric'})}</span>
+        <span><b>${esc(tr.a)}</b> sent ${tr.aGave.map(esc).join(', ')||'nothing'} to <b>${esc(tr.b)}</b> for ${tr.bGave.map(esc).join(', ')||'nothing'}</span></div>`).join('')
+      : `<p style="color:var(--chalk-dim)">No trades yet. Somebody's untouchable roster awaits its first lowball offer.</p>`}
+    </div>`;
+}
+
+const SLOT_ELIG = { QB:['QB'], RB:['RB','FLEX'], WR:['WR','FLEX'], TE:['TE','FLEX'], K:['K'], DEF:['DEF'] };
+function myTeamIdx(){ const v = store.get('ffl_my_team'); return v===null? null : +v; }
+function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti); }
+function ensureLineup(ti){
+  const lu = S.lineups[ti] = S.lineups[ti] || {};
+  const roster = teamRoster(ti);
+  const ids = new Set(roster.map(p=>p.playerId));
+  Object.keys(lu).forEach(id=>{ if(!ids.has(id)) delete lu[id]; });
+  // seed: fill starters greedily in pick order, rest to bench
+  const cap = slot => slot==='BN'? Infinity : (+S.roster[slot]||0);
+  const used = slot => Object.values(lu).filter(s2=>s2===slot).length;
+  roster.forEach(p=>{
+    if(lu[p.playerId]) return;
+    const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN'];
+    lu[p.playerId] = opts.find(s2=>used(s2)<cap(s2)) || 'BN';
+  });
+  return lu;
+}
+function setSlot(ti, pid, slot){
+  const lu = ensureLineup(ti);
+  if(slot!=='BN' && slot!=='IR'){
+    const cap = +S.roster[slot]||0;
+    const used = Object.entries(lu).filter(([id,s2])=>s2===slot && id!==pid).length;
+    if(used>=cap){ toast(`${slot} is full \u2014 bench someone first.`); renderTeams(); return; }
+  }
+  if(slot==='IR'){
+    const used = Object.entries(lu).filter(([id,s2])=>s2==='IR' && id!==pid).length;
+    if(used >= (+S.roster.IR||0)){ toast('IR slot is full.'); renderTeams(); return; }
+  }
+  lu[pid]=slot; saveState(); renderTeams();
+}
+function renderMyTeam(){
+  const el = document.getElementById('myTeamView');
+  const mi = myTeamIdx();
+  const sel = `<select onchange="store.set('ffl_my_team', this.value);renderTeams()">
+    <option value="" ${mi===null?'selected':''}>\u2014 pick your team \u2014</option>
+    ${S.teams.map((t,i)=>`<option value="${i}" ${i===mi?'selected':''}>${esc(t.name)}${t.manager?` (${esc(t.manager)})`:''}</option>`).join('')}</select>`;
+  if(mi===null || !S.teams[mi]){
+    el.innerHTML = `<div class="card" style="max-width:560px"><h2>Whose team is this device?</h2>
+      <p class="sub" style="margin-bottom:10px">Each manager picks their own team here \u2014 the choice sticks on this device.</p>${sel}</div>`;
+    return;
+  }
+  const t = S.teams[mi];
+  const roster = teamRoster(mi);
+  const lu = ensureLineup(mi);
+  const st = S.season ? seasonStandings().find(r=>r.i===mi) : null;
+  const slotRows = [];
+  const order = [];
+  ['QB','RB','WR','TE','FLEX','K','DEF'].forEach(s2=>{ for(let k=0;k<(+S.roster[s2]||0);k++) order.push(s2); });
+  const bySlot = {}; Object.entries(lu).forEach(([id,s2])=>{ (bySlot[s2]=bySlot[s2]||[]).push(id); });
+  const pById = {}; roster.forEach(p=>pById[p.playerId]=p);
+  const consumed = new Set();
+  const playerRow = (p, slotLabel) => {
+    const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
+    return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
+      <td>${esc(p.name)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
+      <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td></tr>`;
+  };
+  order.forEach(s2=>{
+    const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
+    if(id){ consumed.add(id); slotRows.push(playerRow(pById[id], s2)); }
+    else slotRows.push(`<tr><td style="width:56px"><span class="postag" style="--pc:var(--line)">${s2}</span></td><td style="color:var(--chalk-dim)">Empty</td><td></td></tr>`);
+  });
+  const benchRows = roster.filter(p=>lu[p.playerId]==='BN').map(p=>playerRow(p,'BN')).join('');
+  const irRows = roster.filter(p=>lu[p.playerId]==='IR').map(p=>playerRow(p,'IR')).join('');
+  el.innerHTML = `
+    <div class="card" style="max-width:760px">
+      <div class="row" style="justify-content:space-between">
+        <div><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(2)} PF` : 'Season not started'}</p></div>
+        ${sel}
+      </div>
+      <div class="eyebrow" style="margin-top:14px">Starting lineup</div>
+      <table class="plain">${slotRows.join('')}</table>
+      <div class="eyebrow" style="margin-top:14px">Bench</div>
+      <table class="plain">${benchRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>
+      ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
+      <table class="plain">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>`:''}
+      ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
+    </div>`;
+}
+function renderTeams(){
+  const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
+  document.getElementById('subMy').className = 'btn ' + (sub2==='my'?'':'ghost');
+  document.getElementById('subAll').className = 'btn ' + (sub2==='all'?'':'ghost');
+  document.getElementById('myTeamView').style.display = sub2==='my'?'block':'none';
+  const el = document.getElementById('teamsView');
+  el.style.display = sub2==='all'?'grid':'none';
+  if(sub2==='my'){ renderMyTeam(); return; }
+  el.innerHTML = S.teams.map((t,i)=>{
+    const picks = D.picks.filter(p=>p.teamIndex===i);
+    return `<div class="card team-card">
+      <div class="team-head">${teamMarkHTML(t,46)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
+      (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td>${esc(p.name)}</td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
+        : `<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p>`) + `</div>`;
+  }).join('');
+}
+
+/* =====================================================
+   Settings
+===================================================== */
+function renderSettings(){
+  document.getElementById('setLeagueName').value = S.leagueName;
+  document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
+  document.getElementById('setRounds').value = snakeRounds();
+  document.getElementById('setKeeper').checked = !!KR();
+  // master manager roster
+  renderManagers();
+  // teams
+  document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
+    <div class="teamcard"><span class="num">${i+1}</span>
+      <label class="team-logo-up" title="${t.logo?'Change':'Upload'} team logo (JPG/PNG)">
+        ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
+        <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
+      </label>${t.logo?`<button class="logo-rm" title="Remove logo" onclick="clearTeamLogo(${i})">✕</button>`:''}
+      <input type="text" value="${esc(t.name)}" placeholder="Team name" onchange="S.teams[${i}].name=this.value;saveState();renderHome()">
+      <select style="max-width:150px" title="Assign manager (each person once)" onchange="setTeamManager(${i}, this.value)">${managerOptions(t.manager)}</select>
+      <label style="color:${t.auto?'var(--turf)':'var(--chalk-dim)'};font-size:12px;white-space:nowrap"><input type="checkbox" ${t.auto?'checked':''} onchange="S.teams[${i}].auto=this.checked;saveState();renderSettings();refreshDraftUI();maybeAutoFlagged()" style="width:auto"> auto</label>
+      <button class="btn ghost" style="padding:2px 8px" title="Move up" onclick="moveTeam(${i},-1)">\u25B2</button>
+      <button class="btn ghost" style="padding:2px 8px" title="Move down" onclick="moveTeam(${i},1)">\u25BC</button>
+    </div>`).join('');
+  // roster
+  document.getElementById('rosterInputs').innerHTML = Object.keys(S.roster).map(k=>`
+    <div class="setrow"><label>${k==='BN'?'Bench':k==='FLEX'?'Flex (RB/WR/TE)':k==='IR'?'Reserve (IR)':k}</label>
+      <input type="number" min="0" max="10" value="${S.roster[k]}" onchange="S.roster['${k}']=+this.value;saveState();refreshDraftUI()"></div>`).join('');
+  // scoring, grouped
+  const grouped = new Set(Object.values(SCORING_GROUPS).flat());
+  const other = Object.keys(S.scoring).filter(k=>!grouped.has(k));
+  const groupHTML = (title,keys)=>{
+    const present = keys.filter(k=>k in S.scoring);
+    if(!present.length) return '';
+    return `<div class="eyebrow" style="grid-column:1/-1;margin-top:8px">${esc(title)}</div>` + present.map(k=>`
+      <div class="setrow"><label>${esc(k)}</label>
+        <input type="number" step="0.01" value="${S.scoring[k]}" onchange="S.scoring['${esc(k)}']=+this.value;saveState()"></div>`).join('');
+  };
+  document.getElementById('scoringInputs').innerHTML =
+    Object.entries(SCORING_GROUPS).map(([t,keys])=>groupHTML(t,keys)).join('') + groupHTML('Other', other);
+  // league rules
+  const rulesEl = document.getElementById('rulesInputs');
+  if(rulesEl) rulesEl.innerHTML = Object.keys(S.rules||{}).map(k=>`
+    <div class="setrow"><label>${esc(k)}</label>
+      <input type="text" style="min-width:220px" value="${esc(S.rules[k])}" onchange="S.rules['${esc(k)}']=this.value;saveState()"></div>`).join('');
+}
+function renderTrades(){
+  const list = document.getElementById('tradeList');
+  list.innerHTML = (S.pickTrades||[]).map((t,i)=>`
+    <div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
+      <span style="font-family:'IBM Plex Mono',monospace;min-width:70px">Round ${t.round}</span>
+      <span>${esc(t.from)} <span style="color:var(--chalk-dim)">→</span> ${esc(t.to)}</span>
+      <span class="spacer"></span>
+      <button class="btn danger" style="padding:3px 10px;font-size:13px" onclick="S.pickTrades.splice(${i},1);saveState();renderTrades();refreshDraftUI()">Remove</button>
+    </div>`).join('') || `<p style="color:var(--chalk-dim)">No traded picks.</p>`;
+  const rounds = snakeRounds();
+  document.getElementById('trRound').innerHTML = Array.from({length:rounds},(_,i)=>`<option value="${i+1}">Round ${i+1}</option>`).join('');
+  const opts = S.teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+  document.getElementById('trFrom').innerHTML = opts;
+  document.getElementById('trTo').innerHTML = opts;
+}
+function addTrade(){
+  const round = +document.getElementById('trRound').value;
+  const from = document.getElementById('trFrom').value, to = document.getElementById('trTo').value;
+  if(from===to){ toast("A team can't trade a pick to itself."); return; }
+  if((S.pickTrades||[]).some(t=>+t.round===round && t.from===from)){ toast(`${from} already traded their Round ${round} pick.`); return; }
+  S.pickTrades = S.pickTrades||[];
+  S.pickTrades.push({round, from, to});
+  saveState(); renderTrades(); refreshDraftUI();
+}
+function saveFromInputs(){
+  S.leagueName = document.getElementById('setLeagueName').value || 'Bitch Boy League';
+  S.timerSec = +document.getElementById('setTimer').value || 60;
+  S.draftCfg = S.draftCfg||{};
+  S.draftCfg.rounds = Math.max(1, +document.getElementById('setRounds').value || 16);
+  S.draftCfg.keeper = document.getElementById('setKeeper').checked;
+  saveState(); renderHome(); renderTrades(); refreshDraftUI();
+}
+function moveTeam(i,d){
+  if(D.started && D.picks.length){ toast("Can't change draft positions mid-draft — reset the draft first."); return; }
+  const j=i+d; if(j<0||j>=N()) return;
+  [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]];
+  saveState(); renderSettings(); renderTrades(); refreshDraftUI();
+}
+function randomizeOrder(){
+  if(D.started && D.picks.length){ toast("Can't reshuffle mid-draft — reset the draft first."); return; }
+  for(let i=S.teams.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]]; }
+  saveState(); renderSettings(); refreshDraftUI();
+  toast("Draft order shuffled 🎲");
+}
+
+/* =====================================================
+   Export / import
+===================================================== */
+function exportLeague(){
+  const blob = new Blob([JSON.stringify({settings:S, draft:D, exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (S.leagueName.replace(/[^a-z0-9]+/gi,'-').toLowerCase()||'league')+'-league.json';
+  a.click();
+}
+function importLeague(ev){
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{ try{
+      const data = JSON.parse(r.result);
+      if(data.settings) { S = {...structuredClone(DEFAULTS), ...data.settings}; saveState(); }
+      if(data.draft) { D = data.draft; saveDraft(); }
+      renderSettings(); renderHome(); refreshDraftUI();
+      toast("League file imported ✓");
+    }catch(e){ toast("That file didn't look like a league export."); } };
+  r.readAsText(f);
+}
+
+/* =====================================================
+   Utils & boot
+===================================================== */
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+let toastTimer=null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.display='block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.style.display='none', 2600);
+}
+
+/* =====================================================
+   Theme (light "day game" / dark "under the lights")
+===================================================== */
+function applyTheme(t){
+  t = (t==='dark') ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', t);
+  const lbl = document.getElementById('themeLabel');
+  if(lbl) lbl.textContent = (t==='dark') ? 'Lights on' : 'Lights out';
+  store.set('ffl_theme', t);
+}
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light';
+  applyTheme(cur==='dark' ? 'light' : 'dark');
+}
+
+/* =====================================================
+   Manager roster — unique dropdown per team
+===================================================== */
+function allManagerNames(){
+  const set = new Map();  /* lower -> display */
+  const add = n => { n=String(n||'').trim(); if(n) set.set(n.toLowerCase(), n); };
+  Object.values((S.history&&S.history.managers)||{}).forEach(yr=>Object.values(yr).forEach(add));
+  (S.teams||[]).forEach(t=>add(t.manager));
+  return [...set.values()].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+/* seed the master roster once from all names we know */
+function ensureManagers(){
+  if(!Array.isArray(S.managers)) S.managers = [];
+  if(!S.managers.length){ S.managers = allManagerNames(); saveState(); }
+}
+/* ---- avatar helpers (monogram chips, photo-inspired) ---- */
+function mgrColor(name){
+  const pal = ['#00338d','#c60c30','#1fa463','#2f7ff0','#9b55e6','#f0891d','#e23b4e','#0d7d8c','#7a4fd0','#0a7d5a'];
+  let h=0; const s=String(name||''); for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0;
+  return pal[h%pal.length];
+}
+function initials(name){
+  const p = String(name||'').trim().split(/\s+/).filter(Boolean);
+  if(!p.length) return '?';
+  return (p[0][0] + (p[1]?p[1][0]:'')).toUpperCase();
+}
+function avatarHTML(name, size){
+  size = size||38;
+  return `<span class="avatar" aria-hidden="true" style="background:${mgrColor(name)};width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px">${esc(initials(name))}</span>`;
+}
+/* team logo (uploaded jpg/png) if set, else the manager/team monogram */
+function teamMarkHTML(t, size){
+  size = size||40;
+  if(t && t.logo) return `<img class="team-logo" src="${t.logo}" alt="${esc(t.name||'team')} logo" style="width:${size}px;height:${size}px">`;
+  return avatarHTML(t ? (t.manager || t.name || '') : '', size);
+}
+/* upload + downscale a team logo so localStorage stays small */
+function setTeamLogo(i, ev){
+  const f = ev.target.files && ev.target.files[0]; if(!f) return;
+  if(!/^image\//.test(f.type)){ toast('Pick an image file (JPG or PNG).'); ev.target.value=''; return; }
+  const rd = new FileReader();
+  rd.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 160;
+      let w = img.width, h = img.height;
+      const scale = Math.min(1, MAX/Math.max(w,h));
+      w = Math.max(1,Math.round(w*scale)); h = Math.max(1,Math.round(h*scale));
+      const c = document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      let data; try{ data = c.toDataURL('image/jpeg', 0.82); }catch(e){ data = rd.result; }
+      const prev = S.teams[i].logo;
+      S.teams[i].logo = data;
+      try{ saveState(); }
+      catch(e){ S.teams[i].logo = prev; toast('That image is too big for browser storage — try a smaller one.'); }
+      renderSettings(); renderHome(); if(window.currentView==='teams') renderTeams(); if(window.currentView==='matchups') renderMatchups();
+    };
+    img.onerror = () => toast("Couldn't read that image.");
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+function clearTeamLogo(i){
+  delete S.teams[i].logo; saveState();
+  renderSettings(); renderHome(); if(window.currentView==='teams') renderTeams(); if(window.currentView==='matchups') renderMatchups();
+}
+/* ---- master manager list: render + edit ---- */
+function renderManagers(){
+  const el = document.getElementById('managerList'); if(!el) return;
+  const list = S.managers||[];
+  const assigned = new Set((S.teams||[]).map(t=>String(t.manager||'').trim().toLowerCase()).filter(Boolean));
+  el.innerHTML = list.length ? list.map((m,i)=>`
+    <div class="mgr"${assigned.has(m.toLowerCase())?' data-on="1"':''}>
+      ${avatarHTML(m,38)}
+      <input type="text" value="${esc(m)}" aria-label="Manager name" onchange="renameManager(${i}, this.value)">
+      <button class="mgr-rm btn danger" title="Remove ${esc(m)}" onclick="removeManager(${i})">✕</button>
+    </div>`).join('') : `<p class="sub" style="grid-column:1/-1;margin:0">No managers yet — add your league members below.</p>`;
+  const c = document.getElementById('mgrCount');
+  if(c) c.textContent = list.length ? `${list.length} manager${list.length===1?'':'s'}` : '';
+}
+function addManager(){
+  const inp = document.getElementById('mgrNew'); const name = (inp.value||'').trim();
+  if(!name) return;
+  if((S.managers||[]).some(m=>m.toLowerCase()===name.toLowerCase())){ toast(`${name} is already on the list.`); return; }
+  S.managers = S.managers||[]; S.managers.push(name); inp.value='';
+  saveState(); renderManagers(); renderSettings();
+  toast(`Added ${name}`);
+}
+function renameManager(i, val){
+  val = String(val||'').trim();
+  const old = S.managers[i];
+  if(!val){ renderManagers(); return; }
+  if((S.managers||[]).some((m,j)=>j!==i && m.toLowerCase()===val.toLowerCase())){ toast(`${val} is already on the list.`); renderManagers(); return; }
+  S.managers[i] = val;
+  (S.teams||[]).forEach(t=>{ if(String(t.manager||'').toLowerCase()===String(old||'').toLowerCase()) t.manager = val; });
+  saveState(); renderSettings(); renderHome();
+}
+function removeManager(i){
+  const name = S.managers[i];
+  S.managers.splice(i,1);
+  (S.teams||[]).forEach(t=>{ if(String(t.manager||'').toLowerCase()===String(name||'').toLowerCase()) t.manager=''; });
+  saveState(); renderSettings(); renderHome();
+  toast(`Removed ${name}`);
+}
+function managerOptions(cur){
+  cur = String(cur||'').trim();
+  const curL = cur.toLowerCase();
+  const taken = new Set((S.teams||[]).map(t=>String(t.manager||'').trim().toLowerCase()).filter(Boolean));
+  let html = `<option value=""${cur?'':' selected'}>— manager —</option>`;
+  html += (S.managers||[]).map(n=>{
+    const nL=n.toLowerCase(), isCur=nL===curL, isTaken=taken.has(nL)&&!isCur;
+    return `<option value="${esc(n)}"${isCur?' selected':''}${isTaken?' disabled':''}>${esc(n)}${isTaken?' — taken':''}</option>`;
+  }).join('');
+  // keep a legacy/off-list current value visible so it isn't silently dropped
+  if(cur && !(S.managers||[]).some(m=>m.toLowerCase()===curL)) html += `<option value="${esc(cur)}" selected>${esc(cur)} (not on list)</option>`;
+  html += `<option value="__new__">+ Add new manager…</option>`;
+  return html;
+}
+function setTeamManager(i, val){
+  if(val==='__new__'){
+    const name = (window.prompt('New manager name:')||'').trim();
+    if(!name){ renderSettings(); return; }
+    if(!(S.managers||[]).some(m=>m.toLowerCase()===name.toLowerCase())){ S.managers = S.managers||[]; S.managers.push(name); }
+    val = name;
+  }
+  val = String(val||'').trim();
+  if(val && (S.teams||[]).some((t,j)=>j!==i && String(t.manager||'').trim().toLowerCase()===val.toLowerCase())){
+    toast(`${val} already manages another team.`);
+    renderSettings(); return;
+  }
+  S.teams[i].manager = val;
+  saveState(); renderSettings(); renderHome();
+}
+
+applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
+ensureManagers();
+if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
+renderPosFilters();
+renderSettings();
+renderTrades();
+renderHome();
+refreshDraftUI();
+loadPool();
+if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('afterend',
+  `<div class="notice">Heads up: this browser is blocking saved data, so changes only last while the page is open. Use Export League File to keep a copy.</div>`); }
+</script>
+</body>
+</html>
