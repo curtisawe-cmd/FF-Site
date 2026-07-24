@@ -420,6 +420,18 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 .theme-toggle .dot{width:11px;height:11px;border-radius:50%;background:var(--charge);box-shadow:0 0 0 3px var(--charge-wash)}
 :root[data-theme="dark"] .theme-toggle .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.18)}
 
+/* ---------- clean, consistent dropdowns (kills the native "bubble" arrow) ---------- */
+select{
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;
+  padding-right:32px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%235a6b7b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:12px 8px;
+}
+select::-ms-expand{display:none}
+:root[data-theme="dark"] select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%239fb4d6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 /* ---------- global polish ---------- */
 ::selection{background:var(--turf);color:#fff}
 ::-webkit-scrollbar{width:11px;height:11px}
@@ -607,7 +619,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
       <label style="color:var(--chalk-dim)">Draft rounds</label>
       <input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()">
       <label style="color:var(--chalk-dim)"><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"> Keeper round</label>
-      <label style="color:var(--chalk-dim)" title="Total draft picks (including keeper) any one manager may hold. 0 = no limit. Usually set at or above the number of rounds.">Max picks / manager</label>
+      <label style="color:var(--chalk-dim)" title="Most draft picks a manager may acquire through trades. 0 = no limit.">Max traded picks / mgr</label>
       <input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()">
       <label style="color:var(--chalk-dim)" title="Split the league into divisions. Assign each team a division below.">Divisions</label>
       <select id="setDivisions" onchange="S.divisions=+this.value;saveState();renderSettings();renderHome()">
@@ -1436,12 +1448,10 @@ const KR = () => (S.draftCfg&&S.draftCfg.keeper) ? 1 : 0;
 function snakeRounds(){ return Math.max(1, +(S.draftCfg&&S.draftCfg.rounds)||16); }
 function totalRounds(){ return snakeRounds() + KR(); }
 function maxPicks(){ return Math.max(0, +(S.draftCfg&&S.draftCfg.maxPicks)||0); }
-/* total draft picks a team currently holds: base (one per round + keeper) adjusted by pick trades */
-function picksHeld(i){
+/* draft picks a team has ACQUIRED via trade (received; not counting picks traded away) */
+function picksAcquired(i){
   const name = S.teams[i] ? S.teams[i].name : '';
-  let n = snakeRounds() + KR();
-  (S.pickTrades||[]).forEach(t=>{ if(t.from===name) n--; if(t.to===name) n++; });
-  return n;
+  return (S.pickTrades||[]).filter(t=>t.to===name).length;
 }
 function totalPicks(){ return totalRounds()*N(); }
 function teamForPick(idx){ // keeper pre-round is straight order; snake starts fresh after it
@@ -2495,8 +2505,8 @@ function renderTrades(){
   const cap = maxPicks();
   let tally = '';
   if(cap){
-    const over = S.teams.map((t,i)=>({name:t.name, n:picksHeld(i)})).filter(x=>x.n>cap);
-    tally = `<div class="notice" style="margin:0 0 12px">Pick limit: <b>${cap}</b> per manager. ` +
+    const over = S.teams.map((t,i)=>({name:t.name, n:picksAcquired(i)})).filter(x=>x.n>cap);
+    tally = `<div class="notice" style="margin:0 0 12px">Traded-pick limit: <b>${cap}</b> per manager. ` +
       (over.length
         ? `<span style="color:var(--danger)">Over the limit: ${over.map(o=>`${esc(o.name)} (${o.n})`).join(', ')}</span>`
         : `Every manager is within the limit.`) + `</div>`;
@@ -2513,7 +2523,7 @@ function renderTrades(){
   document.getElementById('trRound').innerHTML = Array.from({length:rounds},(_,i)=>`<option value="${i+1}">Round ${i+1}</option>`).join('');
   document.getElementById('trFrom').innerHTML = S.teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
   document.getElementById('trTo').innerHTML = S.teams.map((t,i)=>{
-    const full = cap && picksHeld(i) >= cap;
+    const full = cap && picksAcquired(i) >= cap;
     return `<option value="${esc(t.name)}"${full?' disabled':''}>${esc(t.name)}${full?' — full':''}</option>`;
   }).join('');
 }
@@ -2525,7 +2535,7 @@ function addTrade(){
   const cap = maxPicks();
   if(cap){
     const ti = S.teams.findIndex(t=>t.name===to);
-    if(ti>=0 && picksHeld(ti) + 1 > cap){ toast(`${to} is at the ${cap}-pick limit — can't take on more.`); return; }
+    if(ti>=0 && picksAcquired(ti) + 1 > cap){ toast(`${to} has hit the ${cap} traded-pick limit.`); return; }
   }
   S.pickTrades = S.pickTrades||[];
   S.pickTrades.push({round, from, to});
