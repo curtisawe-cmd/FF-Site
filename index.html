@@ -367,6 +367,13 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .inj.sus{color:var(--k);border-color:var(--k)}
 .poolrefresh{color:var(--turf);font-weight:600;text-decoration:none}
 .poolrefresh:hover{text-decoration:underline}
+/* injury flag on the draft-board sticker */
+.sticker .inj-flag{position:absolute;top:2px;right:2px;z-index:2;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:9px;line-height:1;padding:1px 4px;border-radius:3px;background:#0c1420;color:#fff}
+.sticker .inj-flag.q{color:var(--gold)}
+.sticker .inj-flag.d{color:#ffb15c}
+.sticker .inj-flag.out{color:#ff7b7b}
+.sticker .inj-flag.sus{color:#c9a3ff}
+.sticker.hurt{box-shadow:0 2px 5px rgba(30,50,70,.28), inset 0 0 0 2px rgba(198,12,48,.9)}
 
 /* team logos */
 .team-logo{border-radius:9px;object-fit:cover;flex:none;box-shadow:var(--sh-1);background:var(--panel-2)}
@@ -1550,7 +1557,8 @@ function ownerForPick(idx){ // pick trades: slot belongs to original team, but a
 /* =====================================================
    Player pool — Sleeper public API, cached after first load
 ===================================================== */
-let POOL = [];           // [{id,name,pos,team,rank}]
+let POOL = [];           // [{id,name,pos,team,rank,inj,injBody}]
+let POOL_MAP = new Map();  // id -> player, for injury lookups on the board/rosters
 let poolReady = false;
 const POS_LIST = ["QB","RB","WR","TE","K","DEF"];
 let posFilter = "ALL";
@@ -1558,7 +1566,7 @@ let posFilter = "ALL";
 async function loadPool(){
   const status = document.getElementById('poolStatus');
   // cached?
-  try{ const c = store.get('ffl_pool_v2'); if(c){ POOL = JSON.parse(c); poolReady=true; status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
+  try{ const c = store.get('ffl_pool_v2'); if(c){ POOL = JSON.parse(c); POOL_MAP = new Map(POOL.map(p=>[p.id,p])); poolReady=true; status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
   status.textContent = "Downloading current NFL player pool…";
   try{
     const res = await fetch('https://api.sleeper.app/v1/players/nfl');
@@ -1576,6 +1584,7 @@ async function loadPool(){
     }
     out.sort((a,b)=>a.rank-b.rank);
     POOL = out;
+    POOL_MAP = new Map(POOL.map(p=>[p.id,p]));
     poolReady = true;
     try{ store.set('ffl_pool_v2', JSON.stringify(POOL)); }catch(e){}
     const flagged = POOL.filter(p=>p.inj).length;
@@ -1600,6 +1609,17 @@ function injBadge(inj, body){
   const map={Questionable:['Q','q'],Doubtful:['D','d'],Out:['OUT','out'],IR:['IR','out'],PUP:['PUP','out'],Sus:['SUS','sus'],Suspended:['SUS','sus'],NA:['NA','out'],DNR:['DNR','out'],COV:['COV','out']};
   const m=map[s]||[s.slice(0,3).toUpperCase(),'q'];
   return ` <span class="inj ${m[1]}" title="${esc(s + (body?' — '+body:''))}">${m[0]}</span>`;
+}
+/* injury badge for an already-drafted player, looked up live from the pool */
+function injById(id){ const p=POOL_MAP.get(id); return p ? injBadge(p.inj,p.injBody) : ''; }
+/* compact corner flag + "hurt" ring for the draft-board sticker */
+function injInfo(id){
+  const p=POOL_MAP.get(id); if(!p||!p.inj) return {cls:'',flag:''};
+  const s=String(p.inj);
+  const serious=['Out','IR','PUP','Sus','Suspended','NA','DNR','COV'].includes(s);
+  const abbr=({Questionable:'Q',Doubtful:'D',Out:'OUT',IR:'IR',PUP:'PUP',Sus:'SUS',Suspended:'SUS'})[s]||s.slice(0,3).toUpperCase();
+  const kind=s==='Questionable'?'q':(s==='Doubtful'?'d':((s==='Sus'||s==='Suspended')?'sus':'out'));
+  return { cls: serious?' hurt':'', flag:`<span class="inj-flag ${kind}" title="${esc(s+(p.injBody?' — '+p.injBody:''))}">${abbr}</span>` };
 }
 function draftedIds(){ return new Set(D.picks.map(p=>p.playerId)); }
 function availablePlayers(){
@@ -1831,7 +1851,7 @@ function renderBoard(){
       const own = ownerForPick(idx);
       const isKeep = KR() && row===0;
       html += `<div class="slot${isNext?' next':''}">` +
-        (p? `<div class="sticker pos-${p.pos}"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?' → '+esc(S.teams[p.teamIndex]?.name||''):''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div>`:'') +
+        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?' → '+esc(S.teams[p.teamIndex]?.name||''):''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div>`:'') +
         ((!p && own!==teamForPick(idx))? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--chalk-dim);font-family:'IBM Plex Mono',monospace">${esc(S.teams[own].name.slice(0,14))}</div>`:'') + `</div>`;
     }
   }
@@ -1864,7 +1884,7 @@ function renderRosterMini(){
   if(tIdx===null){ el.innerHTML = `<b>Draft complete.</b> See the Teams tab for full rosters.`; return; }
   const picks = D.picks.filter(p=>p.teamIndex===tIdx);
   el.innerHTML = `<div class="eyebrow" style="margin-bottom:4px">${esc(S.teams[tIdx].name)} so far</div>` +
-    (picks.map(p=>`<div class="rr"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span><b>${esc(p.name)}</b></div>`).join('') || `<span style="color:var(--chalk-dim)">No picks yet.</span>`);
+    (picks.map(p=>`<div class="rr"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span><b>${esc(p.name)}</b>${injById(p.playerId)}</div>`).join('') || `<span style="color:var(--chalk-dim)">No picks yet.</span>`);
 }
 
 function refreshDraftUI(){
@@ -2541,7 +2561,7 @@ function renderMyTeam(){
   const playerRow = (p, slotLabel) => {
     const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
     return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
-      <td>${esc(p.name)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
+      <td>${esc(p.name)}${injById(p.playerId)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
       <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td></tr>`;
   };
   order.forEach(s2=>{
@@ -2579,7 +2599,7 @@ function renderTeams(){
     const picks = D.picks.filter(p=>p.teamIndex===i);
     return `<div class="card team-card">
       <div class="team-head">${teamMarkHTML(t,46)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
-      (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td>${esc(p.name)}</td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
+      (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td>${esc(p.name)}${injById(p.playerId)}</td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
         : `<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p>`) + `</div>`;
   }).join('');
 }
