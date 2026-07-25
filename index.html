@@ -359,6 +359,14 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .moneyin{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--chalk-dim)}
 .moneyin input[type=number]{width:92px;font-weight:600}
 .prize-pot{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--turf)}
+/* injury designation badges in the draft player pool */
+.inj{display:inline-flex;align-items:center;flex:none;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:.03em;padding:0 6px;height:17px;line-height:1;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);white-space:nowrap}
+.inj.q{color:var(--gold);border-color:var(--gold)}
+.inj.d{color:var(--te);border-color:var(--te)}
+.inj.out{color:var(--charge);border-color:var(--charge)}
+.inj.sus{color:var(--k);border-color:var(--k)}
+.poolrefresh{color:var(--turf);font-weight:600;text-decoration:none}
+.poolrefresh:hover{text-decoration:underline}
 
 /* team logos */
 .team-logo{border-radius:9px;object-fit:cover;flex:none;box-shadow:var(--sh-1);background:var(--panel-2)}
@@ -1550,7 +1558,7 @@ let posFilter = "ALL";
 async function loadPool(){
   const status = document.getElementById('poolStatus');
   // cached?
-  try{ const c = store.get('ffl_pool_v1'); if(c){ POOL = JSON.parse(c); poolReady=true; status.textContent = `${POOL.length} players loaded (cached)`; renderPool(); return; } }catch(e){}
+  try{ const c = store.get('ffl_pool_v2'); if(c){ POOL = JSON.parse(c); poolReady=true; status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
   status.textContent = "Downloading current NFL player pool…";
   try{
     const res = await fetch('https://api.sleeper.app/v1/players/nfl');
@@ -1563,19 +1571,35 @@ async function loadPool(){
       if(p.position!=='DEF' && (p.active===false || !p.search_rank || p.search_rank>600)) continue;
       out.push({ id, name: p.position==='DEF' ? `${p.first_name||''} ${p.last_name||''}`.trim()+" D/ST" : (p.full_name || `${p.first_name} ${p.last_name}`),
                  pos: p.position, team: p.team || 'FA',
-                 rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.search_rank });
+                 rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.search_rank,
+                 inj: p.injury_status || null, injBody: p.injury_body_part || null });
     }
     out.sort((a,b)=>a.rank-b.rank);
     POOL = out;
     poolReady = true;
-    try{ store.set('ffl_pool_v1', JSON.stringify(POOL)); }catch(e){}
-    status.textContent = `${POOL.length} players loaded — ranked by consensus`;
+    try{ store.set('ffl_pool_v2', JSON.stringify(POOL)); }catch(e){}
+    const flagged = POOL.filter(p=>p.inj).length;
+    status.innerHTML = `${POOL.length} players · ${flagged} injury-flagged · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh</a>`;
     maybeAutoOthers(); maybeAutoFlagged();
   }catch(err){
     status.innerHTML = "Couldn't reach the player feed (needs internet). Retry when connected — the draft board still works.";
     POOL = []; poolReady = false;
   }
   renderPool();
+}
+function refreshPool(){
+  try{ store.set('ffl_pool_v2',''); }catch(e){}
+  POOL=[]; poolReady=false;
+  const st=document.getElementById('poolStatus'); if(st) st.textContent='Refreshing player pool…';
+  loadPool();
+}
+/* injury designation badge from Sleeper injury_status */
+function injBadge(inj, body){
+  if(!inj) return '';
+  const s=String(inj);
+  const map={Questionable:['Q','q'],Doubtful:['D','d'],Out:['OUT','out'],IR:['IR','out'],PUP:['PUP','out'],Sus:['SUS','sus'],Suspended:['SUS','sus'],NA:['NA','out'],DNR:['DNR','out'],COV:['COV','out']};
+  const m=map[s]||[s.slice(0,3).toUpperCase(),'q'];
+  return ` <span class="inj ${m[1]}" title="${esc(s + (body?' — '+body:''))}">${m[0]}</span>`;
 }
 function draftedIds(){ return new Set(D.picks.map(p=>p.playerId)); }
 function availablePlayers(){
@@ -1821,7 +1845,7 @@ function renderPool(){
   list.innerHTML = avail.map(p=>`
     <div class="prow pos-${p.pos}">
       <span class="postag">${p.pos}</span>
-      <span class="pname">${esc(p.name)}</span>
+      <span class="pname">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
       <span class="pmeta">${p.team||''}</span>
       <button class="pick" onclick="makePick('${p.id}')">Draft</button>
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
