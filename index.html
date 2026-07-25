@@ -242,6 +242,10 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 
 /* player pool panel */
 .pool{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column;max-height:680px}
+/* keep the player pool pinned in view while scrolling the long draft board */
+@media(min-width:1021px){
+  .pool{position:sticky;top:calc(var(--hdr-h,72px) + 10px);align-self:start;max-height:calc(100dvh - var(--hdr-h,72px) - 30px)}
+}
 .pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
 .posfilters{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 .posfilters button{
@@ -2999,6 +3003,13 @@ function setTeamManager(i, val){
     if(suggested && !(S.teams||[]).some((t,j)=>j!==i && String(t.name||'').trim().toLowerCase()===suggested.toLowerCase())) S.teams[i].name = suggested; }
   saveState(); renderSettings(); renderHome();
 }
+
+/* measure the sticky header so the draft pool can pin right beneath it */
+function syncHeaderH(){ const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px'); }
+window.addEventListener('resize', syncHeaderH);
+window.addEventListener('load', syncHeaderH);
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderH);
+syncHeaderH();
 
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
 ensureManagers();
