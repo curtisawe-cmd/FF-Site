@@ -2568,7 +2568,7 @@ function renderSettings(){
         ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
         <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
       </label>${t.logo?`<button class="logo-rm" title="Remove logo" onclick="clearTeamLogo(${i})">✕</button>`:''}
-      <select class="tnamesel" title="Team name" onchange="setTeamName(${i}, this.value)">${teamNameOptions(t.name)}</select>
+      <select class="tnamesel" title="Team name" onchange="setTeamName(${i}, this.value)">${teamNameOptions(t.name, i)}</select>
       ${(+S.divisions>0) ? `<select class="divsel" title="Division" onchange="S.teams[${i}].div=+this.value;saveState();renderHome();if(window.currentView==='teams')renderTeams()">${Array.from({length:+S.divisions},(_,d)=>`<option value="${d+1}"${(+t.div||1)===d+1?' selected':''}>Div ${d+1}</option>`).join('')}</select>` : ''}
       <select style="max-width:150px" title="Assign manager (each person once)" onchange="setTeamManager(${i}, this.value)">${managerOptions(t.manager)}</select>
       <label style="color:${t.auto?'var(--turf)':'var(--chalk-dim)'};font-size:12px;white-space:nowrap"><input type="checkbox" ${t.auto?'checked':''} onchange="S.teams[${i}].auto=this.checked;saveState();renderSettings();refreshDraftUI();maybeAutoFlagged()" style="width:auto"> auto</label>
@@ -2763,12 +2763,17 @@ function latestTeamNameFor(mgr){
   }
   return '';
 }
-function teamNameOptions(cur){
+function teamNameOptions(cur, self){
   cur = String(cur||'');
+  const curL = cur.toLowerCase();
+  const taken = new Set((S.teams||[]).map((t,j)=> j!==self ? String(t.name||'').trim().toLowerCase() : '').filter(Boolean));
   const names = allTeamNames();
   let html = `<option value=""${cur?'':' selected'}>— team name —</option>`;
-  html += names.map(n=>`<option value="${esc(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('');
-  if(cur && !names.includes(cur)) html += `<option value="${esc(cur)}" selected>${esc(cur)}</option>`;
+  html += names.map(n=>{
+    const nL=n.toLowerCase(), isCur=nL===curL, isTaken=taken.has(nL)&&!isCur;
+    return `<option value="${esc(n)}"${isCur?' selected':''}${isTaken?' disabled':''}>${esc(n)}${isTaken?' — taken':''}</option>`;
+  }).join('');
+  if(cur && !names.some(n=>n.toLowerCase()===curL)) html += `<option value="${esc(cur)}" selected>${esc(cur)}</option>`;
   html += `<option value="__custom__">Custom…</option>`;
   return html;
 }
@@ -2777,6 +2782,11 @@ function setTeamName(i, val){
     const v = window.prompt('Team name:', S.teams[i].name||'');
     if(v===null){ renderSettings(); return; }
     val = v.trim();
+  }
+  val = String(val||'').trim();
+  if(val && (S.teams||[]).some((t,j)=>j!==i && String(t.name||'').trim().toLowerCase()===val.toLowerCase())){
+    toast(`"${val}" is already another team's name.`);
+    renderSettings(); return;
   }
   S.teams[i].name = val;
   saveState(); renderSettings(); renderHome();
@@ -2898,7 +2908,8 @@ function setTeamManager(i, val){
   }
   S.teams[i].manager = val;
   // link: drop in this manager's most-recent team name from history (still editable below)
-  if(val){ const suggested = latestTeamNameFor(val); if(suggested) S.teams[i].name = suggested; }
+  if(val){ const suggested = latestTeamNameFor(val);
+    if(suggested && !(S.teams||[]).some((t,j)=>j!==i && String(t.name||'').trim().toLowerCase()===suggested.toLowerCase())) S.teams[i].name = suggested; }
   saveState(); renderSettings(); renderHome();
 }
 
