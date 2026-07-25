@@ -442,6 +442,35 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* keep every settings row's controls vertically centered and evenly spaced */
 .setrow{min-height:40px}
 
+/* ---------- trash-talk slam animation (mock draft reset) ---------- */
+.tt-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;pointer-events:none;overflow:hidden}
+.tt-flash{position:absolute;inset:0;background:radial-gradient(circle at center, var(--charge), transparent 68%);opacity:0;animation:tt-flash 2.7s ease-out forwards}
+.tt-text{
+  font-family:'Anton',sans-serif;text-transform:uppercase;text-align:center;line-height:.9;
+  color:#fff;font-size:clamp(42px,9vw,120px);letter-spacing:.01em;padding:0 16px;
+  -webkit-text-stroke:2px var(--turf);paint-order:stroke fill;
+  text-shadow:0 5px 0 var(--turf-deep), 0 0 46px rgba(255,74,95,.7);
+  animation:tt-slam 2.7s cubic-bezier(.18,.9,.24,1) forwards;
+}
+.tt-sub{display:block;margin-top:10px;font-size:clamp(16px,3.4vw,36px);color:var(--charge);
+  -webkit-text-stroke:0;text-shadow:0 0 22px var(--charge);letter-spacing:.02em}
+@keyframes tt-slam{
+  0%{transform:scale(2.6) rotate(-9deg);opacity:0;filter:blur(8px)}
+  12%{transform:scale(.9) rotate(2.5deg);opacity:1;filter:blur(0)}
+  18%{transform:scale(1.06) rotate(-2deg)}
+  24%{transform:scale(.98) rotate(1.4deg)}
+  30%{transform:scale(1.02) rotate(-.6deg)}
+  36%{transform:scale(1) rotate(0)}
+  80%{transform:scale(1) rotate(0);opacity:1}
+  100%{transform:scale(1.16) rotate(0);opacity:0;filter:blur(3px)}
+}
+@keyframes tt-flash{0%{opacity:0}8%{opacity:.5}34%{opacity:.22}100%{opacity:0}}
+@keyframes tt-fade{0%{opacity:0}12%{opacity:1}75%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){
+  .tt-text{animation:tt-fade 1.5s ease-out forwards}
+  .tt-flash{animation:none;opacity:.18}
+}
+
 /* ---------- global polish ---------- */
 ::selection{background:var(--turf);color:#fff}
 ::-webkit-scrollbar{width:11px;height:11px}
@@ -1663,6 +1692,24 @@ function undoPick(){
   if(D.started && !D.paused) armClock();
   refreshDraftUI();
 }
+/* crude-but-no-slurs trash talk shown on a mock-draft reset */
+const RESET_TRASH = [
+  ["Don't be a bitch","use these picks, pussy"],
+  ["Grow a pair","and draft already"],
+  ["Quit crying","pick again, coward"],
+  ["Man up","the clock's waiting"],
+  ["Scared, are we?","get back in there"],
+  ["Cry about it","then make the pick"]
+];
+function trashTalk(pair){
+  const [big, sub] = pair || RESET_TRASH[Math.floor(Math.random()*RESET_TRASH.length)];
+  const el = document.createElement('div');
+  el.className = 'tt-overlay';
+  el.innerHTML = `<div class="tt-flash"></div><div class="tt-text">${esc(big)}<span class="tt-sub">${esc(sub)}</span></div>`;
+  document.body.appendChild(el);
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(()=>el.remove(), reduce ? 1600 : 2800);
+}
 function resetDraft(){
   if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
   clearInterval(timerId); timerId=null;
@@ -1670,6 +1717,7 @@ function resetDraft(){
   document.getElementById('clock').textContent='--';
   document.getElementById('btnPause').textContent='Pause';
   refreshDraftUI();
+  if(draftMode==='mock') trashTalk();
 }
 
 /* =====================================================
