@@ -355,6 +355,10 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
   color:#06210f;background:var(--rb);
 }
 .statpill.hot{background:var(--charge);color:#fff}
+/* prize money inputs */
+.moneyin{display:inline-flex;align-items:center;gap:4px;font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--chalk-dim)}
+.moneyin input[type=number]{width:92px;font-weight:600}
+.prize-pot{font-family:'IBM Plex Mono',monospace;font-size:18px;color:var(--turf)}
 
 /* team logos */
 .team-logo{border-radius:9px;object-fit:cover;flex:none;box-shadow:var(--sh-1);background:var(--panel-2)}
@@ -683,6 +687,12 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <h2>Prize Money</h2>
+    <p class="sub" style="margin-bottom:12px">Buy-in per manager sets the pot. Division winners get their buy-in back; the podium payouts below are placeholders — edit them to match your league.</p>
+    <div id="prizesView"></div>
+  </div>
+
   <div class="card managers-card" style="margin-bottom:18px">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">League Managers</h2>
@@ -799,6 +809,7 @@ const DEFAULTS = {
   roster: {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DEF:1, BN:8, IR:1},  /* 9 starters + 8 bench = 17 = keeper + 16 rounds; IR extra, no draft round */
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
+  prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -2561,6 +2572,7 @@ function renderSettings(){
   document.getElementById('setDivisions').value = String(+S.divisions||0);
   // master manager roster
   renderManagers();
+  renderPrizes();
   // teams
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
     <div class="teamcard"><span class="num">${i+1}</span>
@@ -2738,6 +2750,37 @@ function allManagerNames(){
   Object.values((S.history&&S.history.managers)||{}).forEach(yr=>Object.values(yr).forEach(add));
   (S.teams||[]).forEach(t=>add(t.manager));
   return [...set.values()].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+/* ---- prize money / payouts ---- */
+function money(n){ return '$' + Math.round(+n||0).toLocaleString('en-US'); }
+function renderPrizes(){
+  const el = document.getElementById('prizesView'); if(!el) return;
+  const P = S.prizes = Object.assign({buyIn:250, first:0, second:0, third:0}, S.prizes||{});
+  const n = N();
+  const buyIn = +P.buyIn||0;
+  const pot = buyIn * n;
+  const divs = +S.divisions||0;
+  const divRefund = divs * buyIn;
+  const podium = (+P.first||0)+(+P.second||0)+(+P.third||0);
+  const allocated = podium + divRefund;
+  const left = pot - allocated;
+  const dollarIn = (key, step)=>`<span class="moneyin">$<input type="number" min="0" step="${step}" value="${+P[key]||0}" onchange="S.prizes.${key}=+this.value;saveState();renderPrizes();renderHome()"></span>`;
+  el.innerHTML = `
+    <div class="setgrid">
+      <div class="setrow"><label>Buy-in / manager</label>${dollarIn('buyIn',5)}</div>
+      <div class="setrow"><label>Managers</label><b>${n}</b></div>
+      <div class="setrow"><label>Total pot</label><b class="prize-pot">${money(pot)}</b></div>
+    </div>
+    <div class="eyebrow" style="margin:16px 0 6px">Payouts</div>
+    <div class="setgrid">
+      <div class="setrow"><label>🥇 1st place</label>${dollarIn('first',10)}</div>
+      <div class="setrow"><label>🥈 2nd place</label>${dollarIn('second',10)}</div>
+      <div class="setrow"><label>🥉 3rd place</label>${dollarIn('third',10)}</div>
+      <div class="setrow"><label>Division winners <span style="color:var(--chalk-dim);font-size:12px">(buy-in back)</span></label>${
+        divs ? `<b>${money(divRefund)} <span style="color:var(--chalk-dim);font-weight:400;font-size:12px">${divs} × ${money(buyIn)}</span></b>`
+             : `<span style="color:var(--chalk-dim)">set Divisions above</span>`}</div>
+    </div>
+    <div class="notice" style="margin-top:14px">Allocated <b>${money(allocated)}</b> of <b>${money(pot)}</b> — <span style="color:${left<0?'var(--danger)':'var(--rb)'};font-weight:600">${left<0?('over by '+money(-left)):(money(left)+' left to allocate')}</span></div>`;
 }
 /* seed the master roster once from all names we know */
 function ensureManagers(){
