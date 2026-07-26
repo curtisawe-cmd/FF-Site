@@ -498,6 +498,16 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 .theme-toggle:active{transform:scale(.96)}
 .theme-toggle .dot{width:11px;height:11px;border-radius:50%;background:var(--charge);box-shadow:0 0 0 3px var(--charge-wash)}
 :root[data-theme="dark"] .theme-toggle .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.18)}
+/* admin / viewer role */
+.role-btn{display:inline-flex;align-items:center;gap:7px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line-strong);border-radius:999px;padding:6px 14px;box-shadow:var(--sh-1);cursor:pointer;transition:color .15s,border-color .15s,background .15s}
+.role-btn:hover{color:var(--chalk);border-color:var(--turf)}
+.role-btn .dot{width:11px;height:11px;border-radius:50%;background:var(--chalk-dim)}
+:root[data-role="admin"] .role-btn{color:#fff;background:var(--turf);border-color:var(--turf)}
+:root[data-role="admin"] .role-btn .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.2)}
+:root[data-role="user"] .admin-only{display:none !important}
+:root[data-role="user"] nav.tabs button[data-view="settings"]{display:none}
+:root[data-role="user"] .viewer-only{display:inline-flex !important;align-items:center}
+:root[data-role="user"] #matchupsView input[type=number]{pointer-events:none;background:var(--panel-2);opacity:.75}
 
 /* ---------- clean, consistent dropdowns (kills the native "bubble" arrow) ---------- */
 select{
@@ -608,6 +618,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button data-view="history">History</button>
     <button data-view="settings">Settings</button>
   </nav>
+  <button class="role-btn" id="roleBtn" onclick="toggleAdmin()"><span class="dot"></span>Viewer</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
 </header>
 
@@ -651,6 +662,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="clock" id="clock">--</div>
     <div class="onclock"><small id="pickLabel">Pre-draft</small><span id="onClockTeam">Ready when you are</span></div>
     <div class="spacer"></div>
+    <span class="admin-only" style="display:contents">
     <span id="mockCtrls" style="display:none;align-items:center;gap:8px">
       <label style="color:var(--chalk-dim);font-size:13px">You control</label>
       <select id="mockTeam" onchange="S.mock.team=+this.value;saveState()"></select>
@@ -667,6 +679,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button class="btn ghost" id="btnPause" onclick="togglePause()" disabled>Pause</button>
     <button class="btn ghost" id="btnUndo" onclick="undoPick()" disabled>Undo Pick</button>
     <button class="btn danger" onclick="resetDraft()">Reset</button>
+    </span>
+    <span class="viewer-only" style="display:none;color:var(--chalk-dim);font-size:13px">Viewer mode — the commissioner runs the draft.</span>
   </div>
 
   <div class="draftwrap">
@@ -1939,12 +1953,14 @@ function applyInactiveFilter(){
 let timerId=null, timeLeft=0;
 
 function startDraft(){
+  if(!requireAdmin()) return;
   if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
   D.started = true; D.paused = false; saveDraft();
   armClock();
   refreshDraftUI();
 }
 function togglePause(){
+  if(!requireAdmin()) return;
   if(!D.started||D.finished) return;
   D.paused = !D.paused; saveDraft();
   document.getElementById('btnPause').textContent = D.paused ? 'Resume' : 'Pause';
@@ -1967,6 +1983,7 @@ function armClock(carry){
 /* Auto-draft: when on, auto-pick for EVERY team (best available) on a short timer */
 let autoDraftOn = false;
 function setAutoDraft(on){
+  if(!requireAdmin()){ const t=document.getElementById('autoDraftToggle'); if(t) t.checked=false; return; }
   autoDraftOn = !!on;
   store.set('ffl_autodraft', autoDraftOn ? '1' : '');
   if(autoDraftOn && D.started && !D.paused && !D.finished){ clearInterval(timerId); maybeAutoDraft(); }
@@ -2043,6 +2060,7 @@ function pickAlarm(why){
   setTimeout(()=>el.remove(), 5100);
 }
 function makePick(playerId){
+  if(!requireAdmin()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
   const idx = currentPickIndex();
   const player = POOL.find(p=>p.id===playerId);
@@ -2108,6 +2126,7 @@ function afterPick(){
   refreshDraftUI();
 }
 function undoPick(){
+  if(!requireAdmin()) return;
   if(!D.picks.length) return;
   const last = D.picks.pop();
   D.finished = false; saveDraft();
@@ -2139,6 +2158,7 @@ function trashTalk(pair){
   setTimeout(()=>el.remove(), 5100);
 }
 function resetDraft(){
+  if(!requireAdmin()) return;
   if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
   clearInterval(timerId); timerId=null;
   D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
@@ -2151,7 +2171,26 @@ function resetDraft(){
 /* =====================================================
    Rendering
 ===================================================== */
+/* ---------- lightweight admin / user roles (client-side gate) ---------- */
+function hashStr(s){ let h=5381; s=String(s); for(let i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))>>>0; return h; }
+const ADMIN_HASH = 11071474;   /* hash of the admin passcode; change the passcode by updating this number */
+function isAdmin(){ return store.get('ffl_role')==='admin'; }
+function requireAdmin(){ if(!isAdmin()){ toast("Commissioner only — you're in viewer mode."); return false; } return true; }
+function applyRole(){
+  document.documentElement.setAttribute('data-role', isAdmin()?'admin':'user');
+  const b=document.getElementById('roleBtn');
+  if(b){ b.innerHTML = isAdmin()?'<span class="dot"></span>Admin':'<span class="dot"></span>Viewer'; b.title = isAdmin()?'Admin mode — click to switch to viewer':'Viewer mode — click to unlock admin'; }
+}
+function toggleAdmin(){
+  if(isAdmin()){ store.set('ffl_role','user'); applyRole(); rerenderRole(); toast('Switched to viewer mode'); return; }
+  const pass = window.prompt('Enter the admin passcode:');
+  if(pass===null) return;
+  if(hashStr(pass.trim())===ADMIN_HASH){ store.set('ffl_role','admin'); applyRole(); rerenderRole(); toast('Admin unlocked ✓'); }
+  else toast('Wrong passcode.');
+}
+function rerenderRole(){ refreshDraftUI(); const v=window.currentView||'home'; showView(v); }
 function showView(v){
+  if(v==='settings' && !isAdmin()){ toast("Settings are commissioner-only."); v='home'; }
   window.currentView = v;
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
@@ -2226,7 +2265,7 @@ function renderPool(){
       <span class="postag">${p.pos}</span>
       <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
       <span class="pmeta">${p.team||''}</span>
-      <button class="pick" onclick="makePick('${p.id}')">Draft</button>
+      ${isAdmin()?`<button class="pick" onclick="makePick('${p.id}')">Draft</button>`:''}
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
 }
 
@@ -2681,12 +2720,14 @@ function genSchedule(){
 }
 function mScore(wk,m){ return (S.season.scores[wk]&&S.season.scores[wk][m]) || [null,null]; }
 function setScore(wk,m,side,val){
+  if(!requireAdmin()) return;
   S.season.scores[wk] = S.season.scores[wk]||{};
   const cur = S.season.scores[wk][m] = S.season.scores[wk][m]||[null,null];
   cur[side] = (val===''||val===null)? null : +val;
   saveState(); renderMatchups();
 }
 function setMatchTeam(wk,m,side,ti){
+  if(!requireAdmin()) return;
   S.season.schedule[wk][m][side] = +ti; saveState(); renderMatchups();
 }
 function seasonStandings(){
@@ -2734,7 +2775,7 @@ function renderMatchups(){
     el.innerHTML = `<div class="card" style="max-width:640px">
       <h2>No schedule yet</h2>
       <p class="sub" style="margin-bottom:12px">Generate the 2026 regular season: every team plays the other 11 once, then the first three rounds repeat to fill Weeks 12–14. You can edit any matchup after.</p>
-      <button class="btn" onclick="genSchedule();renderMatchups()">Generate 2026 Schedule</button>
+      <button class="btn admin-only" onclick="genSchedule();renderMatchups()">Generate 2026 Schedule</button>
     </div>`;
     return;
   }
@@ -2755,8 +2796,8 @@ function renderMatchups(){
           <span class="wk-date"><span class="eyebrow" style="margin:0">NFL Week ${wk}</span>${nflWeekRange(+wk).label}, ${nflWeekRange(+wk).year}</span>
         </div>
         <div class="row">
-          <button class="btn ghost" onclick="window.muEdit=!window.muEdit;renderMatchups()">${edit?'Done':'Edit matchups'}</button>
-          <button class="btn danger" onclick="if(confirm('Throw out the whole schedule and all scores?')){S.season=null;saveState();window.muWeek=1;renderMatchups();}">Regenerate</button>
+          <span class="admin-only" style="display:contents"><button class="btn ghost" onclick="window.muEdit=!window.muEdit;renderMatchups()">${edit?'Done':'Edit matchups'}</button>
+          <button class="btn danger" onclick="if(confirm('Throw out the whole schedule and all scores?')){S.season=null;saveState();window.muWeek=1;renderMatchups();}">Regenerate</button></span>
         </div>
       </div>
       ${games.map((g,m)=>{
@@ -2808,6 +2849,7 @@ function tradeSetTeam(side, ti){
   renderTradeCenter();
 }
 function executeTrade(){
+  if(!requireAdmin()) return;
   const T = window.tradeSel;
   if(T.a===T.b){ toast("Pick two different teams."); return; }
   if(!T.pa.size && !T.pb.size){ toast("Select at least one player."); return; }
@@ -2903,6 +2945,7 @@ function setSlot(ti, pid, slot){
 /* ---- add / drop free agents ---- */
 window.faQuery='';
 function dropPlayer(ti, pid){
+  if(!requireAdmin()) return;
   const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid);
   if(!p) return;
   if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
@@ -2913,6 +2956,7 @@ function dropPlayer(ti, pid){
   toast(`Dropped ${p.name}`);
 }
 function addPlayer(ti, pid){
+  if(!requireAdmin()) return;
   if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
   if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
@@ -2924,6 +2968,7 @@ function addPlayer(ti, pid){
 }
 /* add-with-drop: if there's room just add; if full, force a drop to make room (roster stays at the limit) */
 function addWithDrop(ti, pid){
+  if(!requireAdmin()) return;
   if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
@@ -2946,6 +2991,7 @@ function addWithDrop(ti, pid){
   </div>`;
 }
 function swapPlayer(ti, dropPid, addPid){
+  if(!requireAdmin()) return;
   D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===dropPid));
   if(S.lineups[ti]) delete S.lineups[ti][dropPid];
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
@@ -3002,7 +3048,7 @@ function renderMyTeam(){
     return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
       <td>${esc(p.name)}${injById(p.playerId)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
       <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
-      <td style="text-align:right;width:58px"><button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button></td></tr>`;
+      <td style="text-align:right;width:58px">${isAdmin()?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
     const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
@@ -3025,12 +3071,12 @@ function renderMyTeam(){
       ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
       <table class="plain">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
-      <div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
+      ${isAdmin()?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
       <p class="sub" style="margin:2px 0 8px">Every available player. Roster caps at ${rosterLimit()} (${rosterLimit()-(+S.roster.BN||0)} starters + ${+S.roster.BN||0} bench); IR is separate. Drop someone to make room.</p>
       <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="window.faQuery=this.value;renderFreeAgents(${mi})" style="width:100%;max-width:340px">
-      <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>
+      <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>`:''}
     </div>`;
-  renderFreeAgents(mi);
+  if(isAdmin()) renderFreeAgents(mi);
 }
 function renderTeams(){
   const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
@@ -3467,6 +3513,7 @@ applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('dat
 ensureManagers();
 if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
 autoDraftOn = store.get('ffl_autodraft')==='1';
+applyRole();
 renderPosFilters();
 renderSettings();
 renderTrades();
