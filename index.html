@@ -547,6 +547,20 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
 /* ---------- global polish ---------- */
 ::selection{background:var(--turf);color:#fff}
+/* ---------- mobile: compact scrollable nav + no sideways page scroll ---------- */
+@media(max-width:640px){
+  html,body{overflow-x:hidden}
+  header.top{padding:9px 12px;gap:8px}
+  .wordmark{font-size:20px;order:1}
+  .theme-toggle{order:2;margin-left:auto}
+  nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  nav.tabs::-webkit-scrollbar{display:none}
+  nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
+  main{padding:12px 12px}
+  .card{padding:16px 14px}
+  .hero{padding:30px 20px}
+  h1{font-size:clamp(30px,9vw,40px)}
+}
 ::-webkit-scrollbar{width:11px;height:11px}
 ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:20px;border:2px solid var(--bg)}
 ::-webkit-scrollbar-thumb:hover{background:var(--chalk-dim)}
