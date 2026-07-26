@@ -780,6 +780,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <h2>Mock Draft Trash Talk</h2>
+    <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
+    <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost" onclick="trashTalk()">Test animation</button>
+    </div>
+  </div>
+
   <div class="card managers-card" style="margin-bottom:18px">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">League Managers</h2>
@@ -898,6 +907,7 @@ const DEFAULTS = {
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
+  mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -2062,8 +2072,14 @@ const RESET_TRASH = [
   ["Scared, are we?","get back in there"],
   ["Cry about it","then make the pick"]
 ];
+function saveMockTrash(val){ S.mockTrash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+function mockTrashLines(){
+  if(S.mockTrash && S.mockTrash.length) return S.mockTrash.map(s=>{ const i=s.indexOf('|'); return i>=0 ? [s.slice(0,i).trim(), s.slice(i+1).trim()] : [s.trim(), '']; });
+  return RESET_TRASH;
+}
 function trashTalk(pair){
-  const [big, sub] = pair || RESET_TRASH[Math.floor(Math.random()*RESET_TRASH.length)];
+  const lines = mockTrashLines();
+  const [big, sub] = pair || lines[Math.floor(Math.random()*lines.length)];
   const el = document.createElement('div');
   el.className = 'tt-overlay';
   el.innerHTML = `<div class="tt-flash"></div><div class="tt-text">${esc(big)}<span class="tt-sub">${esc(sub)}</span></div>`;
@@ -2909,6 +2925,7 @@ function renderSettings(){
   renderManagers();
   renderPrizes();
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
+  { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
   // teams
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
     <div class="teamcard"><span class="num">${i+1}</span>
