@@ -785,21 +785,23 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="prizesView"></div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
-    <h2>Draft Alarm Insults</h2>
-    <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
-    <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
-    <div class="row" style="margin-top:10px">
-      <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <h2>Draft Alarm Insults</h2>
+      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
+      <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
+      </div>
     </div>
-  </div>
 
-  <div class="card" style="margin-bottom:18px">
-    <h2>Mock Draft Trash Talk</h2>
-    <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
-    <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
-    <div class="row" style="margin-top:10px">
-      <button class="btn ghost" onclick="trashTalk()">Test animation</button>
+    <div class="card">
+      <h2>Mock Draft Trash Talk</h2>
+      <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
+      <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="trashTalk()">Test animation</button>
+      </div>
     </div>
   </div>
 
