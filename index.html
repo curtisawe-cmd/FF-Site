@@ -1616,7 +1616,7 @@ let posFilter = "ALL";
 async function loadPool(){
   const status = document.getElementById('poolStatus');
   // cached?
-  try{ const c = store.get('ffl_pool_v2'); if(c){ POOL = JSON.parse(c); POOL_MAP = new Map(POOL.map(p=>[p.id,p])); poolReady=true; status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
+  try{ const c = store.get('ffl_pool_v3'); if(c){ POOL = JSON.parse(c); POOL_MAP = new Map(POOL.map(p=>[p.id,p])); poolReady=true; applyInactiveFilter(); status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
   status.textContent = "Downloading current NFL player pool…";
   try{
     const res = await fetch('https://api.sleeper.app/v1/players/nfl');
@@ -1630,13 +1630,15 @@ async function loadPool(){
       out.push({ id, name: p.position==='DEF' ? `${p.first_name||''} ${p.last_name||''}`.trim()+" D/ST" : (p.full_name || `${p.first_name} ${p.last_name}`),
                  pos: p.position, team: p.team || 'FA',
                  rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.search_rank,
+                 exp: (p.years_exp??null),
                  inj: p.injury_status || null, injBody: p.injury_body_part || null });
     }
     out.sort((a,b)=>a.rank-b.rank);
     POOL = out;
     POOL_MAP = new Map(POOL.map(p=>[p.id,p]));
     poolReady = true;
-    try{ store.set('ffl_pool_v2', JSON.stringify(POOL)); }catch(e){}
+    try{ store.set('ffl_pool_v3', JSON.stringify(POOL)); }catch(e){}
+    applyInactiveFilter();
     const flagged = POOL.filter(p=>p.inj).length;
     status.innerHTML = `${POOL.length} players · ${flagged} injury-flagged · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh</a>`;
     maybeAutoOthers(); maybeAutoFlagged();
@@ -1647,7 +1649,7 @@ async function loadPool(){
   renderPool();
 }
 function refreshPool(){
-  try{ store.set('ffl_pool_v2',''); }catch(e){}
+  try{ store.set('ffl_pool_v3',''); }catch(e){}
   POOL=[]; poolReady=false;
   const st=document.getElementById('poolStatus'); if(st) st.textContent='Refreshing player pool…';
   loadPool();
@@ -1801,6 +1803,7 @@ function renderPlayers(){
   const taken=new Set((realDraft().picks||[]).map(p=>p.playerId));   // drafted players drop off the board
   let rows=PLAYERS.filter(p=>
     !taken.has(p.id) &&
+    (!recentReady || RECENT_IDS.has(p.id) || p.exp===0) &&
     (window.plPos==='ALL'||p.pos===window.plPos) &&
     (window.plTeam==='ALL'||p.team===window.plTeam) &&
     (!window.plInjOnly||p.inj) &&
@@ -1811,10 +1814,11 @@ function renderPlayers(){
                   : sort==='age' ? ((a.age||199)-(b.age||199)||a.rank-b.rank)
                   : a.rank-b.rank);
   const total=rows.length, shown=rows.slice(0,200);
-  const draftedN=PLAYERS.reduce((n,p)=>n+(taken.has(p.id)?1:0),0);
-  const injCount=PLAYERS.filter(p=>p.inj && !taken.has(p.id)).length;
+  const eligible=PLAYERS.filter(p=> !recentReady || RECENT_IDS.has(p.id) || p.exp===0);
+  const draftedN=eligible.reduce((n,p)=>n+(taken.has(p.id)?1:0),0);
+  const injCount=eligible.filter(p=>p.inj && !taken.has(p.id)).length;
   const st=document.getElementById('plStatus');
-  if(st) st.innerHTML=`${PLAYERS.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
+  if(st) st.innerHTML=`${eligible.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
   list.innerHTML=`<div style="overflow-x:auto"><table class="plain plplayers">
     <tr><th style="width:44px">Pos</th><th>Player</th><th>Team</th><th style="text-align:center">Age</th><th style="text-align:center">Exp</th><th>Injury</th><th>Status</th></tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
@@ -1834,6 +1838,34 @@ function availablePlayers(){
   return POOL.filter(p=>!taken.has(p.id))
              .filter(p=>posFilter==='ALL'||p.pos===posFilter)
              .filter(p=>!q || p.name.toLowerCase().includes(q) || (p.team||'').toLowerCase().includes(q));
+}
+
+/* ---- drop players who haven't actually played recently (Sleeper keeps retirees marked "active") ---- */
+let RECENT_IDS=new Set(), recentReady=false, recentLoading=false;
+async function loadRecentIds(){
+  if(recentReady||recentLoading) return;
+  recentLoading=true;
+  try{ const c=store.get('ffl_recent_v1'); if(c){ RECENT_IDS=new Set(JSON.parse(c)); recentReady=true; recentLoading=false; applyInactiveFilter(); if(window.currentView==='players') renderPlayers(); return; } }catch(e){}
+  try{
+    const [a,b]=await Promise.all([
+      fetch('https://api.sleeper.app/v1/stats/nfl/regular/2025').then(r=>r.json()),
+      fetch('https://api.sleeper.app/v1/stats/nfl/regular/2024').then(r=>r.json())
+    ]);
+    const set=new Set();
+    [a,b].forEach(d=>{ for(const id in d){ if(d[id] && +d[id].gp>=1) set.add(id); } });
+    if(set.size>500){ RECENT_IDS=set; recentReady=true; try{ store.set('ffl_recent_v1', JSON.stringify([...set])); }catch(e){} }
+  }catch(e){}
+  recentLoading=false;
+  applyInactiveFilter();
+  if(window.currentView==='players') renderPlayers();
+}
+/* prune the draft pool to players with 2024/2025 games, plus rookies and team defenses */
+function applyInactiveFilter(){
+  if(!recentReady || RECENT_IDS.size<500 || !poolReady || !POOL.length) return;
+  const keep=p=> RECENT_IDS.has(p.id) || p.exp===0 || p.pos==='DEF';
+  const before=POOL.length;
+  POOL=POOL.filter(keep);
+  if(POOL.length!==before){ POOL_MAP=new Map(POOL.map(p=>[p.id,p])); try{ store.set('ffl_pool_v3', JSON.stringify(POOL)); }catch(e){} renderPool(); }
 }
 
 /* =====================================================
@@ -3223,6 +3255,7 @@ renderTrades();
 renderHome();
 refreshDraftUI();
 loadPool();
+loadRecentIds();
 if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('afterend',
   `<div class="notice">Heads up: this browser is blocking saved data, so changes only last while the page is open. Use Export League File to keep a copy.</div>`); }
 </script>
