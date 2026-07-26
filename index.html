@@ -392,6 +392,8 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .pcareer .pbar.proj .pv,.pcareer .pbar.proj .py{color:var(--gold)}
 .pcareer .pbar .py{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--chalk-dim)}
 .pcareer-loading{height:190px;display:grid;place-items:center;color:var(--chalk-dim)}
+.prow .pname[onclick]{cursor:pointer}
+.prow .pname[onclick]:hover{color:var(--turf);text-decoration:underline}
 /* injury flag on the draft-board sticker */
 .sticker .inj-flag{position:absolute;top:2px;right:2px;z-index:2;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:9px;line-height:1;padding:1px 4px;border-radius:3px;background:#0c1420;color:#fff}
 .sticker .inj-flag.q{color:var(--gold)}
@@ -1747,6 +1749,14 @@ function openPlayer(id){
   if(!statsLoaded) loadCareerStats().then(()=>{ const o=document.getElementById('playerModal'); if(o && o.dataset.pid===id && o.style.display!=='none') renderPlayerModal(id); });
 }
 function closePlayer(){ const ov=document.getElementById('playerModal'); if(ov) ov.style.display='none'; }
+/* key stat columns per position for the season table */
+function statCols(pos){
+  if(pos==='QB') return [['Pa Yd','pass_yd'],['Pa TD','pass_td'],['INT','pass_int'],['Ru Yd','rush_yd'],['Ru TD','rush_td']];
+  if(pos==='RB') return [['Ru Yd','rush_yd'],['Ru TD','rush_td'],['Rec','rec'],['Re Yd','rec_yd'],['Re TD','rec_td']];
+  if(pos==='WR'||pos==='TE') return [['Rec','rec'],['Re Yd','rec_yd'],['Re TD','rec_td'],['Ru Yd','rush_yd']];
+  if(pos==='K') return [['FGM',s=>(+(s.fgm_0_19||0)+ +(s.fgm_20_29||0)+ +(s.fgm_30_39||0)+ +(s.fgm_40_49||0)+ +(s.fgm_50p||0))],['XPM','xpm']];
+  return [['Ru Yd','rush_yd'],['Re Yd','rec_yd'],['Re TD','rec_td']];
+}
 function renderPlayerModal(id){
   const ov=document.getElementById('playerModal'); if(!ov) return;
   const m=findPlayerMeta(id)||{name:'Player',pos:'',team:''}; const pos=m.pos||'';
@@ -1758,13 +1768,20 @@ function renderPlayerModal(id){
   if(!statsLoaded){
     body=`<div class="pcareer-loading">Loading career stats…</div>`;
   }else{
-    const rows=CAREER_YEARS.map(y=>{ const st=STAT_CACHE[String(y)]?.[id]; return {label:"'"+String(y).slice(2), full:y, pts:scoreSeasonStats(st,pos), gp:st?+(st.gp||0):0, proj:false}; });
-    rows.push({label:"'26", full:'2026', pts:scoreSeasonStats(STAT_CACHE['proj']?.[id],pos), gp:null, proj:true});
+    const cols=statCols(pos);
+    const rows=CAREER_YEARS.map(y=>{ const st=STAT_CACHE[String(y)]?.[id]; return {label:"'"+String(y).slice(2), full:y, st, pts:scoreSeasonStats(st,pos), gp:st?+(st.gp||0):0, proj:false}; });
+    rows.push({label:"'26", full:'2026', st:STAT_CACHE['proj']?.[id], pts:scoreSeasonStats(STAT_CACHE['proj']?.[id],pos), gp:null, proj:true});
     const max=Math.max(1,...rows.map(r=>r.pts||0));
     const chart=`<div class="pcareer">${rows.map(r=>{ const h=r.pts?Math.max(3,Math.round(r.pts/max*100)):0;
       return `<div class="pbar${r.proj?' proj':''}"><span class="pv">${r.pts!=null?Math.round(r.pts):'–'}</span><div class="bar" style="height:${h}%"></div><span class="py">${r.label}</span></div>`; }).join('')}</div>`;
-    const table=`<table class="plain" style="margin-top:16px"><tr><th>Season</th><th style="text-align:right">Points</th><th style="text-align:right">GP</th><th style="text-align:right">PPG</th></tr>${
-      rows.map(r=>`<tr${r.proj?' class="top"':''}><td>${r.proj?'2026 (proj)':r.full}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pts!=null?r.pts.toFixed(1):'—'}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.gp?r.gp:'—'}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace">${(r.pts&&r.gp)?(r.pts/r.gp).toFixed(1):'—'}</td></tr>`).join('')}</table>`;
+    const cell=(r,c)=>{ if(!r.st) return '—'; const v=typeof c[1]==='function'?c[1](r.st):+(r.st[c[1]]||0); return Math.round(v); };
+    const table=`<div style="overflow-x:auto"><table class="plain" style="margin-top:16px;white-space:nowrap">
+      <tr><th>Season</th><th style="text-align:right">Pts</th><th style="text-align:right">GP</th>${cols.map(c=>`<th style="text-align:right">${c[0]}</th>`).join('')}</tr>
+      ${rows.map(r=>`<tr${r.proj?' class="top"':''}><td>${r.proj?'2026 proj':r.full}</td>
+        <td style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:600">${r.pts!=null?r.pts.toFixed(1):'—'}</td>
+        <td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.gp?r.gp:'—'}</td>
+        ${cols.map(c=>`<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${cell(r,c)}</td>`).join('')}</tr>`).join('')}
+    </table></div>`;
     body=chart+table+`<p class="sub" style="font-size:12px;margin-top:12px">Scored in <b>your league's rules</b> from season totals (per-game yardage/long-TD bonuses excluded). 2026 is Sleeper's projection.</p>`;
   }
   ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
@@ -2052,7 +2069,7 @@ function renderPool(){
   list.innerHTML = avail.map(p=>`
     <div class="prow pos-${p.pos}">
       <span class="postag">${p.pos}</span>
-      <span class="pname">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
+      <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
       <span class="pmeta">${p.team||''}</span>
       <button class="pick" onclick="makePick('${p.id}')">Draft</button>
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
