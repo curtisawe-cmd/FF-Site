@@ -113,6 +113,8 @@ body{
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select{font-family:inherit;font-size:14px;color:var(--chalk);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--r-ctrl);padding:8px 11px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}
 input:focus,select:focus{border-color:var(--turf);box-shadow:0 0 0 3px var(--turf-wash)}
+textarea{font-family:inherit;font-size:14px;color:var(--chalk);background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--r-ctrl);padding:9px 11px;outline:none;width:100%;min-height:120px;resize:vertical;line-height:1.5;transition:border-color .15s ease,box-shadow .15s ease}
+textarea:focus{border-color:var(--turf);box-shadow:0 0 0 3px var(--turf-wash)}
 input[type=number]{width:72px;font-family:'IBM Plex Mono',monospace}
 
 /* ---------- shell ---------- */
@@ -769,6 +771,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div id="prizesView"></div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <h2>Draft Alarm Insults</h2>
+    <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
+    <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
+    </div>
+  </div>
+
   <div class="card managers-card" style="margin-bottom:18px">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">League Managers</h2>
@@ -886,6 +897,7 @@ const DEFAULTS = {
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
+  alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -1959,8 +1971,10 @@ const PICK_INSULTS=[
   "You absolute muppet","Not the sharpest, huh?","Do you even know the rules?","Big dumb move, champ",
   "Clown behavior","That was idiotic"
 ];
+function saveInsults(val){ S.alarmInsults = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 function pickAlarm(why){
-  const big=PICK_INSULTS[Math.floor(Math.random()*PICK_INSULTS.length)];
+  const pool=(S.alarmInsults && S.alarmInsults.length) ? S.alarmInsults : PICK_INSULTS;
+  const big=pool[Math.floor(Math.random()*pool.length)];
   const el=document.createElement('div'); el.className='alarm-overlay';
   el.innerHTML=`<div class="alarm-flash"></div><div class="alarm-box"><div class="alarm-ico">⚠</div><div class="alarm-big">${esc(big)}</div><div class="alarm-sub">${esc(why||'')}</div></div>`;
   document.body.appendChild(el);
@@ -2894,6 +2908,7 @@ function renderSettings(){
   // master manager roster
   renderManagers();
   renderPrizes();
+  { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   // teams
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
     <div class="teamcard"><span class="num">${i+1}</span>
