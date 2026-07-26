@@ -530,15 +530,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 @keyframes tt-flash{0%{opacity:0}8%{opacity:.5}34%{opacity:.22}100%{opacity:0}}
 /* ---------- illegal-pick alarm ---------- */
 .alarm-overlay{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;pointer-events:none;overflow:hidden}
-.alarm-flash{position:absolute;inset:0;background:var(--danger);opacity:0;animation:alarm-flash 2.6s steps(1,end) forwards}
+.alarm-flash{position:absolute;inset:0;background:var(--danger);opacity:0;animation:alarm-flash 5s steps(1,end) forwards}
 @keyframes alarm-flash{0%{opacity:.32}9%{opacity:0}18%{opacity:.32}27%{opacity:0}36%{opacity:.28}45%{opacity:0}70%{opacity:.1}100%{opacity:0}}
-.alarm-box{position:relative;text-align:center;color:#fff;padding:0 16px;animation:alarm-shake .5s ease-in-out 4, alarm-out .45s ease-in 2.2s forwards}
+.alarm-box{position:relative;text-align:center;color:#fff;padding:0 16px;animation:alarm-shake .5s ease-in-out 9, alarm-out .5s ease-in 4.5s forwards}
 .alarm-ico{font-size:clamp(38px,8vw,88px);line-height:1;filter:drop-shadow(0 0 18px rgba(255,20,20,.75))}
 .alarm-big{font-family:'Anton',sans-serif;text-transform:uppercase;font-size:clamp(30px,7vw,86px);line-height:.95;color:#fff;-webkit-text-stroke:2px var(--danger);paint-order:stroke fill;text-shadow:0 4px 0 #6b0000, 0 0 42px rgba(255,40,40,.85)}
 .alarm-sub{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:clamp(15px,2.6vw,26px);letter-spacing:.04em;text-transform:uppercase;color:#ffd7d7;margin-top:10px;text-shadow:0 0 16px rgba(255,0,0,.6)}
 @keyframes alarm-shake{0%,100%{transform:translateX(0) rotate(0)}20%{transform:translateX(-13px) rotate(-2deg)}40%{transform:translateX(13px) rotate(2deg)}60%{transform:translateX(-9px) rotate(-1deg)}80%{transform:translateX(9px) rotate(1deg)}}
 @keyframes alarm-out{to{opacity:0;transform:scale(1.12)}}
-@media (prefers-reduced-motion: reduce){.alarm-box{animation:alarm-out .45s ease-in 2.2s forwards}.alarm-flash{animation:none;opacity:.14}}
+@media (prefers-reduced-motion: reduce){.alarm-box{animation:alarm-out .5s ease-in 4.5s forwards}.alarm-flash{animation:none;opacity:.14}}
 @keyframes tt-fade{0%{opacity:0}12%{opacity:1}75%{opacity:1}100%{opacity:0}}
 @media (prefers-reduced-motion: reduce){
   .tt-text{animation:tt-fade 5s ease-out forwards}
@@ -1978,7 +1978,7 @@ function pickAlarm(why){
   const el=document.createElement('div'); el.className='alarm-overlay';
   el.innerHTML=`<div class="alarm-flash"></div><div class="alarm-box"><div class="alarm-ico">⚠</div><div class="alarm-big">${esc(big)}</div><div class="alarm-sub">${esc(why||'')}</div></div>`;
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(), 2600);
+  setTimeout(()=>el.remove(), 5100);
 }
 function makePick(playerId){
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
