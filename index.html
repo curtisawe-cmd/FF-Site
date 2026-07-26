@@ -1798,7 +1798,9 @@ function renderPlayers(){
   const list=document.getElementById('plList'); if(!list) return;
   if(!playersReady){ list.innerHTML=''; return; }
   const q=(window.plQuery||'').toLowerCase().trim();
+  const taken=new Set((realDraft().picks||[]).map(p=>p.playerId));   // drafted players drop off the board
   let rows=PLAYERS.filter(p=>
+    !taken.has(p.id) &&
     (window.plPos==='ALL'||p.pos===window.plPos) &&
     (window.plTeam==='ALL'||p.team===window.plTeam) &&
     (!window.plInjOnly||p.inj) &&
@@ -1809,9 +1811,10 @@ function renderPlayers(){
                   : sort==='age' ? ((a.age||199)-(b.age||199)||a.rank-b.rank)
                   : a.rank-b.rank);
   const total=rows.length, shown=rows.slice(0,200);
-  const injCount=PLAYERS.filter(p=>p.inj).length;
+  const draftedN=PLAYERS.reduce((n,p)=>n+(taken.has(p.id)?1:0),0);
+  const injCount=PLAYERS.filter(p=>p.inj && !taken.has(p.id)).length;
   const st=document.getElementById('plStatus');
-  if(st) st.innerHTML=`${PLAYERS.length} players · ${injCount} injury-flagged${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
+  if(st) st.innerHTML=`${PLAYERS.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
   list.innerHTML=`<div style="overflow-x:auto"><table class="plain plplayers">
     <tr><th style="width:44px">Pos</th><th>Player</th><th>Team</th><th style="text-align:center">Age</th><th style="text-align:center">Exp</th><th>Injury</th><th>Status</th></tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
