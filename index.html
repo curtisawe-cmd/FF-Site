@@ -392,6 +392,10 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .pface img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:var(--panel-2)}
 .pface img.contain{object-fit:contain;padding:14%}
 .pcell{display:flex;align-items:center;gap:10px;min-width:0}
+/* add/drop free-agent rows */
+.faRow{display:flex;align-items:center;gap:9px;padding:6px 4px;border-bottom:1px solid var(--line)}
+.faRow:hover{background:var(--turf-wash)}
+.faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .pmodal-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--chalk-dim);font-size:14px;margin-top:8px}
 .pcareer{display:flex;align-items:flex-end;gap:8px;height:190px;padding-top:12px}
 .pcareer .pbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:5px;min-width:0}
@@ -2867,6 +2871,46 @@ function setSlot(ti, pid, slot){
   }
   lu[pid]=slot; saveState(); renderTeams();
 }
+/* ---- add / drop free agents ---- */
+window.faQuery='';
+function dropPlayer(ti, pid){
+  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid);
+  if(!p) return;
+  if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
+  D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===pid));
+  if(S.lineups[ti]) delete S.lineups[ti][pid];
+  saveDraft(); saveState();
+  renderTeams(); refreshDraftUI();
+  toast(`Dropped ${p.name}`);
+}
+function addPlayer(ti, pid){
+  if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
+  const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
+  if(!p){ toast("Player not found."); return; }
+  D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
+  saveDraft();
+  renderTeams(); refreshDraftUI();
+  toast(`Added ${p.name}`);
+}
+function freeAgents(q){
+  const taken = draftedIds();
+  q = String(q||'').toLowerCase().trim();
+  return POOL.filter(p=>!taken.has(p.id))
+    .filter(p=>!q || p.name.toLowerCase().includes(q) || String(p.team||'').toLowerCase().includes(q) || p.pos.toLowerCase()===q);
+}
+function renderFreeAgents(ti){
+  const el = document.getElementById('faList'); if(!el) return;
+  if(!poolReady){ el.innerHTML = `<p class="sub" style="margin:8px 0 0">Loading player pool…</p>`; return; }
+  const fa = freeAgents(window.faQuery), shown = fa.slice(0,40);
+  el.innerHTML = (shown.map(p=>`
+    <div class="faRow">${playerFace(p,32)}
+      <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
+      <span class="faName">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+      <span class="pmeta">${p.team||''}</span>
+      <button class="pick" onclick="addPlayer(${ti},'${p.id}')">Add</button>
+    </div>`).join('') || `<p class="sub" style="margin:8px 0 0">No available players match.</p>`)
+    + (fa.length>40 ? `<p class="sub" style="margin:8px 0 0">Showing 40 of ${fa.length} — search to narrow.</p>` : '');
+}
 function renderMyTeam(){
   const el = document.getElementById('myTeamView');
   const mi = myTeamIdx();
@@ -2892,12 +2936,13 @@ function renderMyTeam(){
     const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
     return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
       <td>${esc(p.name)}${injById(p.playerId)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
-      <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td></tr>`;
+      <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
+      <td style="text-align:right;width:58px"><button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button></td></tr>`;
   };
   order.forEach(s2=>{
     const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
     if(id){ consumed.add(id); slotRows.push(playerRow(pById[id], s2)); }
-    else slotRows.push(`<tr><td style="width:56px"><span class="postag" style="--pc:var(--line)">${s2}</span></td><td style="color:var(--chalk-dim)">Empty</td><td></td></tr>`);
+    else slotRows.push(`<tr><td style="width:56px"><span class="postag" style="--pc:var(--line)">${s2}</span></td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`);
   });
   const benchRows = roster.filter(p=>lu[p.playerId]==='BN').map(p=>playerRow(p,'BN')).join('');
   const irRows = roster.filter(p=>lu[p.playerId]==='IR').map(p=>playerRow(p,'IR')).join('');
@@ -2915,7 +2960,12 @@ function renderMyTeam(){
       ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
       <table class="plain">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
+      <div class="eyebrow" style="margin-top:16px">Add a free agent</div>
+      <p class="sub" style="margin:2px 0 8px">Every available player. Adding puts them on the bench; drop someone to make room.</p>
+      <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="window.faQuery=this.value;renderFreeAgents(${mi})" style="width:100%;max-width:340px">
+      <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>
     </div>`;
+  renderFreeAgents(mi);
 }
 function renderTeams(){
   const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
