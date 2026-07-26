@@ -399,6 +399,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .faRow{display:flex;align-items:center;gap:9px;padding:6px 4px;border-bottom:1px solid var(--line)}
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.pick:disabled{opacity:.4;cursor:not-allowed}
 .pmodal-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--chalk-dim);font-size:14px;margin-top:8px}
 .pcareer{display:flex;align-items:flex-end;gap:8px;height:190px;padding-top:12px}
 .pcareer .pbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:5px;min-width:0}
@@ -2868,6 +2869,9 @@ function renderTradeCenter(){
 const SLOT_ELIG = { QB:['QB'], RB:['RB','FLEX'], WR:['WR','FLEX'], TE:['TE','FLEX'], K:['K'], DEF:['DEF'] };
 function myTeamIdx(){ const v = store.get('ffl_my_team'); return v===null? null : +v; }
 function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti); }
+/* roster size limit = all starter slots + bench (IR is a separate reserve, not counted) */
+function rosterLimit(){ return ['QB','RB','WR','TE','FLEX','K','DEF','BN'].reduce((n,k)=>n+(+S.roster[k]||0),0); }
+function rosterCount(ti){ const lu=S.lineups[ti]||{}; return D.picks.filter(p=>p.teamIndex===ti && lu[p.playerId]!=='IR').length; }
 function ensureLineup(ti){
   const lu = S.lineups[ti] = S.lineups[ti] || {};
   const roster = teamRoster(ti);
@@ -2910,6 +2914,7 @@ function dropPlayer(ti, pid){
 }
 function addPlayer(ti, pid){
   if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
+  if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
@@ -2926,13 +2931,15 @@ function freeAgents(q){
 function renderFreeAgents(ti){
   const el = document.getElementById('faList'); if(!el) return;
   if(!poolReady){ el.innerHTML = `<p class="sub" style="margin:8px 0 0">Loading player pool…</p>`; return; }
+  const full = rosterCount(ti) >= rosterLimit();
   const fa = freeAgents(window.faQuery), shown = fa.slice(0,40);
-  el.innerHTML = (shown.map(p=>`
+  const note = full ? `<div class="notice" style="margin:0 0 8px;border-left-color:var(--danger);color:var(--danger)">Roster is full (${rosterLimit()}). Drop a player before adding.</div>` : '';
+  el.innerHTML = note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
       <span class="faName">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
       <span class="pmeta">${p.team||''}</span>
-      <button class="pick" onclick="addPlayer(${ti},'${p.id}')">Add</button>
+      <button class="pick"${full?' disabled':''} onclick="addPlayer(${ti},'${p.id}')">Add</button>
     </div>`).join('') || `<p class="sub" style="margin:8px 0 0">No available players match.</p>`)
     + (fa.length>40 ? `<p class="sub" style="margin:8px 0 0">Showing 40 of ${fa.length} — search to narrow.</p>` : '');
 }
@@ -2985,8 +2992,8 @@ function renderMyTeam(){
       ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
       <table class="plain">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
-      <div class="eyebrow" style="margin-top:16px">Add a free agent</div>
-      <p class="sub" style="margin:2px 0 8px">Every available player. Adding puts them on the bench; drop someone to make room.</p>
+      <div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
+      <p class="sub" style="margin:2px 0 8px">Every available player. Roster caps at ${rosterLimit()} (${rosterLimit()-(+S.roster.BN||0)} starters + ${+S.roster.BN||0} bench); IR is separate. Drop someone to make room.</p>
       <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="window.faQuery=this.value;renderFreeAgents(${mi})" style="width:100%;max-width:340px">
       <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>
     </div>`;
