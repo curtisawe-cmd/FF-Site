@@ -190,6 +190,9 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
   background:var(--clock-bg);border:1px solid var(--clock-bg);border-radius:var(--r-ctrl);padding:3px 12px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08),var(--sh-1);
 }
+.autodraft-toggle{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--chalk-dim);cursor:pointer;padding:6px 12px;border:1px solid var(--line-strong);border-radius:999px;background:var(--panel);transition:color .15s,border-color .15s,background .15s}
+.autodraft-toggle input{width:auto;margin:0;cursor:pointer}
+.autodraft-toggle:has(input:checked){color:#fff;background:var(--charge);border-color:var(--charge);box-shadow:0 0 14px -2px var(--charge)}
 .clock.warn{color:var(--gold)}
 .clock.crit{color:var(--charge);animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{opacity:.35}}
@@ -652,6 +655,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <select id="mockTeam" onchange="S.mock.team=+this.value;saveState()"></select>
       <label style="color:var(--chalk-dim);font-size:13px"><input type="checkbox" id="mockAuto" onchange="S.mock.auto=this.checked;saveState();maybeAutoOthers()" style="width:auto"> auto-pick others</label>
     </span>
+    <label class="autodraft-toggle" title="Auto-pick every team, best available, on a short timer"><input type="checkbox" id="autoDraftToggle" onchange="setAutoDraft(this.checked)"> <span>Auto-draft</span></label>
     <select id="clockSel" onchange="S.timerSec=+this.value;saveState()" title="Pick clock (applies from the next pick)">
       <option value="60">1 min clock</option>
       <option value="180">3 min clock</option>
@@ -1955,10 +1959,29 @@ function armClock(carry){
     paintClock();
     if(timeLeft<=0){ clearInterval(timerId); autoPick(); }
   },1000);
+  maybeAutoDraft();
   maybeAutoOthers();
   maybeAutoFlagged();
 }
+/* Auto-draft: when on, auto-pick for EVERY team (best available) on a short timer */
+let autoDraftOn = false;
+function setAutoDraft(on){
+  autoDraftOn = !!on;
+  store.set('ffl_autodraft', autoDraftOn ? '1' : '');
+  if(autoDraftOn && D.started && !D.paused && !D.finished){ clearInterval(timerId); maybeAutoDraft(); }
+}
+function maybeAutoDraft(){
+  if(!autoDraftOn || !D.started || D.paused || D.finished || !poolReady) return;
+  if(KR() && roundForPick(currentPickIndex())===0) return;   // keepers stay commissioner-entered
+  clearInterval(timerId);
+  setTimeout(()=>{
+    if(!autoDraftOn || !D.started || D.paused || D.finished) return;
+    if(KR() && roundForPick(currentPickIndex())===0) return;
+    autoPick();
+  }, 450);
+}
 function maybeAutoFlagged(){
+  if(autoDraftOn) return;   // auto-draft covers everyone
   if(draftMode!=='real' || !D.started || D.paused || D.finished || !poolReady) return;
   const idx = currentPickIndex();
   if(KR() && roundForPick(idx)===0) return; // commissioner enters keepers by hand
@@ -1973,6 +1996,7 @@ function maybeAutoFlagged(){
   }
 }
 function maybeAutoOthers(){
+  if(autoDraftOn) return;   // auto-draft covers everyone
   if(draftMode!=='mock' || !(S.mock&&S.mock.auto) || !D.started || D.paused || D.finished) return;
   if(!poolReady) return;
   const onClock = ownerForPick(currentPickIndex());
@@ -2223,6 +2247,7 @@ function renderRosterMini(){
 
 function refreshDraftUI(){
   const cs = document.getElementById('clockSel'); if(cs) cs.value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
+  const adt = document.getElementById('autoDraftToggle'); if(adt) adt.checked = autoDraftOn;
   const mt = document.getElementById('mockTeam');
   if(mt){ mt.innerHTML = S.teams.map((t,i)=>`<option value="${i}" ${i===+(S.mock&&S.mock.team||0)?'selected':''}>${esc(t.name)}</option>`).join(''); }
   const idx = currentPickIndex();
@@ -3401,6 +3426,7 @@ syncHeaderH();
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
 ensureManagers();
 if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
+autoDraftOn = store.get('ffl_autodraft')==='1';
 renderPosFilters();
 renderSettings();
 renderTrades();
