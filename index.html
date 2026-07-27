@@ -607,7 +607,6 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <nav class="tabs">
     <button data-view="home" class="active">Home</button>
     <button data-view="draft">Draft Room</button>
-    <button data-view="mock">Mock Draft</button>
     <button data-view="players">Players</button>
     <button data-view="matchups">Matchups</button>
     <button data-view="trades">Trades</button>
@@ -657,6 +656,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-draft">
   <h1 id="draftTitle">Draft Room</h1>
   <p class="sub" id="draftSub">Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.</p>
+  <div class="row" style="gap:8px;margin-bottom:14px">
+    <button class="btn" id="modeReal" onclick="setDraftMode('real')">Real Draft</button>
+    <button class="btn ghost" id="modeMock" onclick="setDraftMode('mock')">Mock Draft</button>
+  </div>
 
   <div class="clockbar">
     <div class="clock" id="clock">--</div>
@@ -1779,21 +1782,28 @@ function startLeagueSync(){
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
 }
+function syncDraftModeToggle(){
+  const r=document.getElementById('modeReal'), m=document.getElementById('modeMock');
+  if(r) r.className = 'btn' + (draftMode==='real'?'':' ghost');
+  if(m) m.className = 'btn' + (draftMode==='mock'?'':' ghost');
+}
 function setDraftMode(m){
-  if(draftMode===m) return;
-  clearInterval(timerId); timerId=null;
-  draftMode = m;
-  D = loadDraft();
-  document.getElementById('draftTitle').textContent = m==='mock' ? 'Mock Draft' : 'Draft Room';
-  document.getElementById('draftSub').textContent = m==='mock'
-    ? 'Practice runs — pick for your team and let the bots handle the rest. The real board is untouched.'
-    : 'Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.';
-  document.getElementById('mockCtrls').style.display = m==='mock' ? 'inline-flex' : 'none';
-  document.getElementById('clock').textContent='--';
-  document.getElementById('btnPause').textContent='Pause';
-  if(D.started && !D.paused && !D.finished) armClock();
-  refreshDraftUI();
-  maybeAutoOthers();
+  if(draftMode!==m){
+    clearInterval(timerId); timerId=null;
+    draftMode = m;
+    D = loadDraft();
+    document.getElementById('draftTitle').textContent = m==='mock' ? 'Mock Draft' : 'Draft Room';
+    document.getElementById('draftSub').textContent = m==='mock'
+      ? 'Practice runs — pick for your team and let the bots handle the rest. The real board is untouched.'
+      : 'Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.';
+    document.getElementById('mockCtrls').style.display = m==='mock' ? 'inline-flex' : 'none';
+    document.getElementById('clock').textContent='--';
+    document.getElementById('btnPause').textContent='Pause';
+    if(D.started && !D.paused && !D.finished) armClock();
+    refreshDraftUI();
+    maybeAutoOthers();
+  }
+  syncDraftModeToggle();
 }
 
 /* =====================================================
@@ -2541,8 +2551,7 @@ function showView(v){
   if(v==='stats') renderStats();
   if(v==='recaps') renderRecaps();
   if(v==='chat') initChat();
-  if(v==='draft'){ setDraftMode('real'); refreshDraftUI(); }
-  if(v==='mock'){ setDraftMode('mock'); refreshDraftUI(); }
+  if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
 
