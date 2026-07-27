@@ -1840,10 +1840,12 @@ let posFilter = "ALL";
 /* FLEX filter = the flex-eligible skill positions (RB/WR/TE) */
 function posMatches(pos, filter){ return filter==='ALL' || (filter==='FLEX' ? (pos==='RB'||pos==='WR'||pos==='TE') : pos===filter); }
 
-async function loadPool(){
+const POOL_REFRESH_MS = 4*60*60*1000;   /* auto-refresh live data every 4 hours */
+async function loadPool(force){
   const status = document.getElementById('poolStatus');
-  // cached?
-  try{ const c = store.get('ffl_pool_v3'); if(c){ POOL = JSON.parse(c); POOL_MAP = new Map(POOL.map(p=>[p.id,p])); poolReady=true; applyInactiveFilter(); status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh injuries</a>`; renderPool(); return; } }catch(e){}
+  if(!force){
+    try{ const c = store.get('ffl_pool_v4'); if(c){ const j = JSON.parse(c); if(j && Array.isArray(j.list)){ POOL = j.list; POOL_MAP = new Map(POOL.map(p=>[p.id,p])); poolReady=true; applyInactiveFilter(); status.innerHTML = `${POOL.length} players loaded (cached) · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh</a>`; renderPool(); if(Date.now()-(j.ts||0) > POOL_REFRESH_MS) loadPool(true); return; } } }catch(e){}
+  }
   status.textContent = "Downloading current NFL player pool…";
   try{
     const res = await fetch('https://api.sleeper.app/v1/players/nfl');
@@ -1853,10 +1855,11 @@ async function loadPool(){
     for(const id in all){
       const p = all[id];
       if(!p || !p.position || !POS_LIST.includes(p.position)) continue;
-      if(p.position!=='DEF' && (p.active===false || !p.search_rank || p.search_rank>600)) continue;
+      if(p.position==='K'){ if(p.active===false || !p.team) continue; }              /* kickers: Sleeper flat-ranks rostered ones 999, so keep by team not rank */
+      else if(p.position!=='DEF'){ if(p.active===false || !p.search_rank || p.search_rank>600) continue; }
       out.push({ id, name: p.position==='DEF' ? `${p.first_name||''} ${p.last_name||''}`.trim()+" D/ST" : (p.full_name || `${p.first_name} ${p.last_name}`),
                  pos: p.position, team: p.team || 'FA',
-                 rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.search_rank,
+                 rank: p.position==='DEF' ? 5000 + (p.team? p.team.charCodeAt(0):0) : p.position==='K' ? 900 + (+p.depth_chart_order||9) : p.search_rank,
                  exp: (p.years_exp??null),
                  inj: p.injury_status || null, injBody: p.injury_body_part || null });
     }
@@ -1864,23 +1867,20 @@ async function loadPool(){
     POOL = out;
     POOL_MAP = new Map(POOL.map(p=>[p.id,p]));
     poolReady = true;
-    try{ store.set('ffl_pool_v3', JSON.stringify(POOL)); }catch(e){}
+    try{ store.set('ffl_pool_v4', JSON.stringify({ts:Date.now(), list:POOL})); }catch(e){}
     applyInactiveFilter();
     const flagged = POOL.filter(p=>p.inj).length;
     status.innerHTML = `${POOL.length} players · ${flagged} injury-flagged · <a href="#" class="poolrefresh" onclick="refreshPool();return false">refresh</a>`;
     maybeAutoOthers(); maybeAutoFlagged();
   }catch(err){
     status.innerHTML = "Couldn't reach the player feed (needs internet). Retry when connected — the draft board still works.";
-    POOL = []; poolReady = false;
+    if(!poolReady){ POOL = []; }   /* keep the cached pool if a background refresh fails */
   }
   renderPool();
 }
-function refreshPool(){
-  try{ store.set('ffl_pool_v3',''); }catch(e){}
-  POOL=[]; poolReady=false;
-  const st=document.getElementById('poolStatus'); if(st) st.textContent='Refreshing player pool…';
-  loadPool();
-}
+function refreshPool(){ loadPool(true); }
+/* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
+setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* injury designation badge from Sleeper injury_status */
 function injBadge(inj, body){
   if(!inj) return '';
@@ -1912,7 +1912,7 @@ function timeAgo(ts){ if(!ts) return ''; const s=(Date.now()-ts)/1000; if(s<90)r
 async function loadPlayers(force){
   const st=document.getElementById('plStatus');
   if(playersLoading) return;
-  if(!force){ try{ const c=store.get('ffl_players_v2'); if(c){ const j=JSON.parse(c); PLAYERS=j.list||[]; window.plUpdated=j.ts; playersReady=true; renderPlayers(); return; } }catch(e){} }
+  if(!force){ try{ const c=store.get('ffl_players_v2'); if(c){ const j=JSON.parse(c); PLAYERS=j.list||[]; window.plUpdated=j.ts; playersReady=true; renderPlayers(); if(Date.now()-(j.ts||0) > POOL_REFRESH_MS) loadPlayers(true); return; } }catch(e){} }
   playersLoading=true; if(st) st.textContent='Downloading live player data…';
   try{
     const all=await (await fetch('https://api.sleeper.app/v1/players/nfl')).json();
