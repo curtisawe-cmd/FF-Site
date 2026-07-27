@@ -1906,20 +1906,20 @@ function draftedIds(){ return new Set(D.picks.map(p=>p.playerId)); }
    Players tab — live NFL player index (Sleeper feed)
 ===================================================== */
 let PLAYERS=[], playersReady=false, playersLoading=false;
-const PL_POS=['QB','RB','WR','TE','K'];
+const PL_POS=['QB','RB','WR','TE','K','DEF'];
 window.plQuery=''; window.plPos='ALL'; window.plTeam='ALL'; window.plSort='rank'; window.plInjOnly=false;
 function timeAgo(ts){ if(!ts) return ''; const s=(Date.now()-ts)/1000; if(s<90)return 'just now'; const m=s/60; if(m<90)return Math.round(m)+'m ago'; const h=m/60; if(h<36)return Math.round(h)+'h ago'; return Math.round(h/24)+'d ago'; }
 async function loadPlayers(force){
   const st=document.getElementById('plStatus');
   if(playersLoading) return;
-  if(!force){ try{ const c=store.get('ffl_players_v1'); if(c){ const j=JSON.parse(c); PLAYERS=j.list||[]; window.plUpdated=j.ts; playersReady=true; renderPlayers(); return; } }catch(e){} }
+  if(!force){ try{ const c=store.get('ffl_players_v2'); if(c){ const j=JSON.parse(c); PLAYERS=j.list||[]; window.plUpdated=j.ts; playersReady=true; renderPlayers(); return; } }catch(e){} }
   playersLoading=true; if(st) st.textContent='Downloading live player data…';
   try{
     const all=await (await fetch('https://api.sleeper.app/v1/players/nfl')).json();
     const out=[];
     for(const id in all){ const p=all[id];
-      if(!p || !PL_POS.includes(p.position) || !p.team) continue;   // rostered NFL players at fantasy positions
-      out.push({ id, name:p.full_name||`${p.first_name||''} ${p.last_name||''}`.trim(), pos:p.position, team:p.team,
+      if(!p || !PL_POS.includes(p.position) || !p.team) continue;   // rostered NFL players at fantasy positions (+ team defenses)
+      out.push({ id, name: p.position==='DEF' ? (`${p.first_name||''} ${p.last_name||''}`.trim()+' D/ST') : (p.full_name||`${p.first_name||''} ${p.last_name||''}`.trim()), pos:p.position, team:p.team,
         num:(p.number??null), status:p.status||'', age:(p.age??null), exp:(p.years_exp??null),
         ht:p.height||'', wt:p.weight||'', college:p.college||'',
         inj:p.injury_status||null, injBody:p.injury_body_part||null, injNote:p.injury_notes||null,
@@ -1927,7 +1927,7 @@ async function loadPlayers(force){
     }
     out.sort((a,b)=>a.rank-b.rank);
     PLAYERS=out; playersReady=true; window.plUpdated=Date.now();
-    try{ store.set('ffl_players_v1', JSON.stringify({ts:window.plUpdated, list:PLAYERS})); }catch(e){}
+    try{ store.set('ffl_players_v2', JSON.stringify({ts:window.plUpdated, list:PLAYERS})); }catch(e){}
   }catch(e){ if(st) st.innerHTML='Couldn’t reach the player feed (needs internet). <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">retry</a>'; playersLoading=false; return; }
   playersLoading=false; renderPlayers();
 }
@@ -2017,7 +2017,7 @@ function renderPlayerModal(id){
 }
 function renderPlayers(){
   const pf=document.getElementById('plPosFilters');
-  if(pf) pf.innerHTML=['ALL','QB','RB','WR','TE','FLEX','K'].map(p=>`<button class="${window.plPos===p?'on':''}" onclick="window.plPos='${p}';renderPlayers()">${p}</button>`).join('');
+  if(pf) pf.innerHTML=['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(p=>`<button class="${window.plPos===p?'on':''}" onclick="window.plPos='${p}';renderPlayers()">${p}</button>`).join('');
   const teamSel=document.getElementById('plTeam');
   if(teamSel && teamSel.options.length<=1 && PLAYERS.length){
     const teams=[...new Set(PLAYERS.map(p=>p.team))].filter(Boolean).sort();
@@ -2030,7 +2030,7 @@ function renderPlayers(){
   const taken=new Set((realDraft().picks||[]).map(p=>p.playerId));   // drafted players drop off the board
   let rows=PLAYERS.filter(p=>
     !taken.has(p.id) &&
-    (!recentReady || RECENT_IDS.has(p.id) || p.exp===0) &&
+    (!recentReady || RECENT_IDS.has(p.id) || p.exp===0 || p.pos==='DEF') &&
     posMatches(p.pos, window.plPos) &&
     (window.plTeam==='ALL'||p.team===window.plTeam) &&
     (!window.plInjOnly||p.inj) &&
@@ -2041,7 +2041,7 @@ function renderPlayers(){
                   : sort==='age' ? ((a.age||199)-(b.age||199)||a.rank-b.rank)
                   : a.rank-b.rank);
   const total=rows.length, shown=rows.slice(0,200);
-  const eligible=PLAYERS.filter(p=> !recentReady || RECENT_IDS.has(p.id) || p.exp===0);
+  const eligible=PLAYERS.filter(p=> !recentReady || RECENT_IDS.has(p.id) || p.exp===0 || p.pos==='DEF');
   const draftedN=eligible.reduce((n,p)=>n+(taken.has(p.id)?1:0),0);
   const injCount=eligible.filter(p=>p.inj && !taken.has(p.id)).length;
   const st=document.getElementById('plStatus');
