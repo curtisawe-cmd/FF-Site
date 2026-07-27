@@ -1837,6 +1837,8 @@ let POOL_MAP = new Map();  // id -> player, for injury lookups on the board/rost
 let poolReady = false;
 const POS_LIST = ["QB","RB","WR","TE","K","DEF"];
 let posFilter = "ALL";
+/* FLEX filter = the flex-eligible skill positions (RB/WR/TE) */
+function posMatches(pos, filter){ return filter==='ALL' || (filter==='FLEX' ? (pos==='RB'||pos==='WR'||pos==='TE') : pos===filter); }
 
 async function loadPool(){
   const status = document.getElementById('poolStatus');
@@ -2015,7 +2017,7 @@ function renderPlayerModal(id){
 }
 function renderPlayers(){
   const pf=document.getElementById('plPosFilters');
-  if(pf) pf.innerHTML=['ALL',...PL_POS].map(p=>`<button class="${window.plPos===p?'on':''}" onclick="window.plPos='${p}';renderPlayers()">${p}</button>`).join('');
+  if(pf) pf.innerHTML=['ALL','QB','RB','WR','TE','FLEX','K'].map(p=>`<button class="${window.plPos===p?'on':''}" onclick="window.plPos='${p}';renderPlayers()">${p}</button>`).join('');
   const teamSel=document.getElementById('plTeam');
   if(teamSel && teamSel.options.length<=1 && PLAYERS.length){
     const teams=[...new Set(PLAYERS.map(p=>p.team))].filter(Boolean).sort();
@@ -2029,7 +2031,7 @@ function renderPlayers(){
   let rows=PLAYERS.filter(p=>
     !taken.has(p.id) &&
     (!recentReady || RECENT_IDS.has(p.id) || p.exp===0) &&
-    (window.plPos==='ALL'||p.pos===window.plPos) &&
+    posMatches(p.pos, window.plPos) &&
     (window.plTeam==='ALL'||p.team===window.plTeam) &&
     (!window.plInjOnly||p.inj) &&
     (!q||p.name.toLowerCase().includes(q)||(p.team||'').toLowerCase().includes(q)||(p.college||'').toLowerCase().includes(q)));
@@ -2061,7 +2063,7 @@ function availablePlayers(){
   const taken = draftedIds();
   const q = (document.getElementById('poolSearch')?.value||'').toLowerCase().trim();
   return POOL.filter(p=>!taken.has(p.id))
-             .filter(p=>posFilter==='ALL'||p.pos===posFilter)
+             .filter(p=>posMatches(p.pos, posFilter))
              .filter(p=>!q || p.name.toLowerCase().includes(q) || (p.team||'').toLowerCase().includes(q));
 }
 
@@ -2605,7 +2607,7 @@ function renderPool(){
 
 function renderPosFilters(){
   const el = document.getElementById('posFilters');
-  const opts = ['ALL',...POS_LIST];
+  const opts = ['ALL','QB','RB','WR','TE','FLEX','K','DEF'];
   el.innerHTML = opts.map(p=>`<button class="${posFilter===p?'on':''}" onclick="posFilter='${p}';renderPosFilters();renderPool()">${p}</button>`).join('');
 }
 
