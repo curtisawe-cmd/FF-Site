@@ -2640,14 +2640,27 @@ async function chatSave(){
     else store.set('ffl_chat', JSON.stringify(trimmed));
   }catch(e){ toast("Couldn't save that message."); }
 }
+let chatStarted = false;
+function chatPath(){ return `league/${LEAGUE_ID}/chat`; }
+function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
 function initChat(){
   const nm = store.get('ffl_chat_name'); if(nm) document.getElementById('chatName').value = nm;
-  document.getElementById('chatBanner').textContent = chatShared
-    ? 'Trash talk lives here. Messages are visible to everyone who uses this league app.'
-    : 'Local shoutbox for now \u2014 messages save only on this device. League-wide chat arrives with the online backend.';
-  chatLoad();
-  clearInterval(chatTimer);
-  if(chatShared) chatTimer = setInterval(()=>{ if(document.getElementById('view-chat').classList.contains('active')) chatLoad(); }, 6000);
+  const banner = document.getElementById('chatBanner');
+  const live = fbOk() && window.fbUser;
+  if(banner) banner.textContent = live
+    ? 'Trash talk lives here \u2014 everyone signed in sees it live.'
+    : 'Sign in to join the league chat \u2014 messages are shared live once you do.';
+  if(live){
+    if(!chatStarted){ chatStarted = true;
+      window.FB.dbOn(chatPath(), (m)=>{
+        chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)).slice(-300) : [];
+        renderChat();
+      });
+    } else renderChat();
+  } else {
+    try{ const raw = store.get('ffl_chat'); chatMsgs = raw ? JSON.parse(raw) : []; }catch(e){ chatMsgs = []; }
+    renderChat();
+  }
 }
 async function sendChat(){
   const nameEl = document.getElementById('chatName'), msgEl = document.getElementById('chatMsg');
@@ -2655,11 +2668,15 @@ async function sendChat(){
   if(!n){ toast('Put a name on it \u2014 anonymous trash talk is cowardice.'); nameEl.focus(); return; }
   if(!m) return;
   store.set('ffl_chat_name', n);
-  await chatLoad();
-  chatMsgs.push({n, m, t: Date.now()});
-  msgEl.value = '';
-  await chatSave();
-  renderChat();
+  if(fbOk() && window.fbUser){
+    const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
+    try{ await window.FB.dbSet(chatPath()+'/'+key, { uid: window.fbUser.uid, n, m, t: Date.now() }); msgEl.value=''; }
+    catch(e){ toast("Couldn't send \u2014 make sure you're signed in."); }
+  } else {
+    chatMsgs.push({n, m, t: Date.now()}); msgEl.value='';
+    try{ store.set('ffl_chat', JSON.stringify(chatMsgs.slice(-300))); }catch(e){}
+    renderChat();
+  }
 }
 function renderChat(){
   const el = document.getElementById('chatList');
@@ -2669,7 +2686,7 @@ function renderChat(){
     const mine = me && x.n===me;
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
-      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(x.n)} \u00B7 ${when}</div>
+      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(x.n)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
       <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${esc(x.m)}</div>
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
