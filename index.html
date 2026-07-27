@@ -1801,6 +1801,7 @@ function startLeagueSync(){
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
 }
 function syncDraftModeToggle(){
   const r=document.getElementById('modeReal'), m=document.getElementById('modeMock');
@@ -2774,9 +2775,11 @@ function renderChat(){
   el.scrollTop = el.scrollHeight;
 }
 
-/* ---------- League Polls (commissioner posts, everyone signed in votes once) ---------- */
-let pollsMap = {};
+/* ---------- League Polls (any signed-in member posts; everyone votes once; creator/commish can close or delete) ---------- */
+let pollsMap = {}, pollVotesMap = {};
 function pollsPath(){ return `league/${LEAGUE_ID}/polls`; }
+function pollVotesPath(){ return `league/${LEAGUE_ID}/pollVotes`; }
+function canManagePoll(poll){ return isAdmin() || (poll && window.fbUser && poll.createdByUid===window.fbUser.uid); }
 function addPollOption(){
   const wrap=document.getElementById('pollOpts'); if(!wrap) return;
   const n=wrap.querySelectorAll('.poll-opt-input').length+1;
@@ -2784,31 +2787,36 @@ function addPollOption(){
   wrap.appendChild(inp); inp.focus();
 }
 function createPoll(){
-  if(!isAdmin()){ toast('Only commissioners can create polls.'); return; }
-  if(!fbOk() || !window.fbUser){ toast('Sign in to post a poll.'); return; }
+  if(!fbOk() || !window.fbUser){ toast('Sign in to post a poll.'); openAuth(); return; }
   const q=(document.getElementById('pollQ').value||'').trim();
   const opts=[...document.querySelectorAll('.poll-opt-input')].map(i=>i.value.trim()).filter(Boolean);
   if(!q){ toast('Enter a poll question.'); return; }
   if(opts.length<2){ toast('Add at least two options.'); return; }
   const id='p'+Date.now()+Math.random().toString(36).slice(2,6);
   const options={}; opts.forEach((o,i)=>options['o'+i]=o);
-  window.FB.dbSet(`${pollsPath()}/${id}`, { q, options, createdAt:Date.now(), createdBy:(window.fbUser.email||'') })
+  window.FB.dbSet(`${pollsPath()}/${id}`, { q, options, createdAt:Date.now(), createdBy:(window.fbUser.email||''), createdByUid:window.fbUser.uid })
     .then(()=>toast('Poll posted ✅')).catch(()=>toast('Could not post — try again.'));
 }
 function votePoll(pollId, optId){
   if(!window.fbUser){ toast('Sign in to vote.'); openAuth(); return; }
   if(!fbOk()) return;
-  window.FB.dbSet(`${pollsPath()}/${pollId}/votes/${window.fbUser.uid}`, optId).catch(()=>toast("Couldn't record your vote."));
+  if(pollsMap[pollId] && pollsMap[pollId].closed){ toast('Voting is closed on this poll.'); return; }
+  window.FB.dbSet(`${pollVotesPath()}/${pollId}/${window.fbUser.uid}`, optId).catch(()=>toast("Couldn't record your vote."));
+}
+function closePoll(id, closed){
+  if(!canManagePoll(pollsMap[id])) return;
+  window.FB.dbSet(`${pollsPath()}/${id}/closed`, !!closed).catch(()=>toast('Could not update — try again.'));
 }
 function deletePoll(id){
-  if(!isAdmin()) return;
+  if(!canManagePoll(pollsMap[id])) return;
   if(!confirm('Delete this poll and all its votes?')) return;
   window.FB.dbRemove(`${pollsPath()}/${id}`).catch(()=>toast('Could not delete — try again.'));
+  window.FB.dbRemove(`${pollVotesPath()}/${id}`).catch(()=>{});   /* votes cleared (commish); orphan votes are otherwise harmless/invisible */
 }
 function renderPolls(){
   const el=document.getElementById('pollsView'); if(!el) return;
-  const admin=isAdmin(), myUid=window.fbUser&&window.fbUser.uid;
-  const create = admin ? `<div class="card" style="margin-bottom:18px">
+  const myUid=window.fbUser&&window.fbUser.uid;
+  const create = myUid ? `<div class="card" style="margin-bottom:18px">
     <h2 style="margin:0 0 4px">Create a poll</h2>
     <p class="sub" style="margin:0 0 12px">Ask the league anything. Everyone signed in gets one vote.</p>
     <input type="text" id="pollQ" placeholder="What's the poll about?" style="width:100%;margin-bottom:10px">
@@ -2817,29 +2825,33 @@ function renderPolls(){
       <input type="text" class="poll-opt-input" placeholder="Option 2" style="width:100%;margin-bottom:8px">
     </div>
     <div class="row" style="gap:8px"><button class="btn ghost" onclick="addPollOption()">+ Add option</button><button class="btn" onclick="createPoll()">Post poll</button></div>
-  </div>` : (myUid ? '' : `<div class="notice" style="margin-bottom:18px">Sign in to vote in league polls.</div>`);
+  </div>` : `<div class="notice" style="margin-bottom:18px">Sign in to create polls and vote.</div>`;
   const polls = Object.keys(pollsMap||{}).map(id=>({id, ...(pollsMap[id]||{})})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const list = polls.length ? polls.map(poll=>{
-    const votes=poll.votes||{}, opts=poll.options||{};
+    const votes=(pollVotesMap&&pollVotesMap[poll.id])||{}, opts=poll.options||{};
     const counts={}; Object.values(votes).forEach(o=>counts[o]=(counts[o]||0)+1);
     const total=Object.keys(votes).length;
     const myVote=myUid?votes[myUid]:null;
+    const closed=!!poll.closed, canManage=canManagePoll(poll);
     const rows=Object.keys(opts).map(oid=>{
       const c=counts[oid]||0, pct=total?Math.round(c/total*100):0, mine=myVote===oid;
-      return `<button class="poll-opt${mine?' mine':''}" ${myUid?'':'disabled'} onclick="votePoll('${poll.id}','${oid}')">
+      return `<button class="poll-opt${mine?' mine':''}" ${(!myUid||closed)?'disabled':''} onclick="votePoll('${poll.id}','${oid}')">
         <span class="poll-fill" style="width:${pct}%"></span>
         <span class="poll-opt-label">${esc(opts[oid])}${mine?' ✓':''}</span>
         <span class="poll-opt-count">${pct}% · ${c}</span></button>`;
     }).join('');
+    const controls = canManage ? `<div class="row" style="gap:6px;flex:0 0 auto">
+      <button class="btn ghost" style="padding:3px 9px" onclick="closePoll('${poll.id}',${closed?'false':'true'})">${closed?'Reopen':'Close voting'}</button>
+      <button class="btn ghost" style="padding:3px 9px" title="Delete poll" onclick="deletePoll('${poll.id}')">✕</button></div>` : '';
     return `<div class="card" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
-        <h2 style="margin:0 0 4px">${esc(poll.q)}</h2>
-        ${admin?`<button class="btn ghost" style="padding:3px 9px;flex:0 0 auto" title="Delete poll" onclick="deletePoll('${poll.id}')">✕</button>`:''}
+        <h2 style="margin:0 0 4px">${esc(poll.q)}${closed?' <span class="divtag">Closed</span>':''}</h2>
+        ${controls}
       </div>
       <div class="poll-opts">${rows}</div>
-      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${myVote?' · you voted':(myUid?' · tap an option to vote':'')}</p>
+      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(myVote?' · you voted':(myUid?' · tap an option to vote':''))}${poll.createdBy?` · by ${esc(String(poll.createdBy).split('@')[0])}`:''}</p>
     </div>`;
-  }).join('') : `<div class="card"><p class="sub" style="margin:0">No polls yet.${admin?' Post one above.':''}</p></div>`;
+  }).join('') : `<div class="card"><p class="sub" style="margin:0">No polls yet.${myUid?' Post one above.':''}</p></div>`;
   el.innerHTML = create + list;
 }
 
