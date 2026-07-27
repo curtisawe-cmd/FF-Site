@@ -2607,7 +2607,7 @@ function renderPool(){
   const avail = availablePlayers().slice(0,150);
   list.innerHTML = avail.map(p=>`
     <div class="prow pos-${p.pos}">
-      <span class="postag">${p.pos}</span>
+      <span class="postag">${p.pos}</span>${playerFace(p,30)}
       <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
       <span class="pmeta">${p.team||''}</span>
       ${isAdmin()?`<button class="pick" onclick="makePick('${p.id}')">Draft</button>`:''}
