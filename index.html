@@ -2446,11 +2446,12 @@ function reconcileTeamData(){
   try{ Object.keys(TD).forEach(k=>{ const ti=+k; const td=TD[k]||{};
     if(Array.isArray(td.roster)) D.picks = D.picks.filter(p=>p.teamIndex!==ti).concat(td.roster.map(p=>({...p, teamIndex:ti})));
     if(td.lineup && typeof td.lineup==='object'){ S.lineups = S.lineups||{}; S.lineups[ti] = td.lineup; }
+    if(S.teams[ti] && ('logo' in td)){ if(td.logo) S.teams[ti].logo = td.logo; else delete S.teams[ti].logo; }
   }); }catch(e){}
 }
 function pushTeamData(ti){
   if(!fbOk() || !canEditTeam(ti)) return;
-  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ roster: teamRoster(ti), lineup: (S.lineups||{})[ti]||{} })).catch(()=>{}); }catch(e){}
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ roster: teamRoster(ti), lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null })).catch(()=>{}); }catch(e){}
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
 function initClaims(){
@@ -3405,7 +3406,7 @@ function renderMyTeam(){
     <div class="card" style="max-width:760px">
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,54)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
-        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(2)} PF` : 'Season not started'}</p></div></div>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(2)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''}</div>`:''}</div></div>
         ${sel}
       </div>
       <div class="eyebrow" style="margin-top:14px">Starting lineup</div>
@@ -3797,6 +3798,7 @@ function teamMarkHTML(t, size){
 }
 /* upload + downscale a team logo so localStorage stays small */
 function setTeamLogo(i, ev){
+  if(!requireTeam(i)){ if(ev&&ev.target) ev.target.value=''; return; }
   const f = ev.target.files && ev.target.files[0]; if(!f) return;
   if(!/^image\//.test(f.type)){ toast('Pick an image file (JPG or PNG).'); ev.target.value=''; return; }
   const rd = new FileReader();
@@ -3814,6 +3816,7 @@ function setTeamLogo(i, ev){
       S.teams[i].logo = data;
       try{ saveState(); }
       catch(e){ S.teams[i].logo = prev; toast('That image is too big for browser storage — try a smaller one.'); }
+      pushTeamData(i);
       renderSettings(); renderHome(); if(window.currentView==='teams') renderTeams(); if(window.currentView==='matchups') renderMatchups();
     };
     img.onerror = () => toast("Couldn't read that image.");
@@ -3822,7 +3825,8 @@ function setTeamLogo(i, ev){
   rd.readAsDataURL(f);
 }
 function clearTeamLogo(i){
-  delete S.teams[i].logo; saveState();
+  if(!requireTeam(i)) return;
+  delete S.teams[i].logo; saveState(); pushTeamData(i);
   renderSettings(); renderHome(); if(window.currentView==='teams') renderTeams(); if(window.currentView==='matchups') renderMatchups();
 }
 /* ---- master manager list: render + edit ---- */
