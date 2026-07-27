@@ -860,6 +860,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   <div class="card" style="margin-bottom:18px">
     <h2>Teams &amp; Draft Order</h2>
     <p class="sub" style="margin-bottom:10px">Order below = round 1 pick order (snakes every round). Check <b>auto</b> for any manager who can’t attend — auto teams draft themselves: starters first (QB, 2 RB, 2 WR, TE, flex, K, DEF), then best available. The commissioner still makes auto teams’ keeper-round picks.</p>
+    <div class="row" style="margin:0 0 14px;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600">Number of teams</label>
+      <select id="teamCount" onchange="setTeamCount(+this.value)">
+        <option value="4">4 teams</option><option value="6">6 teams</option><option value="8">8 teams</option>
+        <option value="10">10 teams</option><option value="12">12 teams</option><option value="14">14 teams</option>
+        <option value="16">16 teams</option><option value="18">18 teams</option><option value="20">20 teams</option>
+      </select>
+      <span class="sub" style="margin:0">Adding a team creates an open slot; removing trims from the bottom.</span>
+    </div>
     <div class="teamgrid" id="teamInputs"></div>
     <div class="row" style="margin-top:12px">
       <button class="btn ghost" onclick="randomizeOrder()">Randomize Draft Order</button>
@@ -3471,6 +3480,7 @@ function renderSettings(){
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
   // teams
+  { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
     <div class="teamcard"><span class="num">${i+1}</span>
       <label class="team-logo-up" title="${t.logo?'Change':'Upload'} team logo (JPG/PNG)">
@@ -3581,6 +3591,30 @@ function moveTeam(i,d){
   const j=i+d; if(j<0||j>=N()) return;
   [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]];
   saveState(); renderSettings(); renderTrades(); refreshDraftUI();
+}
+function setTeamCount(n){
+  if(!requireAdmin()) return;
+  n = Math.max(2, Math.min(20, Math.floor(+n||0)));
+  const cur = S.teams.length;
+  if(n===cur){ renderSettings(); return; }
+  if(D.started && (D.picks||[]).length){ toast("Can't change team count mid-draft — reset the draft first."); renderSettings(); return; }
+  if(n < cur){
+    const hasData = S.teams.slice(n).some((t,k)=>{ const ti=n+k;
+      return (t.manager) || (D.picks||[]).some(p=>p.teamIndex===ti) || (typeof claimsMap!=='undefined' && claimsMap && claimsMap[ti]!=null); });
+    if(hasData && !confirm(`Drop to ${n} teams? Managers, rosters, and claims on the ${cur-n} removed team(s) will be cleared.`)){ renderSettings(); return; }
+    S.teams = S.teams.slice(0, n);
+    for(let ti=n; ti<cur; ti++){ if(S.lineups) delete S.lineups[ti]; }
+    if(Array.isArray(D.picks)) D.picks = D.picks.filter(p=>p.teamIndex < n);
+    if(fbOk() && isAdmin()){ for(let ti=n; ti<cur; ti++){ try{ window.FB.dbRemove('claims/'+ti); window.FB.dbRemove(`league/${LEAGUE_ID}/teamData/${ti}`); }catch(e){} } }
+  } else {
+    for(let i=cur; i<n; i++){ const t={ name:'Team '+(i+1), manager:'' }; if(+S.divisions>0) t.div=1; S.teams.push(t); }
+  }
+  S.season = null;               /* schedule depends on team count — rebuild it */
+  saveDraft(); saveState();
+  try{ genSchedule(); }catch(e){}
+  renderSettings(); renderHome(); refreshDraftUI();
+  if(window.currentView==='teams') renderTeams();
+  toast(`League set to ${n} teams`);
 }
 function randomizeOrder(){
   if(D.started && D.picks.length){ toast("Can't reshuffle mid-draft — reset the draft first."); return; }
