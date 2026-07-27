@@ -618,7 +618,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button data-view="history">History</button>
     <button data-view="settings">Settings</button>
   </nav>
-  <button class="role-btn" id="roleBtn" onclick="toggleAdmin()"><span class="dot"></span>Viewer</button>
+  <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
 </header>
 
@@ -900,6 +900,80 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 </section>
 
 </main>
+<!-- ============ AUTH MODAL ============ -->
+<style>
+.auth-overlay{position:fixed;inset:0;z-index:120;display:none;align-items:flex-start;justify-content:center;padding:60px 16px;background:rgba(4,10,26,.62);backdrop-filter:blur(4px)}
+.auth-overlay.on{display:flex}
+.auth-card{width:100%;max-width:380px;background:var(--panel-grad-a,#fff);border:1px solid var(--line,#dfe4ee);border-radius:16px;padding:26px 24px 22px;box-shadow:0 24px 60px rgba(0,0,0,.35);position:relative}
+:root[data-theme=dark] .auth-card{background:#0b1a37;border-color:#1b2c52}
+.auth-x{position:absolute;top:12px;right:12px;background:none;border:none;font-size:18px;color:var(--muted,#8a94a6);cursor:pointer;line-height:1}
+.auth-title{font-family:Anton,sans-serif;font-size:26px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink,#0b1526)}
+.auth-sub{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--charge,#c60c30);font-weight:700;margin:2px 0 18px}
+.auth-google{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:11px;border:1px solid var(--line,#dfe4ee);border-radius:10px;background:#fff;color:#1a1a1a;font-weight:700;font-size:14px;cursor:pointer}
+.auth-google:hover{background:#f4f6fb}
+.auth-g-ic{width:17px;height:17px;flex:0 0 17px}
+.auth-or{text-align:center;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted,#9aa3b4);margin:14px 0;position:relative}
+.auth-or:before,.auth-or:after{content:"";position:absolute;top:50%;width:38%;height:1px;background:var(--line,#e2e6ef)}
+.auth-or:before{left:0}.auth-or:after{right:0}
+.auth-card input{width:100%;padding:11px 12px;margin-bottom:10px;border:1px solid var(--line,#dfe4ee);border-radius:10px;background:var(--field,#f7f9fc);color:var(--ink,#0b1526);font-size:15px}
+:root[data-theme=dark] .auth-card input{background:#08152e;border-color:#22345c;color:#eaf0fb}
+.auth-primary{width:100%;padding:12px;border:none;border-radius:10px;background:var(--turf,#00338d);color:#fff;font-family:Anton,sans-serif;font-size:17px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;margin-top:4px}
+.auth-primary:hover{filter:brightness(1.08)}
+.auth-primary.danger{background:var(--charge,#c60c30)}
+.auth-err{color:var(--charge,#c60c30);font-size:13px;min-height:18px;margin:2px 0 6px;font-weight:600}
+.auth-toggle{text-align:center;font-size:13px;color:var(--muted,#8a94a6);margin-top:14px}
+.auth-toggle a{color:var(--turf,#3d7bff);font-weight:700;text-decoration:none}
+.auth-me{font-size:16px;font-weight:800;color:var(--ink,#0b1526);word-break:break-all}
+.auth-role{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted,#8a94a6);margin:4px 0 18px}
+.auth-role b{color:var(--charge,#c60c30)}
+.role-btn .dot{background:#9aa3b4}
+:root[data-role=admin] #authBtn .dot{background:#2ec27e}
+:root[data-role=user] #authBtn .dot{background:#3d7bff}
+</style>
+<div class="auth-overlay" id="authOverlay" onclick="if(event.target===this)closeAuth()">
+  <div class="auth-card">
+    <button class="auth-x" onclick="closeAuth()" aria-label="Close">&#10005;</button>
+    <div id="authFormWrap">
+      <div class="auth-title" id="authTitle">Sign in</div>
+      <div class="auth-sub">Bitch Boy League</div>
+      <button class="auth-google" onclick="doGoogle()">
+        <svg class="auth-g-ic" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-or">or</div>
+      <input id="authEmail" type="email" placeholder="Email" autocomplete="email">
+      <input id="authPass" type="password" placeholder="Password" autocomplete="current-password">
+      <div class="auth-err" id="authErr"></div>
+      <button class="auth-primary" id="authSubmit" onclick="authSubmit()">Sign in</button>
+      <div class="auth-toggle"><span id="authToggleTxt">New to the league?</span> <a href="#" id="authToggleLink" onclick="toggleAuthMode();return false">Create an account</a></div>
+    </div>
+    <div id="authAccount" style="display:none">
+      <div class="auth-title">Your account</div>
+      <div class="auth-sub">Bitch Boy League</div>
+      <div class="auth-me" id="authMe"></div>
+      <div class="auth-role" id="authRoleLine"></div>
+      <button class="auth-primary" id="claimBtn" style="display:none;margin-bottom:10px" onclick="closeAuth();openClaim()">Change my team</button>
+      <button class="auth-primary danger" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+</div>
+<!-- ============ CLAIM YOUR TEAM MODAL ============ -->
+<style>
+.auth-card select{width:100%;padding:11px 12px;margin:10px 0;border:1px solid var(--line,#dfe4ee);border-radius:10px;background:var(--field,#f7f9fc);color:var(--ink,#0b1526);font-size:15px}
+:root[data-theme=dark] .auth-card select{background:#08152e;border-color:#22345c;color:#eaf0fb}
+.auth-note{font-size:13px;color:var(--muted,#8a94a6);line-height:1.45;margin:6px 0 4px}
+</style>
+<div class="auth-overlay" id="claimOverlay" onclick="if(event.target===this && window.myClaim) closeClaim()">
+  <div class="auth-card">
+    <div class="auth-title">Claim your team</div>
+    <div class="auth-sub">Bitch Boy League</div>
+    <div class="auth-me" id="claimWho"></div>
+    <div class="auth-note">Pick the team you manage. It locks to your account so nobody else can grab it — the commissioner can reassign if needed.</div>
+    <select id="claimSelect"></select>
+    <div class="auth-err" id="claimErr"></div>
+    <button class="auth-primary" onclick="submitClaim()">Claim this team</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script>
 /* =====================================================
@@ -1621,18 +1695,70 @@ function loadState(){
     return {...structuredClone(DEFAULTS), ...s, teams, pickTrades, roster:{...DEFAULTS.roster,...(s.roster||{})}, scoring:{...DEFAULTS.scoring,...(s.scoring||{})}, history:h}; } }catch(e){}
   return structuredClone(DEFAULTS);
 }
-function saveState(){ store.set('ffl_state', JSON.stringify(S)); }
+function saveState(){ store.set('ffl_state', JSON.stringify(S)); pushSettings(); }
 
 /* Draft state kept separate so settings changes don't clobber a draft.
    Two boards: the real draft and a mock sandbox. */
 let draftMode = 'real';
 function draftKey(){ return draftMode==='mock' ? 'ffl_mock' : 'ffl_draft'; }
 function loadDraft(){
-  try{ const raw = store.get(draftKey()); if(raw) return JSON.parse(raw); }catch(e){}
+  try{ const raw = store.get(draftKey()); if(raw){ const d=JSON.parse(raw)||{}; if(!Array.isArray(d.picks)) d.picks=[]; return d; } }catch(e){}
   return { started:false, paused:false, picks:[], finished:false };
 }
 let D = loadDraft();
-function saveDraft(){ store.set(draftKey(), JSON.stringify(D)); }
+function saveDraft(){ store.set(draftKey(), JSON.stringify(D)); pushDraftRemote(); }
+
+/* =====================================================
+   Live league sync (Firebase Realtime Database)
+   Commissioner is the authority for shared settings + the real draft;
+   everyone signed in gets a live mirror. Per-team writes come in Stage 2.
+===================================================== */
+const LEAGUE_ID = 'main';
+let applyingRemote = false, syncStarted = false, _pushST = null, _pushDT = null;
+function fbOk(){ return !!(window.FB && window.FB.dbSet); }
+/* stored as JSON strings so arbitrary setting keys (e.g. "Fractional / negative points")
+   don't collide with Realtime Database's key charset restrictions */
+function pushSettings(){
+  if(applyingRemote || !fbOk() || !isAdmin()) return;
+  clearTimeout(_pushST);
+  _pushST = setTimeout(()=>{ try{ window.FB.dbSet(`league/${LEAGUE_ID}/settings`, JSON.stringify(S)).catch(()=>{}); }catch(e){} }, 300);
+}
+function pushDraftRemote(){
+  if(applyingRemote || !fbOk() || !isAdmin() || draftMode!=='real') return;
+  clearTimeout(_pushDT);
+  _pushDT = setTimeout(()=>{ try{ window.FB.dbSet(`league/${LEAGUE_ID}/draft`, JSON.stringify(D)).catch(()=>{}); }catch(e){} }, 300);
+}
+function reRenderLive(){
+  try{
+    const v = window.currentView || 'home';
+    if(v==='draft' || v==='mock') refreshDraftUI(); else showView(v);
+    renderHome();
+  }catch(e){}
+}
+function startLeagueSync(){
+  if(syncStarted || !fbOk()) return; syncStarted = true;
+  window.FB.dbOn(`league/${LEAGUE_ID}/settings`, (remote)=>{
+    if(remote==null){ if(isAdmin()){ try{ window.FB.dbSet(`league/${LEAGUE_ID}/settings`, JSON.stringify(S)); }catch(e){} } return; }
+    applyingRemote = true;
+    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_state', raw); S = loadState(); reconcileTeamData(); reRenderLive(); }catch(e){}
+    applyingRemote = false;
+  });
+  window.FB.dbOn(`league/${LEAGUE_ID}/draft`, (remote)=>{
+    if(remote==null || draftMode!=='real') return;
+    applyingRemote = true;
+    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileTeamData(); reRenderLive(); }catch(e){}
+    applyingRemote = false;
+  });
+  window.FB.dbOn(`league/${LEAGUE_ID}/teamData`, (m)=>{
+    applyingRemote = true;
+    try{
+      TD = {};
+      if(m && typeof m==='object') Object.keys(m).forEach(k=>{ try{ TD[k]=(typeof m[k]==='string')?JSON.parse(m[k]):m[k]; }catch(e){} });
+      reconcileTeamData(); reRenderLive();
+    }catch(e){}
+    applyingRemote = false;
+  });
+}
 function setDraftMode(m){
   if(draftMode===m) return;
   clearInterval(timerId); timerId=null;
@@ -2189,6 +2315,165 @@ function toggleAdmin(){
   else toast('Wrong passcode.');
 }
 function rerenderRole(){ refreshDraftUI(); const v=window.currentView||'home'; showView(v); }
+
+/* ---------- Firebase auth (real registration + login) ---------- */
+const COMMISH_EMAIL = 'curtisawe@gmail.com';   /* commissioner = admin; everyone else = user */
+let authMode = 'login';
+function fbReady(){ return !!(window.FB && window.FB.auth); }
+function openAuth(){
+  const ov=document.getElementById('authOverlay'); if(!ov) return;
+  const u=window.fbUser;
+  document.getElementById('authFormWrap').style.display = u ? 'none':'block';
+  document.getElementById('authAccount').style.display = u ? 'block':'none';
+  if(u){
+    document.getElementById('authMe').textContent = u.email || u.displayName || 'Signed in';
+    updateClaimBadge();
+  } else { setAuthErr(''); }
+  ov.classList.add('on');
+}
+function closeAuth(){ const ov=document.getElementById('authOverlay'); if(ov) ov.classList.remove('on'); }
+function setAuthErr(m){ const e=document.getElementById('authErr'); if(e) e.textContent=m||''; }
+function toggleAuthMode(){
+  authMode = authMode==='login' ? 'signup':'login';
+  document.getElementById('authTitle').textContent = authMode==='login'?'Sign in':'Create account';
+  document.getElementById('authSubmit').textContent = authMode==='login'?'Sign in':'Sign up';
+  document.getElementById('authToggleTxt').textContent = authMode==='login'?'New to the league?':'Already have an account?';
+  document.getElementById('authToggleLink').textContent = authMode==='login'?'Create an account':'Sign in instead';
+  document.getElementById('authPass').setAttribute('autocomplete', authMode==='login'?'current-password':'new-password');
+  setAuthErr('');
+}
+const AUTH_ERRS = {
+  'auth/invalid-email':'That email address looks invalid.',
+  'auth/missing-password':'Enter a password.',
+  'auth/weak-password':'Password must be at least 6 characters.',
+  'auth/email-already-in-use':'That email is already registered — try signing in.',
+  'auth/invalid-credential':'Wrong email or password.',
+  'auth/wrong-password':'Wrong email or password.',
+  'auth/user-not-found':'No account with that email — create one.',
+  'auth/too-many-requests':'Too many attempts. Wait a bit and try again.',
+  'auth/operation-not-allowed':'This sign-in method is not enabled in Firebase yet.',
+  'auth/popup-closed-by-user':'Google sign-in was cancelled.',
+  'auth/unauthorized-domain':'This site is not authorized in Firebase Auth settings.',
+  'auth/network-request-failed':'Network error — check your connection.'
+};
+function authErr(err){ setAuthErr(AUTH_ERRS[err && err.code] || (err && err.message) || 'Something went wrong.'); }
+async function authSubmit(){
+  if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
+  const email=(document.getElementById('authEmail').value||'').trim();
+  const pass=document.getElementById('authPass').value||'';
+  if(!email){ setAuthErr('Enter your email.'); return; }
+  if(!pass){ setAuthErr('Enter a password.'); return; }
+  const btn=document.getElementById('authSubmit'); btn.disabled=true; setAuthErr('');
+  try{
+    if(authMode==='signup') await window.FB.signup(email,pass);
+    else await window.FB.login(email,pass);
+    closeAuth();
+  }catch(err){ authErr(err); }
+  finally{ btn.disabled=false; }
+}
+async function doGoogle(){
+  if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
+  try{ await window.FB.google(); closeAuth(); }
+  catch(err){ authErr(err); }
+}
+async function doLogout(){ if(fbReady()) try{ await window.FB.logout(); }catch(e){} closeAuth(); }
+/* called by the Firebase module whenever auth state changes */
+function onFbUser(user){
+  window.fbUser = user || null;
+  const btn=document.getElementById('authBtn');
+  if(user){
+    const admin=(user.email||'').toLowerCase()===COMMISH_EMAIL;
+    store.set('ffl_role', admin?'admin':'user');
+    const label = admin ? 'Commish' : (user.displayName || (user.email||'').split('@')[0] || 'Manager');
+    if(btn) btn.innerHTML = '<span class="dot"></span>'+label;
+  } else {
+    store.set('ffl_role','user');   /* logged out = viewer / read-only */
+    if(btn) btn.innerHTML = '<span class="dot"></span>Sign in';
+  }
+  try{ applyRole(); rerenderRole(); }catch(e){}
+  if(user){ startLeagueSync(); initClaims(); }
+  else { window.myClaim = null; }
+}
+window.onFbUser = onFbUser;
+
+/* ---------- Stage B: claim your team (bind an account to one team) ---------- */
+window.myClaim = null;          /* {email,name,teamIndex,role,claimedAt} */
+let claimsMap = {}, claimsStarted = false;
+function myUid(){ return window.fbUser && window.fbUser.uid; }
+function myTeamIndex(){ return (window.myClaim && Number.isInteger(window.myClaim.teamIndex)) ? window.myClaim.teamIndex : null; }
+function canEditTeam(ti){ return isAdmin() || myTeamIndex()===ti; }
+function requireTeam(ti){ if(canEditTeam(ti)) return true; toast("You can only manage your own team."); return false; }
+/* ---- per-team overlay: each team's roster+lineup live at league/main/teamData/{ti}.
+        managers write only their own; reconcile() folds overlays back into D.picks / S.lineups
+        so every existing renderer keeps working unchanged. ---- */
+let TD = {};
+function teamDataFor(ti){ return TD[ti]||{}; }
+function reconcileTeamData(){
+  try{ Object.keys(TD).forEach(k=>{ const ti=+k; const td=TD[k]||{};
+    if(Array.isArray(td.roster)) D.picks = D.picks.filter(p=>p.teamIndex!==ti).concat(td.roster.map(p=>({...p, teamIndex:ti})));
+    if(td.lineup && typeof td.lineup==='object'){ S.lineups = S.lineups||{}; S.lineups[ti] = td.lineup; }
+  }); }catch(e){}
+}
+function pushTeamData(ti){
+  if(!fbOk() || !canEditTeam(ti)) return;
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ roster: teamRoster(ti), lineup: (S.lineups||{})[ti]||{} })).catch(()=>{}); }catch(e){}
+}
+function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
+function initClaims(){
+  if(!fbOk() || !window.fbUser) return;
+  if(!claimsStarted){ claimsStarted = true;
+    window.FB.dbOn('claims', (m)=>{ claimsMap = m||{};
+      if(window.currentView==='teams') renderTeams();
+      if(document.getElementById('claimOverlay').classList.contains('on')) openClaim();
+      updateClaimBadge();
+    });
+  }
+  window.FB.dbGet('managers/'+myUid()).then(rec=>{
+    window.myClaim = rec || null;
+    updateClaimBadge();
+    if(!isAdmin() && (!rec || !Number.isInteger(rec.teamIndex))) openClaim();  /* first-time manager: prompt */
+  }).catch(()=>{});
+}
+function openClaim(){
+  const ov=document.getElementById('claimOverlay'); if(!ov) return;
+  document.getElementById('claimWho').textContent = (window.fbUser && window.fbUser.email) || '';
+  const sel=document.getElementById('claimSelect'); const mine=myTeamIndex();
+  sel.innerHTML = '<option value="">— pick your team —</option>' + (S.teams||[]).map((t,i)=>{
+    const takenBy = claimsMap[i]; const taken = takenBy && takenBy!==myUid();
+    return `<option value="${i}"${i===mine?' selected':''}${taken?' disabled':''}>${esc(t.name||('Team '+(i+1)))}${taken?' — taken':''}</option>`;
+  }).join('');
+  setClaimErr(''); ov.classList.add('on');
+}
+function closeClaim(){ const ov=document.getElementById('claimOverlay'); if(ov) ov.classList.remove('on'); }
+function setClaimErr(m){ const e=document.getElementById('claimErr'); if(e) e.textContent=m||''; }
+async function submitClaim(){
+  if(!fbOk() || !window.fbUser){ setClaimErr('Not signed in.'); return; }
+  const ti=parseInt(document.getElementById('claimSelect').value,10);
+  if(!(ti>=0)){ setClaimErr('Pick a team first.'); return; }
+  try{
+    const cur = await window.FB.dbGet('claims/'+ti);
+    if(cur && cur!==myUid()){ setClaimErr('Someone just grabbed that team — choose another.'); openClaim(); return; }
+    const prev = myTeamIndex();
+    if(Number.isInteger(prev) && prev!==ti) await window.FB.dbRemove('claims/'+prev);
+    const rec = { email: window.fbUser.email||'', name:(window.fbUser.displayName || (window.fbUser.email||'').split('@')[0] || 'Manager'),
+                  teamIndex: ti, role:'manager', claimedAt: Date.now() };
+    await window.FB.dbSet('managers/'+myUid(), rec);
+    await window.FB.dbSet('claims/'+ti, myUid());
+    window.myClaim = rec; closeClaim(); updateClaimBadge();
+    toast('You claimed '+teamName(ti)+' ✅');
+    if(window.currentView==='teams') renderTeams();
+  }catch(e){ setClaimErr('Could not claim right now — try again.'); }
+}
+function updateClaimBadge(){
+  const btn=document.getElementById('claimBtn');
+  if(btn) btn.style.display = (window.fbUser && !isAdmin()) ? 'block' : 'none';
+  const line=document.getElementById('authRoleLine');
+  if(line && window.fbUser){
+    if(isAdmin()){ line.innerHTML='Role: <b>Commissioner</b>'; }
+    else { const ti=myTeamIndex();
+      line.innerHTML='Role: <b>Manager</b> · '+(Number.isInteger(ti)?esc(teamName(ti)):'<span style="color:var(--muted)">no team yet</span>'); }
+  }
+}
 function showView(v){
   if(v==='settings' && !isAdmin()){ toast("Settings are commissioner-only."); v='home'; }
   window.currentView = v;
@@ -2909,7 +3194,11 @@ function renderTradeCenter(){
 }
 
 const SLOT_ELIG = { QB:['QB'], RB:['RB','FLEX'], WR:['WR','FLEX'], TE:['TE','FLEX'], K:['K'], DEF:['DEF'] };
-function myTeamIdx(){ const v = store.get('ffl_my_team'); return v===null? null : +v; }
+function myTeamIdx(){
+  const claimed = (typeof myTeamIndex==='function') ? myTeamIndex() : null;
+  if(Number.isInteger(claimed)) return claimed;   /* logged-in manager: locked to their claimed team */
+  const v = store.get('ffl_my_team'); return v===null? null : +v;
+}
 function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti); }
 /* roster size limit = all starter slots + bench (IR is a separate reserve, not counted) */
 function rosterLimit(){ return ['QB','RB','WR','TE','FLEX','K','DEF','BN'].reduce((n,k)=>n+(+S.roster[k]||0),0); }
@@ -2930,6 +3219,7 @@ function ensureLineup(ti){
   return lu;
 }
 function setSlot(ti, pid, slot){
+  if(!requireTeam(ti)){ renderTeams(); return; }
   const lu = ensureLineup(ti);
   if(slot!=='BN' && slot!=='IR'){
     const cap = +S.roster[slot]||0;
@@ -2940,35 +3230,35 @@ function setSlot(ti, pid, slot){
     const used = Object.entries(lu).filter(([id,s2])=>s2==='IR' && id!==pid).length;
     if(used >= (+S.roster.IR||0)){ toast('IR slot is full.'); renderTeams(); return; }
   }
-  lu[pid]=slot; saveState(); renderTeams();
+  lu[pid]=slot; saveState(); pushTeamData(ti); renderTeams();
 }
 /* ---- add / drop free agents ---- */
 window.faQuery='';
 function dropPlayer(ti, pid){
-  if(!requireAdmin()) return;
+  if(!requireTeam(ti)) return;
   const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid);
   if(!p) return;
   if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
   D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===pid));
   if(S.lineups[ti]) delete S.lineups[ti][pid];
-  saveDraft(); saveState();
+  saveDraft(); saveState(); pushTeamData(ti);
   renderTeams(); refreshDraftUI();
   toast(`Dropped ${p.name}`);
 }
 function addPlayer(ti, pid){
-  if(!requireAdmin()) return;
+  if(!requireTeam(ti)) return;
   if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
   if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
-  saveDraft();
+  saveDraft(); pushTeamData(ti);
   renderTeams(); refreshDraftUI();
   toast(`Added ${p.name}`);
 }
 /* add-with-drop: if there's room just add; if full, force a drop to make room (roster stays at the limit) */
 function addWithDrop(ti, pid){
-  if(!requireAdmin()) return;
+  if(!requireTeam(ti)) return;
   if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
@@ -2991,12 +3281,12 @@ function addWithDrop(ti, pid){
   </div>`;
 }
 function swapPlayer(ti, dropPid, addPid){
-  if(!requireAdmin()) return;
+  if(!requireTeam(ti)) return;
   D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===dropPid));
   if(S.lineups[ti]) delete S.lineups[ti][dropPid];
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
   if(p) D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
-  saveDraft(); saveState();
+  saveDraft(); saveState(); pushTeamData(ti);
   const ov=document.getElementById('swapModal'); if(ov) ov.style.display='none';
   renderTeams(); refreshDraftUI();
   toast(`Added ${p?p.name:'player'} — a spot was dropped`);
@@ -3025,7 +3315,8 @@ function renderFreeAgents(ti){
 function renderMyTeam(){
   const el = document.getElementById('myTeamView');
   const mi = myTeamIdx();
-  const sel = `<select onchange="store.set('ffl_my_team', this.value);renderTeams()">
+  const locked = Number.isInteger((typeof myTeamIndex==='function')?myTeamIndex():null);  /* claimed manager can't switch teams */
+  const sel = locked ? '' : `<select onchange="store.set('ffl_my_team', this.value);renderTeams()">
     <option value="" ${mi===null?'selected':''}>\u2014 pick your team \u2014</option>
     ${S.teams.map((t,i)=>`<option value="${i}" ${i===mi?'selected':''}>${esc(t.name)}${t.manager?` (${esc(t.manager)})`:''}</option>`).join('')}</select>`;
   if(mi===null || !S.teams[mi]){
@@ -3048,7 +3339,7 @@ function renderMyTeam(){
     return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
       <td>${esc(p.name)}${injById(p.playerId)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
       <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
-      <td style="text-align:right;width:58px">${isAdmin()?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
+      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
     const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
@@ -3071,12 +3362,12 @@ function renderMyTeam(){
       ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
       <table class="plain">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
-      ${isAdmin()?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
+      ${canEditTeam(mi)?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
       <p class="sub" style="margin:2px 0 8px">Every available player. Roster caps at ${rosterLimit()} (${rosterLimit()-(+S.roster.BN||0)} starters + ${+S.roster.BN||0} bench); IR is separate. Drop someone to make room.</p>
       <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="window.faQuery=this.value;renderFreeAgents(${mi})" style="width:100%;max-width:340px">
       <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>`:''}
     </div>`;
-  if(isAdmin()) renderFreeAgents(mi);
+  if(canEditTeam(mi)) renderFreeAgents(mi);
 }
 function renderTeams(){
   const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
@@ -3523,6 +3814,53 @@ loadPool();
 loadRecentIds();
 if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('afterend',
   `<div class="notice">Heads up: this browser is blocking saved data, so changes only last while the page is open. Use Export League File to keep a copy.</div>`); }
+</script>
+
+<!-- ============ Firebase (real auth + shared data backend) ============ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence }
+         from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp }
+         from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBZ095267XYZQZxDieqjUcpJ4jUe2kEDo0",
+  authDomain: "bitch-boy-league.firebaseapp.com",
+  projectId: "bitch-boy-league",
+  storageBucket: "bitch-boy-league.firebasestorage.app",
+  messagingSenderId: "832339342052",
+  appId: "1:832339342052:web:18ab91c672d6467e6032f1",
+  measurementId: "G-CVY8TNXKXG"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getDatabase(app);
+const gprov = new GoogleAuthProvider();
+try { await setPersistence(auth, browserLocalPersistence); } catch(e){}
+
+window.FB = {
+  app, auth, db,
+  signup: (e,p) => createUserWithEmailAndPassword(auth, e, p),
+  login:  (e,p) => signInWithEmailAndPassword(auth, e, p),
+  google: ()    => signInWithPopup(auth, gprov),
+  logout: ()    => signOut(auth),
+  /* Realtime Database helpers (path-based) */
+  dbGet:    (p)    => get(ref(db, p)).then(s => s.val()),
+  dbSet:    (p, v) => set(ref(db, p), v),
+  dbUpdate: (p, v) => update(ref(db, p), v),
+  dbRemove: (p)    => remove(ref(db, p)),
+  dbOn:     (p, cb) => onValue(ref(db, p), s => cb(s.val())),   /* live subscribe; returns unsubscribe */
+  now: serverTimestamp
+};
+
+onAuthStateChanged(auth, (user) => {
+  window.fbUser = user || null;
+  if (typeof window.onFbUser === 'function') window.onFbUser(user);
+});
+console.log('[BBL] Firebase connected:', firebaseConfig.projectId);
 </script>
 </body>
 </html>
