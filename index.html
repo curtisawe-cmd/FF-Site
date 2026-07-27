@@ -835,6 +835,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     </div>
   </div>
 
+  <div class="card" id="commishCard" style="margin-bottom:18px;display:none">
+    <div class="row" style="align-items:baseline">
+      <h2 style="margin:0">Commissioners</h2>
+      <span id="commishHint" class="eyebrow" style="margin:0"></span>
+    </div>
+    <p class="sub" style="margin:6px 0 14px">Commissioners can edit league settings, run the draft, and manage every team. Only the league owner can add or remove commissioners.</p>
+    <div id="commishList"></div>
+  </div>
+
   <div class="card managers-card" style="margin-bottom:18px">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">League Managers</h2>
@@ -1758,6 +1767,8 @@ function startLeagueSync(){
     }catch(e){}
     applyingRemote = false;
   });
+  window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
+  window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
 }
 function setDraftMode(m){
   if(draftMode===m) return;
@@ -2381,20 +2392,34 @@ async function doLogout(){ if(fbReady()) try{ await window.FB.logout(); }catch(e
 function onFbUser(user){
   window.fbUser = user || null;
   const btn=document.getElementById('authBtn');
-  if(user){
-    const admin=(user.email||'').toLowerCase()===COMMISH_EMAIL;
-    store.set('ffl_role', admin?'admin':'user');
-    const label = admin ? 'Commish' : (user.displayName || (user.email||'').split('@')[0] || 'Manager');
-    if(btn) btn.innerHTML = '<span class="dot"></span>'+label;
-  } else {
+  if(user){ refreshRoleFromAuth(); }
+  else {
     store.set('ffl_role','user');   /* logged out = viewer / read-only */
     if(btn) btn.innerHTML = '<span class="dot"></span>Sign in';
+    try{ applyRole(); rerenderRole(); }catch(e){}
   }
-  try{ applyRole(); rerenderRole(); }catch(e){}
   if(user){ startLeagueSync(); initClaims(); }
   else { window.myClaim = null; }
 }
 window.onFbUser = onFbUser;
+
+/* ---------- commissioners: owner + a DB-backed admin list (league/admins) ---------- */
+let adminsMap = {}, managersMap = {};
+function isOwner(){ return !!(window.fbUser && (window.fbUser.email||'').toLowerCase()===COMMISH_EMAIL); }
+function computeAdmin(){ if(!window.fbUser) return false; if(isOwner()) return true; return adminsMap[window.fbUser.uid]===true; }
+function refreshRoleFromAuth(){
+  const admin = computeAdmin();
+  store.set('ffl_role', admin?'admin':'user');
+  const btn=document.getElementById('authBtn');
+  if(btn && window.fbUser){ const label = admin ? 'Commish' : (window.fbUser.displayName || (window.fbUser.email||'').split('@')[0] || 'Manager'); btn.innerHTML='<span class="dot"></span>'+label; }
+  try{ applyRole(); rerenderRole(); updateClaimBadge(); }catch(e){}
+}
+async function setCommish(uid, on){
+  if(!isOwner()){ toast('Only the league owner can change commissioners.'); return; }
+  if(!fbOk()) return;
+  try{ if(on) await window.FB.dbSet('admins/'+uid, true); else await window.FB.dbRemove('admins/'+uid); toast(on?'Added a commissioner ✅':'Removed commissioner'); }
+  catch(e){ toast('Could not update — try again.'); }
+}
 
 /* ---------- Stage B: claim your team (bind an account to one team) ---------- */
 window.myClaim = null;          /* {email,name,teamIndex,role,claimedAt} */
@@ -2428,6 +2453,8 @@ function initClaims(){
       updateClaimBadge();
     });
   }
+  /* upsert a lightweight registry record so every signed-in account is listed (promotable) */
+  try{ window.FB.dbUpdate('managers/'+myUid(), { email: window.fbUser.email||'', name:(window.fbUser.displayName||(window.fbUser.email||'').split('@')[0]||'Manager') }).catch(()=>{}); }catch(e){}
   window.FB.dbGet('managers/'+myUid()).then(rec=>{
     window.myClaim = rec || null;
     updateClaimBadge();
@@ -3406,6 +3433,30 @@ function renderTeams(){
 /* =====================================================
    Settings
 ===================================================== */
+function renderCommishCard(){
+  const card=document.getElementById('commishCard'); if(!card) return;
+  card.style.display = isAdmin() ? 'block' : 'none';   /* settings is admin-only anyway */
+  if(!isAdmin()) return;
+  const hint=document.getElementById('commishHint'); if(hint) hint.textContent = isOwner()? 'You are the league owner' : 'Owner-managed';
+  const list=document.getElementById('commishList'); if(!list) return;
+  const owner=isOwner();
+  const accounts = Object.keys(managersMap||{}).map(uid=>({uid, ...(managersMap[uid]||{})}))
+    .sort((a,b)=>String(a.name||a.email||'').localeCompare(String(b.name||b.email||'')));
+  if(!accounts.length){ list.innerHTML = `<p class="sub" style="margin:0">No one has signed in yet. Managers show up here once they log in.</p>`; return; }
+  list.innerHTML = accounts.map(a=>{
+    const ownerRow = String(a.email||'').toLowerCase()===COMMISH_EMAIL;
+    const commish = ownerRow || adminsMap[a.uid]===true;
+    const teamTxt = Number.isInteger(a.teamIndex)? esc(teamName(a.teamIndex)) : '<span style="color:var(--chalk-dim)">no team yet</span>';
+    const badge = ownerRow ? '<span class="divtag">Owner</span>' : (commish?'<span class="divtag">Commish</span>':'');
+    const btn = (owner && !ownerRow)
+      ? `<button class="btn ${commish?'danger':''}" style="padding:3px 11px;font-size:13px" onclick="setCommish('${a.uid}', ${commish?'false':'true'})">${commish?'Remove commish':'Make commish'}</button>`
+      : '';
+    return `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="min-width:0"><b>${esc(a.name||a.email||'Manager')}</b> ${badge}
+        <div class="sub" style="margin:2px 0 0">${esc(a.email||'')} · ${teamTxt}</div></div>
+      ${btn}</div>`;
+  }).join('');
+}
 function renderSettings(){
   document.getElementById('setLeagueName').value = S.leagueName;
   document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
@@ -3413,6 +3464,7 @@ function renderSettings(){
   document.getElementById('setKeeper').checked = !!KR();
   document.getElementById('setMaxPicks').value = maxPicks() || '';
   document.getElementById('setDivisions').value = String(+S.divisions||0);
+  renderCommishCard();
   // master manager roster
   renderManagers();
   renderPrizes();
