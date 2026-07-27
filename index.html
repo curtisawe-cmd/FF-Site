@@ -3704,14 +3704,16 @@ function allManagerNames(){
 function money(n){ return '$' + Math.round(+n||0).toLocaleString('en-US'); }
 function renderPrizes(){
   const el = document.getElementById('prizesView'); if(!el) return;
-  const P = S.prizes = Object.assign({buyIn:250, first:0, second:0, third:0}, S.prizes||{});
+  const P = S.prizes = Object.assign({buyIn:250, first:0, second:0, third:0, extra:[]}, S.prizes||{});
+  if(!Array.isArray(P.extra)) P.extra = [];
   const n = N();
   const buyIn = +P.buyIn||0;
   const pot = buyIn * n;
   const divs = +S.divisions||0;
   const divRefund = divs * buyIn;
   const podium = (+P.first||0)+(+P.second||0)+(+P.third||0);
-  const allocated = podium + divRefund;
+  const extrasTotal = P.extra.reduce((s,e)=>s+(+((e&&e.amount))||0),0);
+  const allocated = podium + divRefund + extrasTotal;
   const left = pot - allocated;
   const dollarIn = (key, step)=>`<span class="moneyin">$<input type="number" min="0" step="${step}" value="${+P[key]||0}" onchange="S.prizes.${key}=+this.value;saveState();renderPrizes();renderHome()"></span>`;
   el.innerHTML = `
@@ -3729,7 +3731,28 @@ function renderPrizes(){
         divs ? `<b>${money(divRefund)} <span style="color:var(--chalk-dim);font-weight:400;font-size:12px">${divs} × ${money(buyIn)}</span></b>`
              : `<span style="color:var(--chalk-dim)">set Divisions above</span>`}</div>
     </div>
+    <div class="eyebrow" style="margin:16px 0 6px">Custom payouts</div>
+    <div id="extraPrizes">${ P.extra.map((e,i)=>`
+      <div class="setrow" style="gap:8px;align-items:center">
+        <input type="text" placeholder="What's it for? (e.g. Highest weekly score)" value="${esc((e&&e.label)||'')}" onchange="setPrizeLabel(${i}, this.value)" style="flex:1;min-width:0">
+        <span class="moneyin">$<input type="number" min="0" step="10" value="${+((e&&e.amount))||0}" onchange="setPrizeAmount(${i}, this.value)"></span>
+        <button class="btn ghost" style="padding:3px 9px" title="Remove payout" onclick="removePrize(${i})">✕</button>
+      </div>`).join('') || `<p class="sub" style="margin:0">No custom payouts yet — add side pots like weekly high score, most points, or a punishment fund.</p>` }</div>
+    <div class="row" style="margin-top:8px"><button class="btn" onclick="addPrize()">+ Add payout</button></div>
     <div class="notice" style="margin-top:14px">Allocated <b>${money(allocated)}</b> of <b>${money(pot)}</b> — <span style="color:${left<0?'var(--danger)':'var(--rb)'};font-weight:600">${left<0?('over by '+money(-left)):(money(left)+' left to allocate')}</span></div>`;
+}
+function addPrize(){
+  S.prizes = S.prizes||{}; S.prizes.extra = Array.isArray(S.prizes.extra)?S.prizes.extra:[];
+  S.prizes.extra.push({label:'', amount:0}); saveState(); renderPrizes(); renderHome();
+}
+function setPrizeLabel(i, val){
+  if(S.prizes && Array.isArray(S.prizes.extra) && S.prizes.extra[i]){ S.prizes.extra[i].label=String(val||''); saveState(); }
+}
+function setPrizeAmount(i, val){
+  if(S.prizes && Array.isArray(S.prizes.extra) && S.prizes.extra[i]){ S.prizes.extra[i].amount=+val||0; saveState(); renderPrizes(); renderHome(); }
+}
+function removePrize(i){
+  if(S.prizes && Array.isArray(S.prizes.extra)){ S.prizes.extra.splice(i,1); saveState(); renderPrizes(); renderHome(); }
 }
 /* seed the master roster once from all names we know */
 function ensureManagers(){
