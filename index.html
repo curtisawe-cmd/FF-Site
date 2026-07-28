@@ -919,13 +919,20 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <h2>Traded Draft Picks</h2>
     <p class="sub" style="margin-bottom:10px">Picks that changed hands before the draft. The draft room honors these automatically — the 2026 deadline deals are preloaded. (Trades are matched by team name, so finish renaming teams before adding trades.)</p>
     <div id="tradeList"></div>
-    <div class="row" style="margin-top:10px">
+    <div class="row" style="margin-top:10px;flex-wrap:wrap">
+      <select id="trYear"></select>
       <select id="trRound"></select>
       <select id="trFrom"></select>
       <span style="color:var(--chalk-dim)">pick goes to</span>
       <select id="trTo"></select>
       <button class="btn ghost" onclick="addTrade()">Add Trade</button>
     </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>Season</h2>
+    <p class="sub" style="margin-bottom:10px">Current draft/season year: <b id="seasonYear">2026</b>. When the season's over, start the next one — it archives this year (and its champion) to History, hands you a fresh draft board + schedule, uses up this year's traded picks, and carries any future‑year pick trades forward.</p>
+    <button class="btn" onclick="startNextSeason()">Start Next Season</button>
   </div>
 
   <div class="card">
@@ -1835,10 +1842,19 @@ const KR = () => (S.draftCfg&&S.draftCfg.keeper) ? 1 : 0;
 function snakeRounds(){ return Math.max(1, +(S.draftCfg&&S.draftCfg.rounds)||16); }
 function totalRounds(){ return snakeRounds() + KR(); }
 function maxPicks(){ return Math.max(0, +(S.draftCfg&&S.draftCfg.maxPicks)||0); }
-/* draft picks a team has ACQUIRED via trade (received; not counting picks traded away) */
+/* the year the current draft board applies to; pick trades are tagged by year */
+function curDraftYear(){ return +S.draftYear || +(S.season&&S.season.year) || 2026; }
+function pickYearOf(t){ return t && t.year!=null ? +t.year : curDraftYear(); }
+function ensureDraftYear(){
+  if(S.draftYear==null) S.draftYear = +(S.season&&S.season.year) || 2026;
+  let changed=false;
+  (S.pickTrades||[]).forEach(t=>{ if(t.year==null){ t.year = S.draftYear; changed=true; } });
+  if(changed) saveState();
+}
+/* draft picks a team has ACQUIRED for the current draft year (received; not counting picks traded away) */
 function picksAcquired(i){
   const name = S.teams[i] ? S.teams[i].name : '';
-  return (S.pickTrades||[]).filter(t=>t.to===name).length;
+  return (S.pickTrades||[]).filter(t=>t.to===name && pickYearOf(t)===curDraftYear()).length;
 }
 function totalPicks(){ return totalRounds()*N(); }
 function teamForPick(idx){ // keeper pre-round is straight order; snake starts fresh after it
@@ -1855,7 +1871,7 @@ function pickLabel(idx){ const rd=roundForPick(idx); if(rd===0) return `Keeper R
 function ownerForPick(idx){ // pick trades: slot belongs to original team, but another team may own it
   const orig = teamForPick(idx), round = roundForPick(idx);
   if(round===0) return orig; // keepers can't change hands
-  const tr = (S.pickTrades||[]).find(t=>+t.round===round && t.from===S.teams[orig].name);
+  const tr = (S.pickTrades||[]).find(t=>+t.round===round && t.from===S.teams[orig].name && pickYearOf(t)===curDraftYear());
   if(tr){ const oi = S.teams.findIndex(t2=>t2.name===tr.to); if(oi>=0) return oi; }
   return orig;
 }
@@ -3179,7 +3195,7 @@ function genSchedule(){
   }
   const schedule = {};
   for(let w=1;w<=REG_WEEKS;w++) schedule[w] = structuredClone(rounds[(w-1)%rounds.length]);
-  S.season = { year: 2026, schedule, scores: {} };
+  S.season = { year: (+S.draftYear||2026), schedule, scores: {} };
   saveState();
 }
 function mScore(wk,m){ return (S.season.scores[wk]&&S.season.scores[wk][m]) || [null,null]; }
@@ -3301,7 +3317,8 @@ function saveRealDraft(d){
   if(draftMode==='real'){ D = d; saveDraft(); }
   else store.set('ffl_draft', JSON.stringify(d));
 }
-window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set(), ra:new Set(), rb:new Set()};
+window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set(), ra:new Set(), rb:new Set(), pickYear:null};
+function tradeSetPickYear(y){ window.tradeSel.pickYear = +y; window.tradeSel.ra = new Set(); window.tradeSel.rb = new Set(); renderTradeCenter(); }
 function tradeToggle(side, pid){
   const s2 = window.tradeSel[side];
   if(s2.has(pid)) s2.delete(pid); else s2.add(pid);
@@ -3312,8 +3329,8 @@ function tradeToggleRound(side, round){
   if(set.has(round)) set.delete(round); else set.add(round);
   renderTradeCenter();
 }
-/* a team still controls its own round-R pick unless it has already been traded away */
-function ownsPick(teamName, round){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName); }
+/* a team still controls its own round-R pick for a given year unless already traded that year */
+function ownsPick(teamName, round, year){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName && pickYearOf(t)===+year); }
 function tradeSetTeam(side, ti){
   window.tradeSel[side] = +ti;
   window.tradeSel[side==='a'?'pa':'pb'] = new Set();
@@ -3330,20 +3347,23 @@ function executeTrade(){
   const giveA = d.picks.filter(p=>p.teamIndex===T.a && T.pa.has(p.playerId));
   const giveB = d.picks.filter(p=>p.teamIndex===T.b && T.pb.has(p.playerId));
   const nmA = S.teams[T.a].name, nmB = S.teams[T.b].name;
+  const py = +window.tradeSel.pickYear || curDraftYear();
   const cap = maxPicks();
   if(cap){
-    if(picksAcquired(T.b)+raS.length > cap){ toast(`${nmB} would exceed the ${cap} traded-pick limit.`); return; }
-    if(picksAcquired(T.a)+rbS.length > cap){ toast(`${nmA} would exceed the ${cap} traded-pick limit.`); return; }
+    const acqB=(S.pickTrades||[]).filter(t=>t.to===nmB && pickYearOf(t)===py).length;
+    const acqA=(S.pickTrades||[]).filter(t=>t.to===nmA && pickYearOf(t)===py).length;
+    if(acqB+raS.length > cap){ toast(`${nmB} would exceed the ${cap} traded-pick limit for ${py}.`); return; }
+    if(acqA+rbS.length > cap){ toast(`${nmA} would exceed the ${cap} traded-pick limit for ${py}.`); return; }
   }
-  const aGave=[...giveA.map(p=>p.name), ...raS.sort((x,y)=>x-y).map(r=>`Round ${r} pick`)];
-  const bGave=[...giveB.map(p=>p.name), ...rbS.sort((x,y)=>x-y).map(r=>`Round ${r} pick`)];
+  const aGave=[...giveA.map(p=>p.name), ...raS.sort((x,y)=>x-y).map(r=>`${py} Round ${r} pick`)];
+  const bGave=[...giveB.map(p=>p.name), ...rbS.sort((x,y)=>x-y).map(r=>`${py} Round ${r} pick`)];
   if(!confirm(`${nmA} sends: ${aGave.join(', ')||'nothing'}\n${nmB} sends: ${bGave.join(', ')||'nothing'}\n\nExecute this trade?`)) return;
   giveA.forEach(p=>{ p.teamIndex = T.b; if(S.lineups[T.a]) delete S.lineups[T.a][p.playerId]; (S.lineups[T.b]=S.lineups[T.b]||{})[p.playerId]='BN'; });
   giveB.forEach(p=>{ p.teamIndex = T.a; if(S.lineups[T.b]) delete S.lineups[T.b][p.playerId]; (S.lineups[T.a]=S.lineups[T.a]||{})[p.playerId]='BN'; });
   if(giveA.length||giveB.length) saveRealDraft(d);
   S.pickTrades = S.pickTrades||[];
-  raS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmA)) S.pickTrades.push({round:r, from:nmA, to:nmB}); });
-  rbS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmB)) S.pickTrades.push({round:r, from:nmB, to:nmA}); });
+  raS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmA && pickYearOf(t)===py)) S.pickTrades.push({round:r, from:nmA, to:nmB, year:py}); });
+  rbS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmB && pickYearOf(t)===py)) S.pickTrades.push({round:r, from:nmB, to:nmA, year:py}); });
   S.trades.push({ t: Date.now(), a: nmA, b: nmB, aGave, bGave });
   saveState();
   window.tradeSel.pa=new Set(); window.tradeSel.pb=new Set(); window.tradeSel.ra=new Set(); window.tradeSel.rb=new Set();
@@ -3367,17 +3387,23 @@ function renderTradeCenter(){
   };
   const cnt = ti => d.picks.filter(p=>p.teamIndex===ti).length;
   const after = side => side==='a' ? cnt(T.a)-T.pa.size+T.pb.size : cnt(T.b)-T.pb.size+T.pa.size;
+  const py = +window.tradeSel.pickYear || curDraftYear();
+  const yearOpts = Array.from({length:4},(_,i)=>curDraftYear()+i).map(y=>`<option value="${y}"${y===py?' selected':''}>${y}${y===curDraftYear()?' (this draft)':''}</option>`).join('');
   const pickList = (ti, side, selSet) => {
     const name = S.teams[ti].name;
-    const rounds = Array.from({length:snakeRounds()},(_,i)=>i+1).filter(r=>ownsPick(name, r));
-    if(!rounds.length) return `<div class="eyebrow" style="margin:12px 0 4px">Draft picks</div><p class="sub" style="margin:0">No tradeable picks.</p>`;
-    return `<div class="eyebrow" style="margin:12px 0 4px">Draft picks</div>` + rounds.map(r=>`
+    const rounds = Array.from({length:snakeRounds()},(_,i)=>i+1).filter(r=>ownsPick(name, r, py));
+    if(!rounds.length) return `<div class="eyebrow" style="margin:12px 0 4px">${py} draft picks</div><p class="sub" style="margin:0">No tradeable picks.</p>`;
+    return `<div class="eyebrow" style="margin:12px 0 4px">${py} draft picks</div>` + rounds.map(r=>`
       <label class="row" style="padding:3px 0;gap:8px;cursor:pointer">
         <input type="checkbox" ${selSet.has(r)?'checked':''} onchange="tradeToggleRound('${side}',${r})" style="width:auto">
         <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">Round ${r} pick</span>
       </label>`).join('');
   };
   el.innerHTML = `
+    <div class="row" style="margin-bottom:12px;gap:8px;align-items:center">
+      <label class="sub" style="margin:0">Draft‑pick year</label>
+      <select onchange="tradeSetPickYear(this.value)">${yearOpts}</select>
+    </div>
     <div class="grid2" style="margin-bottom:14px">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
@@ -3633,6 +3659,7 @@ function renderSettings(){
   document.getElementById('setKeeper').checked = !!KR();
   document.getElementById('setMaxPicks').value = maxPicks() || '';
   document.getElementById('setDivisions').value = String(+S.divisions||0);
+  { const sy=document.getElementById('seasonYear'); if(sy) sy.textContent=curDraftYear(); }
   renderCommishCard();
   // master manager roster
   renderManagers();
@@ -3709,13 +3736,14 @@ function renderTrades(){
   }
   const trades = (S.pickTrades||[]).map((t,i)=>`
     <div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)">
-      <span style="font-family:'IBM Plex Mono',monospace;min-width:70px">Round ${t.round}</span>
+      <span style="font-family:'IBM Plex Mono',monospace;min-width:105px">${pickYearOf(t)} · R${t.round}</span>
       <span>${esc(t.from)} <span style="color:var(--chalk-dim)">→</span> ${esc(t.to)}</span>
       <span class="spacer"></span>
       <button class="btn danger" style="padding:3px 10px;font-size:13px" onclick="S.pickTrades.splice(${i},1);saveState();renderTrades();refreshDraftUI()">Remove</button>
     </div>`).join('') || `<p style="color:var(--chalk-dim)">No traded picks.</p>`;
   list.innerHTML = tally + trades;
   const rounds = snakeRounds();
+  const ty=document.getElementById('trYear'); if(ty) ty.innerHTML = Array.from({length:4},(_,i)=>curDraftYear()+i).map(y=>`<option value="${y}">${y}${y===curDraftYear()?' (this draft)':''}</option>`).join('');
   document.getElementById('trRound').innerHTML = Array.from({length:rounds},(_,i)=>`<option value="${i+1}">Round ${i+1}</option>`).join('');
   document.getElementById('trFrom').innerHTML = S.teams.map(t=>`<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
   document.getElementById('trTo').innerHTML = S.teams.map((t,i)=>{
@@ -3725,17 +3753,41 @@ function renderTrades(){
 }
 function addTrade(){
   const round = +document.getElementById('trRound').value;
+  const year = +document.getElementById('trYear').value || curDraftYear();
   const from = document.getElementById('trFrom').value, to = document.getElementById('trTo').value;
   if(from===to){ toast("A team can't trade a pick to itself."); return; }
-  if((S.pickTrades||[]).some(t=>+t.round===round && t.from===from)){ toast(`${from} already traded their Round ${round} pick.`); return; }
+  if((S.pickTrades||[]).some(t=>+t.round===round && t.from===from && pickYearOf(t)===year)){ toast(`${from} already traded their ${year} Round ${round} pick.`); return; }
   const cap = maxPicks();
   if(cap){
-    const ti = S.teams.findIndex(t=>t.name===to);
-    if(ti>=0 && picksAcquired(ti) + 1 > cap){ toast(`${to} has hit the ${cap} traded-pick limit.`); return; }
+    const acq = (S.pickTrades||[]).filter(t=>t.to===to && pickYearOf(t)===year).length;
+    if(acq + 1 > cap){ toast(`${to} has hit the ${cap} traded-pick limit for ${year}.`); return; }
   }
   S.pickTrades = S.pickTrades||[];
-  S.pickTrades.push({round, from, to});
+  S.pickTrades.push({round, from, to, year});
   saveState(); renderTrades(); refreshDraftUI();
+}
+function startNextSeason(){
+  if(!requireAdmin()) return;
+  const y = curDraftYear();
+  const opts = S.teams.map((t,i)=>`${i} = ${t.name}`).join('\n');
+  const pick = window.prompt(`Wrap up the ${y} season.\n\nWhich team won the championship? Enter its number (or leave blank to skip):\n\n`+opts);
+  if(pick===null) return;
+  const ci = pick.trim()==='' ? -1 : parseInt(pick,10);
+  const champ = (ci>=0 && ci<S.teams.length) ? S.teams[ci] : null;
+  if(!confirm(`Start the ${y+1} season?\n\n• Archive ${y} to History${champ?` — champion: ${champ.name}`:' (no champion recorded)'}\n• Fresh draft board + ${y+1} schedule (scores cleared)\n• ${y} traded picks are used up; ${y+1}+ pick trades carry over\n\nThis can't be undone.`)) return;
+  S.history = S.history || {}; S.history.managers = S.history.managers || {}; S.history.champions = S.history.champions || [];
+  const rec = {}; S.teams.forEach(t=>{ if(t.name) rec[t.name] = t.manager||''; });
+  S.history.managers[String(y)] = rec;
+  if(champ && !S.history.champions.some(c=>+c.year===y)) S.history.champions.unshift({ year:y, team:champ.name });
+  S.draftYear = y+1;
+  S.pickTrades = (S.pickTrades||[]).filter(t=>pickYearOf(t) > y);   /* this year's picks used up; future carry over */
+  S.season = null; genSchedule();                                   /* fresh schedule for the new year */
+  draftMode='real'; D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
+  saveState();
+  renderSettings(); renderHome(); refreshDraftUI();
+  if(window.currentView==='matchups') renderMatchups();
+  if(window.currentView==='history') renderHistory();
+  toast(`Welcome to the ${y+1} season 🏈`);
 }
 function saveFromInputs(){
   S.leagueName = document.getElementById('setLeagueName').value || 'Bitch Boy League';
@@ -4092,6 +4144,7 @@ syncHeaderH();
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
 ensureManagers();
 if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
+ensureDraftYear();             /* set S.draftYear + stamp legacy pick trades with a year */
 autoDraftOn = store.get('ffl_autodraft')==='1';
 applyRole();
 renderPosFilters();
