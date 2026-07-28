@@ -2507,14 +2507,15 @@ let TD = {};
 function teamDataFor(ti){ return TD[ti]||{}; }
 function reconcileTeamData(){
   try{ Object.keys(TD).forEach(k=>{ const ti=+k; const td=TD[k]||{};
-    if(Array.isArray(td.roster)) D.picks = D.picks.filter(p=>p.teamIndex!==ti).concat(td.roster.map(p=>({...p, teamIndex:ti})));
+    /* roster comes from the draft board (D.picks) only — never overwrite it with a stale teamData snapshot,
+       which was clobbering live draft picks for any team that had a teamData node */
     if(td.lineup && typeof td.lineup==='object'){ S.lineups = S.lineups||{}; S.lineups[ti] = td.lineup; }
     if(S.teams[ti] && ('logo' in td)){ if(td.logo) S.teams[ti].logo = td.logo; else delete S.teams[ti].logo; }
   }); }catch(e){}
 }
 function pushTeamData(ti){
   if(!fbOk() || !canEditTeam(ti)) return;
-  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ roster: teamRoster(ti), lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null })).catch(()=>{}); }catch(e){}
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null })).catch(()=>{}); }catch(e){}
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
 function initClaims(){
