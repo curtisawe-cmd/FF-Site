@@ -2015,6 +2015,57 @@ function scoreSeasonStats(st,pos){
   if(pos==='TE') p+=g('rec')*v("TE premium (per reception)");
   return Math.round(p*10)/10;
 }
+/* itemized version of scoreSeasonStats, for verifying scoring against real data */
+function scoreBreakdown(st,pos){
+  if(!st) return [];
+  const g=k=>+(st[k]||0), R=S.scoring, v=k=>+(R[k]||0);
+  const rows=[
+    ["Passing yards", g('pass_yd'), v("Passing yards (per yd)")],
+    ["Passing TD", g('pass_td'), v("Passing TD")],
+    ["Interception thrown", g('pass_int'), v("Interception thrown")],
+    ["Sacked", g('pass_sack'), v("Sacked")],
+    ["Completion", g('pass_cmp'), v("Completion")],
+    ["Incompletion", g('pass_att')-g('pass_cmp'), v("Incompletion")],
+    ["Pick-six thrown", g('pass_int_td'), v("Pick-six thrown")],
+    ["Rushing attempt", g('rush_att'), v("Rushing attempt")],
+    ["Rushing yards", g('rush_yd'), v("Rushing yards (per yd)")],
+    ["Rushing TD", g('rush_td'), v("Rushing TD")],
+    ["Rushing first down", g('rush_fd'), v("Rushing first down")],
+    ["Reception", g('rec'), v("Reception")],
+    ["Receiving yards", g('rec_yd'), v("Receiving yards (per yd)")],
+    ["Receiving TD", g('rec_td'), v("Receiving TD")],
+    ["Receiving first down", g('rec_fd'), v("Receiving first down")],
+    ["TE premium (per rec)", pos==='TE'?g('rec'):0, v("TE premium (per reception)")],
+    ["Kick/punt return TD", g('kr_td')+g('pr_td'), v("Kick/punt return TD")],
+    ["Fumble recovered for TD", g('fum_rec_td'), v("Fumble recovered for TD")],
+    ["Fumble lost", g('fum_lost'), v("Fumble lost")],
+    ["2-pt conversion", g('pass_2pt')+g('rush_2pt')+g('rec_2pt'), v("2-pt conversion")],
+    ["PAT made", g('xpm'), v("PAT made")],
+    ["PAT missed", g('xpmiss'), v("PAT missed")],
+    ["FG 0-19", g('fgm_0_19'), v("FG 0-19")],
+    ["FG 20-29", g('fgm_20_29'), v("FG 20-29")],
+    ["FG 30-39", g('fgm_30_39'), v("FG 30-39")],
+    ["FG 40-49", g('fgm_40_49'), v("FG 40-49")],
+    ["FG 50+", g('fgm_50p'), v("FG 50+")],
+    ["FG missed 0-19", g('fgmiss_0_19'), v("FG missed 0-19")],
+    ["FG missed 20-29", g('fgmiss_20_29'), v("FG missed 20-29")]
+  ];
+  return rows.map(([label,stat,per])=>({label,stat,per,pts:Math.round(stat*per*10)/10})).filter(it=>it.stat!==0 && it.per!==0);
+}
+function renderBreakdown(id){
+  const el=document.getElementById('pbrk'); if(!el) return;
+  const m=findPlayerMeta(id)||{}; const pos=m.pos||'';
+  const y=(document.getElementById('brkYear')||{}).value||'2025';
+  const st=STAT_CACHE[String(y)] && STAT_CACHE[String(y)][id];
+  if(!st){ el.innerHTML=`<p class="sub" style="margin:0">No ${y} stats on record for this player.</p>`; return; }
+  const items=scoreBreakdown(st,pos), total=scoreSeasonStats(st,pos), gp=+(st.gp||0);
+  el.innerHTML=`<div style="overflow-x:auto"><table class="plain" style="white-space:nowrap;font-family:'IBM Plex Mono',monospace;font-size:13px">
+    <tr><th style="text-align:left">Category</th><th style="text-align:right">Stat</th><th style="text-align:right">× pts</th><th style="text-align:right">= Points</th></tr>
+    ${items.length? items.map(it=>`<tr><td style="text-align:left">${esc(it.label)}</td><td style="text-align:right">${it.stat}</td><td style="text-align:right">${it.per}</td><td style="text-align:right;font-weight:600">${it.pts.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--chalk-dim)">No scoring categories in ${y}.</td></tr>`}
+    <tr class="top"><td style="text-align:left"><b>Total${gp?` · ${gp} GP`:''}</b></td><td></td><td></td><td style="text-align:right;font-weight:700">${total!=null?total.toFixed(1):'—'}</td></tr>
+  </table></div>
+  <p class="sub" style="font-size:12px;margin-top:8px">Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.</p>`;
+}
 function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || null; }
 function openPlayer(id){
   let ov=document.getElementById('playerModal');
@@ -2061,8 +2112,12 @@ function renderPlayerModal(id){
         ${cols.map(c=>`<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${cell(r,c)}</td>`).join('')}</tr>`).join('')}
     </table></div>`;
     body=chart+table+`<p class="sub" style="font-size:12px;margin-top:12px">Scored in <b>your league's rules</b> from season totals (per-game yardage/long-TD bonuses excluded). 2026 is Sleeper's projection.</p>`;
+    body+=`<div class="eyebrow" style="margin:18px 0 6px">Verify scoring · itemized breakdown</div>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${[...CAREER_YEARS].reverse().map(y=>`<option value="${y}"${y===2025?' selected':''}>${y}</option>`).join('')}</select></div>
+      <div id="pbrk"></div>`;
   }
   ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
+  if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
   const pf=document.getElementById('plPosFilters');
