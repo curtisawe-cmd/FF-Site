@@ -3579,7 +3579,7 @@ function renderMyTeam(){
     const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
     return `<tr><td style="width:56px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${slotLabel}</span></td>
       <td><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)} <span style="color:var(--chalk-dim);font-size:12px">${p.pos} \u00B7 ${p.nfl||''}</span></td>
-      <td style="text-align:right"><select onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
+      <td style="text-align:right"><select style="width:84px" onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
