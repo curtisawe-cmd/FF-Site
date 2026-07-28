@@ -3301,35 +3301,54 @@ function saveRealDraft(d){
   if(draftMode==='real'){ D = d; saveDraft(); }
   else store.set('ffl_draft', JSON.stringify(d));
 }
-window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set()};
+window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set(), ra:new Set(), rb:new Set()};
 function tradeToggle(side, pid){
   const s2 = window.tradeSel[side];
   if(s2.has(pid)) s2.delete(pid); else s2.add(pid);
   renderTradeCenter();
 }
+function tradeToggleRound(side, round){
+  const set = window.tradeSel[side==='a'?'ra':'rb'];
+  if(set.has(round)) set.delete(round); else set.add(round);
+  renderTradeCenter();
+}
+/* a team still controls its own round-R pick unless it has already been traded away */
+function ownsPick(teamName, round){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName); }
 function tradeSetTeam(side, ti){
   window.tradeSel[side] = +ti;
   window.tradeSel[side==='a'?'pa':'pb'] = new Set();
+  window.tradeSel[side==='a'?'ra':'rb'] = new Set();
   renderTradeCenter();
 }
 function executeTrade(){
   if(!requireAdmin()) return;
   const T = window.tradeSel;
   if(T.a===T.b){ toast("Pick two different teams."); return; }
-  if(!T.pa.size && !T.pb.size){ toast("Select at least one player."); return; }
+  const raS=[...(T.ra||[])], rbS=[...(T.rb||[])];
+  if(!T.pa.size && !T.pb.size && !raS.length && !rbS.length){ toast("Select at least one player or draft pick."); return; }
   const d = realDraft();
   const giveA = d.picks.filter(p=>p.teamIndex===T.a && T.pa.has(p.playerId));
   const giveB = d.picks.filter(p=>p.teamIndex===T.b && T.pb.has(p.playerId));
   const nmA = S.teams[T.a].name, nmB = S.teams[T.b].name;
-  if(!confirm(`${nmA} sends: ${giveA.map(p=>p.name).join(', ')||'nothing'}\n${nmB} sends: ${giveB.map(p=>p.name).join(', ')||'nothing'}\n\nExecute this trade?`)) return;
+  const cap = maxPicks();
+  if(cap){
+    if(picksAcquired(T.b)+raS.length > cap){ toast(`${nmB} would exceed the ${cap} traded-pick limit.`); return; }
+    if(picksAcquired(T.a)+rbS.length > cap){ toast(`${nmA} would exceed the ${cap} traded-pick limit.`); return; }
+  }
+  const aGave=[...giveA.map(p=>p.name), ...raS.sort((x,y)=>x-y).map(r=>`Round ${r} pick`)];
+  const bGave=[...giveB.map(p=>p.name), ...rbS.sort((x,y)=>x-y).map(r=>`Round ${r} pick`)];
+  if(!confirm(`${nmA} sends: ${aGave.join(', ')||'nothing'}\n${nmB} sends: ${bGave.join(', ')||'nothing'}\n\nExecute this trade?`)) return;
   giveA.forEach(p=>{ p.teamIndex = T.b; if(S.lineups[T.a]) delete S.lineups[T.a][p.playerId]; (S.lineups[T.b]=S.lineups[T.b]||{})[p.playerId]='BN'; });
   giveB.forEach(p=>{ p.teamIndex = T.a; if(S.lineups[T.b]) delete S.lineups[T.b][p.playerId]; (S.lineups[T.a]=S.lineups[T.a]||{})[p.playerId]='BN'; });
-  saveRealDraft(d);
-  S.trades.push({ t: Date.now(), a: nmA, b: nmB, aGave: giveA.map(p=>p.name), bGave: giveB.map(p=>p.name) });
+  if(giveA.length||giveB.length) saveRealDraft(d);
+  S.pickTrades = S.pickTrades||[];
+  raS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmA)) S.pickTrades.push({round:r, from:nmA, to:nmB}); });
+  rbS.forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===r && t.from===nmB)) S.pickTrades.push({round:r, from:nmB, to:nmA}); });
+  S.trades.push({ t: Date.now(), a: nmA, b: nmB, aGave, bGave });
   saveState();
-  window.tradeSel.pa = new Set(); window.tradeSel.pb = new Set();
+  window.tradeSel.pa=new Set(); window.tradeSel.pb=new Set(); window.tradeSel.ra=new Set(); window.tradeSel.rb=new Set();
   toast("Trade executed \uD83E\uDD1D");
-  renderTradeCenter();
+  renderTradeCenter(); refreshDraftUI();
 }
 function renderTradeCenter(){
   const el = document.getElementById('tradesView');
@@ -3348,20 +3367,32 @@ function renderTradeCenter(){
   };
   const cnt = ti => d.picks.filter(p=>p.teamIndex===ti).length;
   const after = side => side==='a' ? cnt(T.a)-T.pa.size+T.pb.size : cnt(T.b)-T.pb.size+T.pa.size;
+  const pickList = (ti, side, selSet) => {
+    const name = S.teams[ti].name;
+    const rounds = Array.from({length:snakeRounds()},(_,i)=>i+1).filter(r=>ownsPick(name, r));
+    if(!rounds.length) return `<div class="eyebrow" style="margin:12px 0 4px">Draft picks</div><p class="sub" style="margin:0">No tradeable picks.</p>`;
+    return `<div class="eyebrow" style="margin:12px 0 4px">Draft picks</div>` + rounds.map(r=>`
+      <label class="row" style="padding:3px 0;gap:8px;cursor:pointer">
+        <input type="checkbox" ${selSet.has(r)?'checked':''} onchange="tradeToggleRound('${side}',${r})" style="width:auto">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">Round ${r} pick</span>
+      </label>`).join('');
+  };
   el.innerHTML = `
     <div class="grid2" style="margin-bottom:14px">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
         ${rosterList(T.a,'a',T.pa)}
+        ${pickList(T.a,'a',T.ra)}
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('b')}<span class="sub" style="margin:0">${cnt(T.b)} \u2192 ${after('b')} players</span></div>
         ${rosterList(T.b,'b',T.pb)}
+        ${pickList(T.b,'b',T.rb)}
       </div>
     </div>
     <div class="row" style="margin-bottom:18px">
       <button class="btn" onclick="executeTrade()">Execute Trade</button>
-      <span class="sub" style="margin:0">Traded players land on their new team's bench. Future draft picks trade in Settings \u2192 Traded Draft Picks.</span>
+      <span class="sub" style="margin:0">Traded players land on their new team's bench; traded picks reassign on the draft board (and show in Settings \u2192 Traded Draft Picks).</span>
     </div>
     <div class="card">
       <h2>Trade History</h2>
