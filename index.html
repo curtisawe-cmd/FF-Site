@@ -622,8 +622,6 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button data-view="chat">Chat</button>
     <button data-view="polls">Polls</button>
     <button data-view="stats">Stats</button>
-    <button data-view="recaps">Recaps</button>
-    <button data-view="history">History</button>
     <button data-view="settings">Settings</button>
   </nav>
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
@@ -795,6 +793,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-stats">
   <h1>All-Time Stats</h1>
   <p class="sub">Fourteen years, every manager, every record — computed straight from the verified NFL.com archive.</p>
+  <div class="row statssub" style="gap:8px;margin-bottom:16px">
+    <button class="btn" data-sub="stats" onclick="showView('stats')">Stats</button>
+    <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
+    <button class="btn ghost" data-sub="history" onclick="showView('history')">History</button>
+  </div>
   <div id="statsView"></div>
 </section>
 
@@ -802,6 +805,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-recaps">
   <h1>Season Recaps</h1>
   <p class="sub">Fourteen years of glory, robbery, and 2-12 seasons — one year at a time.</p>
+  <div class="row statssub" style="gap:8px;margin-bottom:16px">
+    <button class="btn ghost" data-sub="stats" onclick="showView('stats')">Stats</button>
+    <button class="btn" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
+    <button class="btn ghost" data-sub="history" onclick="showView('history')">History</button>
+  </div>
   <div id="recapsView"></div>
 </section>
 
@@ -809,6 +817,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-history">
   <h1>League History</h1>
   <p class="sub">The record book — 2012 to today. More gets added as we pull each season off NFL.com.</p>
+  <div class="row statssub" style="gap:8px;margin-bottom:16px">
+    <button class="btn ghost" data-sub="stats" onclick="showView('stats')">Stats</button>
+    <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
+    <button class="btn" data-sub="history" onclick="showView('history')">History</button>
+  </div>
   <div id="historyView"></div>
 </section>
 
@@ -2649,7 +2662,9 @@ function showView(v){
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('view-'+domView).classList.add('active');
-  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  const navV = (v==='recaps'||v==='history') ? 'stats' : v;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===navV));
+  if(v==='stats'||v==='recaps'||v==='history') document.querySelectorAll('.statssub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
   if(v==='home') renderHome();
   if(v==='teams') renderTeams();
   if(v==='matchups') renderMatchups();
