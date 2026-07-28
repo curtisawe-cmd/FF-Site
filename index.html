@@ -620,7 +620,6 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button data-view="trades">Trades</button>
     <button data-view="teams">Teams</button>
     <button data-view="chat">Chat</button>
-    <button data-view="polls">Polls</button>
     <button data-view="stats">Stats</button>
     <button data-view="settings">Settings</button>
   </nav>
@@ -761,6 +760,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-chat">
   <h1>League Chat</h1>
   <p class="sub" id="chatBanner">Trash talk lives here.</p>
+  <div class="row chatsub" style="gap:8px;margin-bottom:16px">
+    <button class="btn" data-sub="chat" onclick="showView('chat')">Chat</button>
+    <button class="btn ghost" data-sub="polls" onclick="showView('polls')">Polls</button>
+  </div>
   <div class="card" style="max-width:760px">
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
     <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
@@ -786,6 +789,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 <section class="view" id="view-polls">
   <h1>Polls</h1>
   <p class="sub">League voting — the commissioner posts a question, everyone signed in gets one vote.</p>
+  <div class="row chatsub" style="gap:8px;margin-bottom:16px">
+    <button class="btn ghost" data-sub="chat" onclick="showView('chat')">Chat</button>
+    <button class="btn" data-sub="polls" onclick="showView('polls')">Polls</button>
+  </div>
   <div id="pollsView"></div>
 </section>
 
@@ -2662,9 +2669,10 @@ function showView(v){
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('view-'+domView).classList.add('active');
-  const navV = (v==='recaps'||v==='history') ? 'stats' : v;
+  const navV = (v==='recaps'||v==='history') ? 'stats' : (v==='polls' ? 'chat' : v);
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===navV));
   if(v==='stats'||v==='recaps'||v==='history') document.querySelectorAll('.statssub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
+  if(v==='chat'||v==='polls') document.querySelectorAll('.chatsub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
   if(v==='home') renderHome();
   if(v==='teams') renderTeams();
   if(v==='matchups') renderMatchups();
