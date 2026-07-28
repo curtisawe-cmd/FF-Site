@@ -4202,9 +4202,30 @@ if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderH
 syncHeaderH();
 
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
+function fixPlayoffs2025(){   /* correct 2025 bracket from the real NFL.com export (overrides any stale synced data) */
+  if((+S.historyFixVer||0) >= 1) return;
+  S.playoffsCustom = S.playoffsCustom || {};
+  S.playoffsCustom['2025'] = [
+    {week:15, label:"Quarterfinal", sa:1, ta:"MaddaMafia", pa:108.30, sb:8, tb:"uncle skips ribs", pb:147.30, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:4, ta:"Saquon Bacher", pa:127.90, sb:5, tb:"Nut buster", pb:235.00, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:3, ta:"Bill Cosbys Sleepers", pa:186.30, sb:6, tb:"This is my Last year", pb:95.50, bracket:"championship"},
+    {week:15, label:"Quarterfinal", sa:2, ta:"WiFi is Down", pa:133.80, sb:7, tb:"Brown Bag Boy", pb:169.80, bracket:"championship"},
+    {week:16, label:"Semifinal", sa:8, ta:"uncle skips ribs", pa:136.80, sb:5, tb:"Nut buster", pb:112.10, bracket:"championship"},
+    {week:16, label:"Semifinal", sa:3, ta:"Bill Cosbys Sleepers", pa:171.30, sb:7, tb:"Brown Bag Boy", pb:181.40, bracket:"championship"},
+    {week:16, label:"Consolation", sa:1, ta:"MaddaMafia", pa:115.50, sb:4, tb:"Saquon Bacher", pb:133.70, bracket:"consolation"},
+    {week:16, label:"Consolation", sa:6, ta:"This is my Last year", pa:193.70, sb:2, tb:"WiFi is Down", pb:203.00, bracket:"consolation"},
+    {week:17, label:"Fantasy Super Bowl", sa:8, ta:"uncle skips ribs", pa:111.80, sb:7, tb:"Brown Bag Boy", pb:113.70, bracket:"championship"},
+    {week:17, label:"3rd Place Game", sa:5, ta:"Nut buster", pa:154.30, sb:3, tb:"Bill Cosbys Sleepers", pb:168.50, bracket:"consolation"},
+    {week:17, label:"5th Place Game", sa:4, ta:"Saquon Bacher", pa:97.50, sb:2, tb:"WiFi is Down", pb:197.20, bracket:"consolation"},
+    {week:17, label:"7th Place Game", sa:1, ta:"MaddaMafia", pa:134.90, sb:6, tb:"This is my Last year", pb:124.50, bracket:"consolation"}
+  ];
+  S.historyFixVer = 1;
+  saveState();
+}
 ensureManagers();
 if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
 ensureDraftYear();             /* set S.draftYear + stamp legacy pick trades with a year */
+fixPlayoffs2025();
 autoDraftOn = store.get('ffl_autodraft')==='1';
 applyRole();
 renderPosFilters();
