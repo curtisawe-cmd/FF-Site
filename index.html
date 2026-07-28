@@ -3469,7 +3469,7 @@ function setSlot(ti, pid, slot){
   lu[pid]=slot; saveState(); pushTeamData(ti); renderTeams();
 }
 /* ---- add / drop free agents ---- */
-window.faQuery='';
+window.faQuery=''; window.faPos='ALL';
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
   const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid);
@@ -3531,6 +3531,7 @@ function freeAgents(q){
   const taken = draftedIds();
   q = String(q||'').toLowerCase().trim();
   return POOL.filter(p=>!taken.has(p.id))
+    .filter(p=>posMatches(p.pos, window.faPos||'ALL'))
     .filter(p=>!q || p.name.toLowerCase().includes(q) || String(p.team||'').toLowerCase().includes(q) || p.pos.toLowerCase()===q);
 }
 function renderFreeAgents(ti){
@@ -3539,7 +3540,8 @@ function renderFreeAgents(ti){
   const full = rosterCount(ti) >= rosterLimit();
   const fa = freeAgents(window.faQuery), shown = fa.slice(0,40);
   const note = full ? `<div class="notice" style="margin:0 0 8px">Roster is full (${rosterLimit()}). Adding a player will make you drop one.</div>` : '';
-  el.innerHTML = note + (shown.map(p=>`
+  const filters = `<div class="posfilters" style="margin:0 0 8px">${['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(p=>`<button class="${(window.faPos||'ALL')===p?'on':''}" onclick="window.faPos='${p}';renderFreeAgents(${ti})">${p}</button>`).join('')}</div>`;
+  el.innerHTML = filters + note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
       <span class="faName">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
