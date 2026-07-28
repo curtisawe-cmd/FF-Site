@@ -274,9 +274,15 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .roster-mini .rr b{color:var(--chalk);font-weight:500}
 
 /* settings */
-.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 18px}
-.setrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 26px}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0}
 .setrow label{color:var(--chalk-dim);font-size:14px}
+#view-settings{max-width:940px;margin-left:auto;margin-right:auto}
+#view-settings .setrow input[type=number]{max-width:100px}
+.applybar{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;justify-content:center;gap:16px;padding:12px 18px;background:var(--panel-2,#0e1f3d);border-top:2px solid var(--turf);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
+.applybar.on{display:flex}
+.applybar .msg{color:var(--chalk);font-weight:600;font-size:14px}
+.applybar .btn.ghost{color:var(--chalk-dim)}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .teamcard .num{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
@@ -530,7 +536,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 #rulesInputs select{width:270px;flex:0 0 auto}
 #rulesInputs label{flex:1 1 auto}
 /* keep every settings row's controls vertically centered and evenly spaced */
-.setrow{min-height:40px}
+.setrow{min-height:34px}
 
 /* ---------- trash-talk slam animation (mock draft reset) ---------- */
 .tt-overlay{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;pointer-events:none;overflow:hidden}
@@ -813,23 +819,13 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
   <div class="card" style="margin-bottom:18px">
     <h2>League</h2>
-    <div class="row">
-      <label style="color:var(--chalk-dim)">League name</label>
-      <input type="text" id="setLeagueName" style="min-width:240px" onchange="saveFromInputs()">
-      <label style="color:var(--chalk-dim)">Pick clock</label>
-      <select id="setTimer" onchange="saveFromInputs()">
-        <option value="60">1 min</option><option value="180">3 min</option>
-        <option value="300">5 min</option><option value="600">10 min</option>
-      </select>
-      <label style="color:var(--chalk-dim)">Draft rounds</label>
-      <input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()">
-      <label style="color:var(--chalk-dim)"><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"> Keeper round</label>
-      <label style="color:var(--chalk-dim)" title="Most draft picks a manager may acquire through trades. 0 = no limit.">Max traded picks / mgr</label>
-      <input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()">
-      <label style="color:var(--chalk-dim)" title="Split the league into divisions. Assign each team a division below.">Divisions</label>
-      <select id="setDivisions" onchange="S.divisions=+this.value;saveState();renderSettings();renderHome()">
-        <option value="0">None</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-      </select>
+    <div class="setgrid">
+      <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
+      <div class="setrow"><label>Pick clock</label><select id="setTimer" onchange="saveFromInputs()"><option value="60">1 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
+      <div class="setrow"><label>Draft rounds</label><input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()"></div>
+      <div class="setrow"><label>Keeper round</label><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"></div>
+      <div class="setrow"><label title="Most draft picks a manager may acquire through trades. 0 = no limit.">Max traded picks / mgr</label><input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()"></div>
+      <div class="setrow"><label title="Split the league into divisions. Assign each team a division below.">Divisions</label><select id="setDivisions" onchange="S.divisions=+this.value;saveState();renderSettings();renderHome()"><option value="0">None</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
     </div>
   </div>
 
@@ -1022,6 +1018,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <div class="auth-err" id="claimErr"></div>
     <button class="auth-primary" onclick="submitClaim()">Claim this team</button>
   </div>
+</div>
+<div class="applybar" id="applyBar">
+  <span class="msg">You've changed settings — not applied yet.</span>
+  <button class="btn ghost" onclick="discardSettings()">Discard</button>
+  <button class="btn" onclick="applySettings()">Apply changes</button>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -1767,11 +1768,18 @@ let applyingRemote = false, syncStarted = false, _pushST = null, _pushDT = null;
 function fbOk(){ return !!(window.FB && window.FB.dbSet); }
 /* stored as JSON strings so arbitrary setting keys (e.g. "Fractional / negative points")
    don't collide with Realtime Database's key charset restrictions */
-function pushSettings(){
+function pushSettings(force){
+  if(!force && window.settingsDirty) return;   /* staged — don't sync to the league until Apply */
   if(applyingRemote || !fbOk() || !isAdmin()) return;
   clearTimeout(_pushST);
   _pushST = setTimeout(()=>{ try{ window.FB.dbSet(`league/${LEAGUE_ID}/settings`, JSON.stringify(S)).catch(()=>{}); }catch(e){} }, 300);
 }
+/* ---- staged settings: Apply button + confirm-on-leave ---- */
+window.settingsDirty = false; window._setSnap = null;
+function markSettingsDirty(){ if(window.currentView!=='settings') return; if(!window.settingsDirty){ window.settingsDirty=true; updateApplyBar(); } }
+function updateApplyBar(){ const b=document.getElementById('applyBar'); if(b) b.classList.toggle('on', !!window.settingsDirty && window.currentView==='settings'); }
+function applySettings(){ window.settingsDirty=false; window._setSnap=JSON.stringify(S); pushSettings(true); updateApplyBar(); toast('Settings applied ✓'); }
+function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar(); try{ renderSettings(); renderHome(); }catch(e){} }
 function pushDraftRemote(){
   if(applyingRemote || !fbOk() || !isAdmin() || draftMode!=='real') return;
   clearTimeout(_pushDT);
@@ -2631,6 +2639,11 @@ function updateClaimBadge(){
   }
 }
 function showView(v){
+  const prevView = window.currentView;
+  if(prevView==='settings' && v!=='settings' && window.settingsDirty){
+    if(confirm('You changed some settings — apply them to the league?\n\nOK = apply · Cancel = discard')) applySettings();
+    else discardSettings();
+  }
   if(v==='settings' && !isAdmin()){ toast("Settings are commissioner-only."); v='home'; }
   window.currentView = v;
   const domView = (v==='mock') ? 'draft' : v;
@@ -2648,6 +2661,8 @@ function showView(v){
   if(v==='chat') initChat();
   if(v==='polls') renderPolls();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
+  if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
+  updateApplyBar();
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
 
@@ -4230,6 +4245,7 @@ autoDraftOn = store.get('ffl_autodraft')==='1';
 applyRole();
 renderPosFilters();
 renderSettings();
+{ const _sv=document.getElementById('view-settings'); if(_sv){ _sv.addEventListener('change', markSettingsDirty); _sv.addEventListener('input', markSettingsDirty); } }
 renderTrades();
 renderHome();
 refreshDraftUI();
