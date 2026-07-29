@@ -3897,7 +3897,19 @@ function renderTradeCenter(){
   const el = document.getElementById('tradesView');
   const T = window.tradeSel;
   const d = realDraft();
-  const teamSel = side => `<select onchange="tradeSetTeam('${side}', this.value)">${S.teams.map((t,i)=>`<option value="${i}" ${i===T[side]?'selected':''}>${esc(t.name)}</option>`).join('')}</select>`;
+  /* a manager always trades FROM their own team: left side is locked, only the right side is choosable */
+  const mineIdx = myTeamIndex();
+  const lockLeft = !isAdmin() && Number.isInteger(mineIdx) && !!S.teams[mineIdx];
+  if(lockLeft){
+    if(T.a!==mineIdx){ T.a=mineIdx; T.pa=new Set(); T.ra=new Set(); }
+    if(T.b===mineIdx){ const alt=(mineIdx+1)%N(); T.b=alt; T.pb=new Set(); T.rb=new Set(); }
+  }
+  const teamSel = side => (side==='a' && lockLeft)
+    ? `<span class="row" style="gap:8px;align-items:center;min-width:0">${teamMarkHTML(S.teams[T.a],26)}<b style="font-size:15px">${esc(S.teams[T.a].name)}</b><span class="divtag">your team</span></span>`
+    : `<select onchange="tradeSetTeam('${side}', this.value)">${S.teams.map((t,i)=>{
+         const other = (side==='a') ? T.b : T.a;
+         return `<option value="${i}"${i===T[side]?' selected':''}${i===other?' disabled':''}>${esc(t.name)}${i===other?' — already picked':''}</option>`;
+       }).join('')}</select>`;
   const rosterList = (ti, side, selSet) => {
     const roster = d.picks.filter(p=>p.teamIndex===ti);
     if(!roster.length) return `<p style="color:var(--chalk-dim)">No players \u2014 roster fills in from the draft.</p>`;
