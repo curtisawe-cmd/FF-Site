@@ -1839,6 +1839,7 @@ function startLeagueSync(){
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{}; if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
 }
 function syncDraftModeToggle(){
@@ -3440,9 +3441,11 @@ function tradeSetTeam(side, ti){
 const TRADE_REVIEW_MS = 2*24*60*60*1000;               /* 2-day review window */
 function vetoNeeded(){ return Math.max(2, Math.floor(N()/2)+1); }   /* majority of managers (7 of 12) */
 function offersPath(){ return `league/${LEAGUE_ID}/tradeOffers`; }
-let offersMap = {};
+function vetoesPath(){ return `league/${LEAGUE_ID}/tradeVetoes`; }   /* separate node: parent .write can't cascade over per-user votes */
+let offersMap = {}, vetoesMap = {};
+function vetoesFor(id){ return (vetoesMap&&vetoesMap[id])||{}; }
 function reviewEndsAt(o){ return (+o.acceptedAt||0) + TRADE_REVIEW_MS; }
-function vetoCount(o){ return Object.keys(o.vetoes||{}).length; }
+function vetoCount(id){ return Object.keys(vetoesFor(id)).length; }
 function tradeTimeLeft(o){
   const ms = reviewEndsAt(o) - Date.now();
   if(ms<=0) return 'review over';
@@ -3514,7 +3517,7 @@ function sendTradeOffer(){
   const id='t'+Date.now()+Math.random().toString(36).slice(2,6);
   const o={ a:T.a, b:T.b, aName:S.teams[T.a].name, bName:S.teams[T.b].name, fromUid:window.fbUser.uid,
             fromEmail:window.fbUser.email||'', pa:[...T.pa], pb:[...T.pb], ra:raS, rb:rbS, py,
-            status:'pending', createdAt:Date.now(), vetoes:{} };
+            status:'pending', createdAt:Date.now() };
   window.FB.dbSet(`${offersPath()}/${id}`, o).then(()=>{
     T.pa=new Set(); T.pb=new Set(); T.ra=new Set(); T.rb=new Set();
     toast('Offer sent \uD83D\uDCE8'); renderTradeCenter();
@@ -3539,15 +3542,15 @@ function toggleVeto(id){
   if(!window.fbUser){ toast('Sign in to vote.'); openAuth(); return; }
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
   if(Date.now()>reviewEndsAt(o)){ toast('The review window has closed.'); return; }
-  const uid=window.fbUser.uid, has=!!(o.vetoes||{})[uid];
-  const p=`${offersPath()}/${id}/vetoes/${uid}`;
+  const uid=window.fbUser.uid, has=!!vetoesFor(id)[uid];
+  const p=`${vetoesPath()}/${id}/${uid}`;
   (has? window.FB.dbRemove(p) : window.FB.dbSet(p, true)).then(()=>toast(has?'Veto withdrawn':'Veto recorded')).catch(()=>toast('Could not record your vote.'));
 }
 /* finalize after review: veto majority kills it, otherwise the commissioner's browser applies it */
 function finalizeOffer(id, silent){
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
   if(Date.now() < reviewEndsAt(o)) return;
-  if(vetoCount(o) >= vetoNeeded()){
+  if(vetoCount(id) >= vetoNeeded()){
     window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'vetoed', closedAt:Date.now()}).catch(()=>{});
     if(!silent) toast('Trade vetoed by the league');
     return;
@@ -3571,7 +3574,7 @@ function renderOffers(){
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   if(!list.length){ el.innerHTML=`<p class="sub" style="margin:0">No pending offers.</p>`; return; }
   el.innerHTML=list.map(o=>{
-    const t=tradePartsText(o), need=vetoNeeded(), vc=vetoCount(o), iVetoed=!!(o.vetoes||{})[uid];
+    const t=tradePartsText(o), need=vetoNeeded(), vc=vetoCount(o.id), iVetoed=!!vetoesFor(o.id)[uid];
     const reviewing=o.status==='accepted', over=reviewing&&Date.now()>=reviewEndsAt(o);
     const status = o.status==='pending'
       ? `<span class="divtag">Awaiting ${esc(o.bName)}</span>`
