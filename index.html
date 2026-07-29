@@ -874,17 +874,6 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       </div>
     </div>
 
-    <div class="card">
-      <h2>Tab Flash</h2>
-      <p class="sub" style="margin-bottom:10px">Slams a full-screen message for 1.7s on every Nth tab click. One line per message — type whatever you want. Leave blank to turn it off.</p>
-      <textarea id="setTabFlash" rows="6" placeholder="One message per line…" onchange="saveTabFlash(this.value)"></textarea>
-      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
-        <label class="sub" style="margin:0">Every</label>
-        <input type="number" id="setTabFlashEvery" min="0" max="200" style="max-width:80px" onchange="S.tabFlashEvery=Math.max(0,+this.value||0);saveState()">
-        <span class="sub" style="margin:0">clicks (0 = off)</span>
-        <button class="btn ghost" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test flash</button>
-      </div>
-    </div>
   </div>
 
   <div class="card" id="commishCard" style="margin-bottom:18px;display:none">
@@ -972,6 +961,23 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
       <button class="btn" onclick="exportLeague()">Export League File</button>
       <button class="btn ghost" onclick="document.getElementById('importFile').click()">Import League File</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importLeague(event)">
+    </div>
+  </div>
+
+  <div class="card tabflash-card" style="margin-top:18px;max-width:420px;opacity:.75">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+      <h2 style="margin:0;font-size:15px">Tab Flash <span style="color:var(--chalk-dim);font-weight:400">🔒</span></h2>
+      <button class="btn ghost" style="padding:2px 10px;font-size:12px" id="tfLockBtn" onclick="toggleTabFlashLock()">Unlock</button>
+    </div>
+    <div id="tabFlashPanel" style="display:none;margin-top:10px">
+      <p class="sub" style="margin:0 0 8px;font-size:12px">Full-screen message for 1.7s on every Nth tab click. One per line; blank = off.</p>
+      <textarea id="setTabFlash" rows="3" placeholder="One message per line…" style="font-size:13px" onchange="saveTabFlash(this.value)"></textarea>
+      <div class="row" style="margin-top:8px;gap:6px;align-items:center">
+        <label class="sub" style="margin:0;font-size:12px">Every</label>
+        <input type="number" id="setTabFlashEvery" min="0" max="200" style="max-width:62px;font-size:13px" onchange="S.tabFlashEvery=Math.max(0,+this.value||0);saveState()">
+        <span class="sub" style="margin:0;font-size:12px">clicks</span>
+        <button class="btn ghost" style="padding:2px 10px;font-size:12px" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test</button>
+      </div>
     </div>
   </div>
 </section>
@@ -2455,7 +2461,18 @@ const RESET_TRASH = [
 function saveMockTrash(val){ S.mockTrash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 /* ---- full-screen flash on every Nth tab click (lines are yours to write in Settings) ---- */
 const TAB_FLASH_MS = 1700;
-let tabClicks = 0, tabFlashTimer = null;
+const TAB_FLASH_HASH = 3840915728;   /* passcode 'bbl-flash' — change by setting this to hashStr('yournewpass') */
+let tabClicks = 0, tabFlashTimer = null, tabFlashUnlocked = false;
+function toggleTabFlashLock(){
+  const panel=document.getElementById('tabFlashPanel'), btn=document.getElementById('tfLockBtn');
+  if(tabFlashUnlocked){ tabFlashUnlocked=false; panel.style.display='none'; btn.textContent='Unlock'; return; }
+  const pass=window.prompt('Passcode:');
+  if(pass===null) return;
+  if(hashStr(pass.trim())!==TAB_FLASH_HASH){ toast('Wrong passcode.'); return; }
+  tabFlashUnlocked=true; panel.style.display='block'; btn.textContent='Lock';
+  const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
+  const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
+}
 function saveTabFlash(val){ S.tabFlash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 function flashTab(text){
   const ov=document.getElementById('tabFlash'), el=document.getElementById('tabFlashText');
@@ -3962,7 +3979,7 @@ function renderSettings(){
   renderPrizes();
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
-  { const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
+  if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
     const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18); }
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
