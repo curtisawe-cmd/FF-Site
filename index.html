@@ -873,6 +873,18 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
         <button class="btn ghost" onclick="trashTalk()">Test animation</button>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Tab Flash</h2>
+      <p class="sub" style="margin-bottom:10px">Slams a full-screen message for 1.7s on every Nth tab click. One line per message — type whatever you want. Leave blank to turn it off.</p>
+      <textarea id="setTabFlash" rows="6" placeholder="One message per line…" onchange="saveTabFlash(this.value)"></textarea>
+      <div class="row" style="margin-top:10px;gap:8px;align-items:center">
+        <label class="sub" style="margin:0">Every</label>
+        <input type="number" id="setTabFlashEvery" min="0" max="200" style="max-width:80px" onchange="S.tabFlashEvery=Math.max(0,+this.value||0);saveState()">
+        <span class="sub" style="margin:0">clicks (0 = off)</span>
+        <button class="btn ghost" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test flash</button>
+      </div>
+    </div>
   </div>
 
   <div class="card" id="commishCard" style="margin-bottom:18px;display:none">
@@ -1039,6 +1051,17 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     <button class="auth-primary" onclick="submitClaim()">Claim this team</button>
   </div>
 </div>
+<style>
+.tabflash{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;pointer-events:none;background:rgba(4,10,26,.55)}
+.tabflash.on{display:flex;animation:tfIn .18s ease-out}
+.tabflash span{font-family:Anton,sans-serif;text-transform:uppercase;text-align:center;line-height:.95;
+  font-size:clamp(40px,11vw,140px);color:#fff;letter-spacing:.02em;padding:0 18px;
+  text-shadow:0 0 24px var(--charge,#c60c30), 0 6px 0 rgba(0,0,0,.35);animation:tfPop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes tfIn{from{opacity:0}to{opacity:1}}
+@keyframes tfPop{0%{transform:scale(.6) rotate(-4deg)}60%{transform:scale(1.06) rotate(1.5deg)}100%{transform:scale(1) rotate(0)}}
+@media (prefers-reduced-motion:reduce){.tabflash.on,.tabflash span{animation:none}}
+</style>
+<div class="tabflash" id="tabFlash" aria-hidden="true"><span id="tabFlashText"></span></div>
 <div class="applybar" id="applyBar">
   <span class="msg">You've changed settings — not applied yet.</span>
   <button class="btn ghost" onclick="discardSettings()">Discard</button>
@@ -1098,6 +1121,8 @@ const DEFAULTS = {
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
+  tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
+  tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -2428,6 +2453,24 @@ const RESET_TRASH = [
   ["Cry about it","then make the pick"]
 ];
 function saveMockTrash(val){ S.mockTrash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+/* ---- full-screen flash on every Nth tab click (lines are yours to write in Settings) ---- */
+const TAB_FLASH_MS = 1700;
+let tabClicks = 0, tabFlashTimer = null;
+function saveTabFlash(val){ S.tabFlash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+function flashTab(text){
+  const ov=document.getElementById('tabFlash'), el=document.getElementById('tabFlashText');
+  const lines=(S.tabFlash||[]).filter(Boolean);
+  const msg = text || (lines.length ? lines[Math.floor(Math.random()*lines.length)] : '');
+  if(!ov||!el||!msg) return;
+  el.textContent = msg; ov.classList.add('on');
+  clearTimeout(tabFlashTimer);
+  tabFlashTimer = setTimeout(()=>ov.classList.remove('on'), TAB_FLASH_MS);
+}
+function noteTabClick(){
+  const every = +S.tabFlashEvery||0;
+  if(!every || !(S.tabFlash||[]).length) return;
+  if(++tabClicks % every === 0) flashTab();
+}
 function mockTrashLines(){
   if(S.mockTrash && S.mockTrash.length) return S.mockTrash.map(s=>{ const i=s.indexOf('|'); return i>=0 ? [s.slice(0,i).trim(), s.slice(i+1).trim()] : [s.trim(), '']; });
   return RESET_TRASH;
@@ -2691,7 +2734,8 @@ function showView(v){
   if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
   updateApplyBar();
 }
-document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>showView(b.dataset.view)));
+document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{ noteTabClick(); showView(b.dataset.view); }));
+document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
 
 function renderHome(){
   document.getElementById('homeLeagueName').textContent = S.leagueName;
@@ -3918,6 +3962,8 @@ function renderSettings(){
   renderPrizes();
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
+  { const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
+    const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18); }
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
