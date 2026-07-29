@@ -2763,6 +2763,7 @@ function showView(v){
   if(v==='chat') initChat();
   if(v==='polls') renderPolls();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
+  if(v==='settings'){ renderCommishCard(); }   /* member list arrives async — re-render on every visit */
   if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
   updateApplyBar();
 }
