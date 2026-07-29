@@ -282,6 +282,13 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .applybar{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;justify-content:center;gap:16px;padding:12px 18px;background:var(--panel-2,#0e1f3d);border-top:2px solid var(--turf);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
 .applybar.on{display:flex}
 .applybar .msg{color:var(--chalk);font-weight:600;font-size:14px}
+/* nav tab alert badge */
+nav.tabs button{position:relative}
+.tabbadge{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;margin-left:6px;
+  border-radius:999px;background:var(--charge);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
+  vertical-align:middle;box-shadow:0 0 0 2px rgba(198,12,48,.25);animation:badgePop .25s ease-out}
+@keyframes badgePop{from{transform:scale(.4)}to{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.tabbadge{animation:none}}
 /* commissioner on/off switch */
 .cswitch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
 .cswitch input{position:absolute;opacity:0;width:0;height:0}
@@ -1882,8 +1889,8 @@ function startLeagueSync(){
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
-  window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{}; if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
-  window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{}; noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
 }
 function syncDraftModeToggle(){
@@ -2005,7 +2012,7 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); if(window.currentView==='trades') renderOffers(); }catch(e){} }, 60000);
+setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); if(window.currentView==='trades') renderOffers(); }catch(e){} }, 60000);
 /* injury designation badge from Sleeper injury_status */
 function injBadge(inj, body){
   if(!inj) return '';
@@ -2717,6 +2724,7 @@ function initClaims(){
   window.FB.dbGet('managers/'+myUid()).then(rec=>{
     window.myClaim = rec || null;
     updateClaimBadge();
+    try{ updateTradeBadge(); }catch(e){}   /* badge depends on which team is yours */
     if(!isAdmin() && (!rec || !Number.isInteger(rec.teamIndex))) openClaim();  /* first-time manager: prompt */
   }).catch(()=>{});
 }
@@ -3683,6 +3691,40 @@ function finalizeOffer(id, silent){
 function maybeFinalizeTrades(){
   Object.keys(offersMap||{}).forEach(id=>{ const o=offersMap[id];
     if(o && o.status==='accepted' && Date.now()>=reviewEndsAt(o)) finalizeOffer(id, true); });
+}
+/* ---- trade alerts: badge on the Trades tab + a toast when a new offer lands ---- */
+let seenOfferIds = null;
+function tradeAlertCount(){
+  if(!window.fbUser) return 0;
+  const mine = myTeamIndex();
+  let n = 0;
+  Object.keys(offersMap||{}).forEach(id=>{
+    const o = offersMap[id]; if(!o) return;
+    if(o.status==='pending' && Number.isInteger(mine) && o.b===mine) n++;          /* waiting on you */
+    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)) n++;            /* league review open */
+  });
+  return n;
+}
+function updateTradeBadge(){
+  const btn = document.querySelector('nav.tabs button[data-view="trades"]'); if(!btn) return;
+  if(!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
+  const n = tradeAlertCount();
+  const cur = btn.querySelector('.tabbadge');
+  if(!n){ if(cur) btn.innerHTML = btn.dataset.label; return; }
+  if(cur && cur.textContent === String(n)) return;                                 /* no needless re-animation */
+  btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${n}</span>`;
+}
+function noticeNewOffers(){
+  const ids = Object.keys(offersMap||{});
+  if(seenOfferIds === null){ seenOfferIds = new Set(ids); updateTradeBadge(); return; }   /* first load: no catch-up spam */
+  const mine = myTeamIndex();
+  ids.forEach(id=>{
+    if(seenOfferIds.has(id)) return;
+    seenOfferIds.add(id);
+    const o = offersMap[id]; if(!o || o.status!=='pending' || !window.fbUser) return;
+    if(Number.isInteger(mine) && o.b===mine) toast(`📨 ${o.aName} sent you a trade offer`);
+  });
+  updateTradeBadge();
 }
 function renderOffers(){
   const el=document.getElementById('offersView'); if(!el) return;
