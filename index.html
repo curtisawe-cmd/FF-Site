@@ -3653,6 +3653,7 @@ function tradeToggleRound(side, round){
 /* a team still controls its own round-R pick for a given year unless already traded that year */
 function ownsPick(teamName, round, year){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName && pickYearOf(t)===+year); }
 function tradeSetTeam(side, ti){
+  window.tradeSel._defaulted = true;      /* an explicit pick wins over the starting default */
   window.tradeSel[side] = +ti;
   window.tradeSel[side==='a'?'pa':'pb'] = new Set();
   window.tradeSel[side==='a'?'ra':'rb'] = new Set();
@@ -3762,6 +3763,7 @@ function rejectOffer(id){
 function counterOffer(id){
   const o=offersMap[id]; if(!o||!offerCanAccept(o)) return;
   const T=window.tradeSel;
+  T._defaulted = true;                    /* countering sets both sides deliberately */
   T.a=o.b; T.b=o.a;                       /* you become the proposer */
   T.pa=new Set(o.pb||[]); T.pb=new Set(o.pa||[]);
   T.ra=new Set((o.rb||[]).map(Number)); T.rb=new Set((o.ra||[]).map(Number));
@@ -3900,6 +3902,12 @@ function renderTradeCenter(){
   /* a manager always trades FROM their own team: left side is locked, only the right side is choosable */
   const mineIdx = myTeamIndex();
   const lockLeft = !isAdmin() && Number.isInteger(mineIdx) && !!S.teams[mineIdx];
+  /* commissioners keep both dropdowns, but the left one starts on their own team */
+  if(isAdmin() && !T._defaulted && Number.isInteger(mineIdx) && S.teams[mineIdx]){
+    T.a = mineIdx; T.pa = new Set(); T.ra = new Set();
+    if(T.b===mineIdx){ T.b=(mineIdx+1)%N(); T.pb=new Set(); T.rb=new Set(); }
+    T._defaulted = true;                                  /* one time only — never fight a manual pick */
+  }
   if(lockLeft){
     if(T.a!==mineIdx){ T.a=mineIdx; T.pa=new Set(); T.ra=new Set(); }
     if(T.b===mineIdx){ const alt=(mineIdx+1)%N(); T.b=alt; T.pb=new Set(); T.rb=new Set(); }
