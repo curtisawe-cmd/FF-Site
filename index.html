@@ -1874,7 +1874,7 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/draft`, (remote)=>{
     if(remote==null || draftMode!=='real') return;
     applyingRemote = true;
-    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileTeamData(); reRenderLive(); }catch(e){}
+    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileMoves(); reconcileTeamData(); reRenderLive(); }catch(e){}
     applyingRemote = false;
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamData`, (m)=>{
@@ -1885,6 +1885,13 @@ function startLeagueSync(){
       reconcileTeamData(); reRenderLive();
     }catch(e){}
     applyingRemote = false;
+  });
+  window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
+    movesMap = m||{};
+    applyingRemote = true;
+    try{ if(draftMode==='real'){ D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileMoves(); reconcileTeamData(); reRenderLive(); } }catch(e){}
+    applyingRemote = false;
+    setTimeout(()=>{ try{ commitMoves(); }catch(e){} }, 0);   /* commish bakes them into the draft */
   });
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
@@ -2715,6 +2722,50 @@ function reconcileTeamData(){
     if(td.lineup && typeof td.lineup==='object'){ S.lineups = S.lineups||{}; S.lineups[ti] = td.lineup; }
     if(S.teams[ti] && ('logo' in td)){ if(td.logo) S.teams[ti].logo = td.logo; else delete S.teams[ti].logo; }
   }); }catch(e){}
+}
+/* ---- manager add/drop sync as ADDITIVE MOVES ----
+   Rosters come from the draft board (commissioner-only). Managers can't write it, so their
+   add/drops are recorded as individual moves and replayed on top of the draft. Never a whole-roster
+   snapshot — that's what previously wiped live draft picks. ---- */
+let movesMap = {}, lastAppliedMoveIds = [];
+function movesPath(){ return `league/${LEAGUE_ID}/teamMoves`; }
+function reconcileMoves(){
+  lastAppliedMoveIds = [];
+  if(draftMode!=='real') return;                       /* mock board is local-only */
+  const all=[];
+  Object.keys(movesMap||{}).forEach(ti=>Object.keys(movesMap[ti]||{}).forEach(mid=>{
+    const m=(movesMap[ti]||{})[mid]; if(m) all.push({...m, ti:+ti, mid});
+  }));
+  all.sort((a,b)=>(a.at||0)-(b.at||0));                /* replay in the order they happened */
+  all.forEach(m=>{
+    if(!Array.isArray(D.picks)) D.picks=[];
+    if(m.type==='drop'){
+      D.picks = D.picks.filter(p=>!(p.teamIndex===m.ti && p.playerId===m.playerId));
+      if(S.lineups && S.lineups[m.ti]) delete S.lineups[m.ti][m.playerId];
+    } else if(m.type==='add'){
+      if(!D.picks.some(p=>p.playerId===m.playerId)){    /* never duplicate or steal a rostered player */
+        D.picks.push({ pickIndex:-1, teamIndex:m.ti, playerId:m.playerId, name:m.name, pos:m.pos, nfl:m.nfl, auto:false, add:true });
+      }
+    }
+    lastAppliedMoveIds.push(`${m.ti}/${m.mid}`);
+  });
+}
+/* managers record a move; the commissioner edits the draft directly, so they skip this */
+function pushMove(ti, type, p){
+  if(!fbOk() || !window.fbUser || isAdmin() || !canEditTeam(ti)) return;
+  const mid='m'+Date.now()+Math.random().toString(36).slice(2,6);
+  try{ window.FB.dbSet(`${movesPath()}/${ti}/${mid}`, {
+    type, playerId:String(p.playerId||p.id||''), name:p.name||'', pos:p.pos||'', nfl:p.nfl||p.team||'',
+    at:Date.now(), by:window.fbUser.uid }).catch(()=>{}); }catch(e){}
+}
+/* commissioner folds pending moves into the draft board, then clears them */
+async function commitMoves(){
+  if(!isAdmin() || !fbOk() || !lastAppliedMoveIds.length || draftMode!=='real') return;
+  const ids = lastAppliedMoveIds.slice();
+  try{
+    saveDraft();                                        /* D already has the moves replayed */
+    for(const key of ids) await window.FB.dbRemove(`${movesPath()}/${key}`).catch(()=>{});
+  }catch(e){}
 }
 function pushTeamData(ti){
   if(!fbOk() || !canEditTeam(ti)) return;
@@ -3881,8 +3932,9 @@ function dropPlayer(ti, pid){
   if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
   D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===pid));
   if(S.lineups[ti]) delete S.lineups[ti][pid];
-  saveDraft(); saveState(); pushTeamData(ti);
+  saveDraft(); saveState(); pushTeamData(ti); pushMove(ti,'drop',p);
   renderTeams(); refreshDraftUI();
+  if(window.currentView==='players') renderPlayers();
   toast(`Dropped ${p.name}`);
 }
 function addPlayer(ti, pid){
@@ -3892,7 +3944,7 @@ function addPlayer(ti, pid){
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
-  saveDraft(); pushTeamData(ti);
+  saveDraft(); pushTeamData(ti); pushMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
   toast(`Added ${p.name}`);
@@ -3923,11 +3975,14 @@ function addWithDrop(ti, pid){
 }
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
+  const dropped = D.picks.find(x=>x.teamIndex===ti && x.playerId===dropPid);
   D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===dropPid));
   if(S.lineups[ti]) delete S.lineups[ti][dropPid];
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
   if(p) D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveDraft(); saveState(); pushTeamData(ti);
+  if(dropped) pushMove(ti,'drop',dropped);
+  if(p) pushMove(ti,'add',{playerId:addPid, name:p.name, pos:p.pos, nfl:p.team});
   const ov=document.getElementById('swapModal'); if(ov) ov.style.display='none';
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
