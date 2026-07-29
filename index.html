@@ -942,7 +942,7 @@ body.has-ticker .applybar{bottom:38px}
       <div class="setrow"><label title="Most draft picks a manager may acquire through trades. 0 = no limit.">Max traded picks / mgr</label><input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()"></div>
       <div class="setrow"><label title="Split the league into divisions. Assign each team a division below.">Divisions</label><select id="setDivisions" onchange="S.divisions=+this.value;saveState();renderSettings();renderHome()"><option value="0">None</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
       <div class="setrow"><label title="Scrolling score bar at the bottom of the screen while a week is being scored.">Live score ticker</label><input type="checkbox" id="setTicker" style="width:auto" onchange="S.tickerOff=!this.checked;saveState();window.tickerHidden=false;renderTicker()"></div>
-      <div class="setrow"><label title="While a commissioner has the app open during a live NFL week, scores refresh from the stat feed every 15 minutes.">Auto-score weekly</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
+      <div class="setrow"><label title="During a live NFL week, any member's open app refreshes the live scoreboard from the stat feed (about every 5 minutes). Commissioner scores stay official.">Live auto-scoring</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
     </div>
   </div>
 
@@ -1970,6 +1970,10 @@ function startLeagueSync(){
       reconcileTeamData(); reRenderLive();
     }catch(e){}
     applyingRemote = false;
+  });
+  window.FB.dbOn(`league/${LEAGUE_ID}/liveScores`, (m)=>{
+    liveScoresMap = m||{};
+    try{ renderTicker(); if(window.currentView==='matchups') renderMatchups(); renderHome(); }catch(e){}
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
     movesMap = m||{};
@@ -3697,7 +3701,22 @@ function genSchedule(){
   S.season = { year: (+S.draftYear||2026), schedule, scores: {} };
   saveState();
 }
-function mScore(wk,m){ return (S.season.scores[wk]&&S.season.scores[wk][m]) || [null,null]; }
+/* ---- two tiers of score: commissioner-official (final) and crowd-computed live (provisional) ----
+   Any signed-in member's device can post live scores, so the board stays current whenever
+   anyone in the league has the app open. Official scores always win. ---- */
+let liveScoresMap = {};                                  /* {week: {m:[a,b], at, by, season}} */
+function livePath(){ return `league/${LEAGUE_ID}/liveScores`; }
+function officialScore(wk,m){
+  const v = (S.season && S.season.scores && S.season.scores[wk] && S.season.scores[wk][m]) || null;
+  return (Array.isArray(v) && (v[0]!=null || v[1]!=null)) ? v : null;
+}
+function liveScoreOf(wk,m){
+  const w = liveScoresMap && liveScoresMap[wk]; if(!w) return null;
+  const v = w[m]; return (Array.isArray(v) && (v[0]!=null || v[1]!=null)) ? v : null;
+}
+function mScore(wk,m){ return officialScore(wk,m) || liveScoreOf(wk,m) || [null,null]; }
+function isLiveScore(wk,m){ return !officialScore(wk,m) && !!liveScoreOf(wk,m); }
+function liveStamp(wk){ const w=liveScoresMap&&liveScoresMap[wk]; return w? (+w.at||0) : 0; }
 /* =====================================================
    Live score ticker
 ===================================================== */
@@ -3709,9 +3728,9 @@ function currentNflWeek(){
   return (w>=1 && w<=REG_WEEKS) ? w : 0;
 }
 function weekHasScores(w){
-  const g = (S.season && S.season.scores && S.season.scores[w]) || null;
-  if(!g) return false;
-  return Object.keys(g).some(k=>(g[k]||[]).some(v=>v!=null && v!==''));
+  const any = obj => obj && Object.keys(obj).some(k=>Array.isArray(obj[k]) && obj[k].some(v=>v!=null && v!==''));
+  return any((S.season && S.season.scores && S.season.scores[w]) || null)
+      || any((liveScoresMap && liveScoresMap[w]) || null);
 }
 /* the week the ticker should show: this week if it's scoring, else the latest week that did */
 function tickerWeek(){
@@ -3754,16 +3773,31 @@ async function autoScoreWeek(wk, statSeason, silent){
     if(btn){ btn.disabled = false; btn.textContent = 'Auto-score from NFL stats'; }
   }
 }
-/* hands-off scoring: while a commissioner has the app open during a live week,
-   refresh that week's scores on a throttle. Server-side cron would need Firebase
-   credentials the app can't hold, so this runs in the commissioner's browser. */
-const AUTOSCORE_EVERY_MS = 15*60*1000;
+/* compute a week and publish it as LIVE (provisional) scores — any signed-in member may do this,
+   so whoever has the app open keeps the board current for everyone. */
+async function postLiveScores(wk, season){
+  if(!fbOk() || !window.fbUser || !S.season || !S.season.schedule) return false;
+  const games = S.season.schedule[wk] || []; if(!games.length) return false;
+  const stats = await fetchWeekStats(+season || +S.season.year || 2026, wk);
+  if(!stats || !Object.keys(stats).length) return false;
+  const payload = { at: Date.now(), by: window.fbUser.uid, season: +season || +S.season.year || 2026 };
+  games.forEach((g,m)=>{ payload[m] = [ teamWeekDetail(g[0],stats).total, teamWeekDetail(g[1],stats).total ]; });
+  await window.FB.dbSet(`${livePath()}/${wk}`, payload);
+  return true;
+}
+/* hands-off scoring: any member's open app refreshes the live board on a throttle.
+   The throttle reads the SHARED timestamp, so 12 devices don't all hammer the feed —
+   whoever gets there first covers everyone. */
+const AUTOSCORE_EVERY_MS = 5*60*1000;
+let autoScoreBusy = false;
 async function maybeAutoScore(){
-  if(S.autoScoreOff || !isAdmin() || !S.season || !S.season.schedule) return;
-  const wk = currentNflWeek(); if(!wk) return;                      /* offseason: nothing to do */
-  const last = (((S.season.autoScored||{})[wk])||{}).at || 0;
-  if(Date.now()-last < AUTOSCORE_EVERY_MS) return;
-  await autoScoreWeek(wk, S.season.year, true);
+  if(S.autoScoreOff || autoScoreBusy || !window.fbUser || !S.season || !S.season.schedule) return;
+  const wk = currentNflWeek(); if(!wk) return;                       /* offseason: nothing to do */
+  if(Date.now() - liveStamp(wk) < AUTOSCORE_EVERY_MS) return;        /* someone refreshed it recently */
+  autoScoreBusy = true;
+  try{ await postLiveScores(wk, S.season.year); }
+  catch(e){}
+  finally{ autoScoreBusy = false; }
 }
 function dismissTicker(){ window.tickerHidden = true; renderTicker(); }
 function renderTicker(){
@@ -3788,7 +3822,9 @@ function renderTicker(){
   }).filter(Boolean);
   if(!items.length) return hide();
   const lbl=document.getElementById('tickerLabel');
-  if(lbl) lbl.textContent = (currentNflWeek()===wk) ? `Live · Wk ${wk}` : `Wk ${wk}`;
+  const anyLive = games.some((g,m)=>isLiveScore(wk,m));
+  if(lbl) lbl.textContent = (currentNflWeek()===wk && anyLive) ? `Live · Wk ${wk}`
+                          : (currentNflWeek()===wk ? `Wk ${wk}` : `Final · Wk ${wk}`);
   move.innerHTML = items.join('') + items.join('');   /* duplicated so the loop is seamless */
   bar.classList.add('on'); document.body.classList.add('has-ticker');
 }
@@ -3877,7 +3913,7 @@ function renderMatchups(){
         <button class="btn" id="autoScoreBtn" onclick="autoScoreWeek(${wk}, document.getElementById('statSeason').value)">Auto-score from NFL stats</button>
         <label class="sub" style="margin:0">stats from</label>
         <select id="statSeason" style="max-width:100px">${[2026,2025,2024,2023].map(y=>`<option value="${y}"${y===(+((S.season&&S.season.year))||2026)?' selected':''}>${y}</option>`).join('')}</select>
-        <span class="sub" style="margin:0">Scores every starter with your league's rules.${(S.season.autoScored&&S.season.autoScored[wk])?` Last run ${timeAgo(S.season.autoScored[wk].at)} from ${S.season.autoScored[wk].season} stats.`:''}</span>
+        <span class="sub" style="margin:0">Locks these in as the official scores.${(S.season.autoScored&&S.season.autoScored[wk])?` Last run ${timeAgo(S.season.autoScored[wk].at)} from ${S.season.autoScored[wk].season} stats.`:''}${liveStamp(wk)?` Live board updated ${timeAgo(liveStamp(wk))}.`:''}</span>
       </div>
       ${games.map((g,m)=>{
         const [pa,pb] = mScore(wk,m);
