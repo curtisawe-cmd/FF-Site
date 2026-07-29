@@ -1894,7 +1894,8 @@ function startLeagueSync(){
     setTimeout(()=>{ try{ commitMoves(); }catch(e){} }, 0);   /* commish bakes them into the draft */
   });
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
-  window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
+  window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
+    try{ updateChatBadge(); updateTradeBadge(); }catch(e){} });   /* another device may have advanced your read marks */
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{};
@@ -3017,9 +3018,24 @@ let chatStarted = false;
 function chatPath(){ return `league/${LEAGUE_ID}/chat`; }
 /* ---- per-account "read up to" marks (per device) so badges clear once you've looked ---- */
 function seenKey(kind){ const u=(window.fbUser&&window.fbUser.uid)||'anon'; return `ffl_seen_${kind}_${u}`; }
-function getSeen(kind){ const v=+store.get(seenKey(kind)); return isFinite(v)&&v>0 ? v : 0; }
+/* read marks live on your account (managers/{uid}/seen) so they follow you across devices */
+function remoteSeen(kind){
+  const uid = window.fbUser && window.fbUser.uid; if(!uid) return 0;
+  const rec = (managersMap||{})[uid] || {};
+  return +(((rec.seen)||{})[kind]) || 0;
+}
+function getSeen(kind){
+  const local = +store.get(seenKey(kind));
+  return Math.max(isFinite(local)&&local>0 ? local : 0, remoteSeen(kind));   /* newest wins — reading anywhere clears everywhere */
+}
 /* clamp past the newest item on screen too, so a device with a fast clock can't leave a stuck badge */
-function markSeen(kind, floor){ try{ store.set(seenKey(kind), String(Math.max(Date.now(), +floor||0))); }catch(e){} }
+function markSeen(kind, floor){
+  const v = Math.max(Date.now(), +floor||0);
+  try{ store.set(seenKey(kind), String(v)); }catch(e){}                       /* local first: works offline */
+  if(fbOk() && window.fbUser){
+    try{ window.FB.dbSet(`managers/${window.fbUser.uid}/seen/${kind}`, v).catch(()=>{}); }catch(e){}
+  }
+}
 function chatMaxTs(){ return (chatMsgs||[]).reduce((mx,m)=>Math.max(mx, +((m||{}).t)||0), 0); }
 function tradeMaxTs(){ let mx=0; Object.keys(offersMap||{}).forEach(k=>{ const o=offersMap[k]; if(!o) return;
   mx=Math.max(mx, +o.createdAt||0, +o.acceptedAt||0); }); return mx; }
