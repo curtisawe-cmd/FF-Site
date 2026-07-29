@@ -282,9 +282,14 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .setrow label{color:var(--chalk-dim);font-size:14px}
 #view-settings{max-width:940px;margin-left:auto;margin-right:auto}
 #view-settings .setrow input[type=number]{max-width:100px}
-.applybar{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;justify-content:center;gap:16px;padding:12px 18px;background:var(--panel-2,#0e1f3d);border-top:2px solid var(--turf);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
+/* floats just under the sticky header, top-left — never over the bottom edge */
+.applybar{position:fixed;left:16px;top:calc(var(--hdr-h,72px) + 12px);z-index:95;display:none;
+  align-items:center;gap:12px;padding:10px 14px;border-radius:12px;
+  background:var(--panel-2,#0e1f3d);border:2px solid var(--turf);
+  box-shadow:0 12px 30px rgba(0,0,0,.42);max-width:calc(100vw - 32px);flex-wrap:wrap}
 .applybar.on{display:flex}
 .applybar .msg{color:var(--chalk);font-weight:600;font-size:14px}
+@media (max-width:520px){ .applybar{left:10px;right:10px;max-width:none} }
 /* nav tab alert badge */
 nav.tabs button{position:relative}
 .tabbadge{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;margin-left:6px;
@@ -697,7 +702,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
 body.has-ticker{padding-bottom:38px}
-body.has-ticker .applybar{bottom:38px}
+/* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
   .ticker-move{animation:none}
   .ticker-track{overflow-x:auto}      /* swipe/scroll it manually instead */
