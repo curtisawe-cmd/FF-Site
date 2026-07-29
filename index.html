@@ -2018,7 +2018,9 @@ function startLeagueSync(){
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/liveScores`, (m)=>{
     liveScoresMap = m||{};
-    try{ renderTicker(); if(window.currentView==='matchups') renderMatchups(); renderHome(); }catch(e){}
+    try{ renderTicker(); renderHome();
+      if(window.currentView==='matchups'){ renderMatchups(); if(window.muTab==='gc') renderGameCenter(); }
+    }catch(e){}
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
     movesMap = m||{};
@@ -2157,7 +2159,12 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); if(window.currentView==='trades') renderOffers(); maybeAutoScore(); }catch(e){} }, 60000);
+setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
+  if(window.currentView==='trades') renderOffers();
+  maybeAutoScore();
+  /* Game Center pulls fresh stats itself (5-min TTL on the live week) */
+  if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
+}catch(e){} }, 60000);
 /* injury designation badge from Sleeper injury_status */
 function injBadge(inj, body){
   if(!inj) return '';
@@ -2349,15 +2356,24 @@ function scoreWeekStats(st, pos){
   return Math.round(p*100)/100;
 }
 /* cache of fetched week stats, keyed "season-week" */
-const WEEK_STATS = {};
-async function fetchWeekStats(season, week){
+const WEEK_STATS = {};                      /* key -> {at, data} */
+const STATS_TTL_MS = 5*60*1000;             /* only the in-progress week goes stale */
+async function fetchWeekStats(season, week, force){
   const key = `${season}-${week}`;
-  if(WEEK_STATS[key]) return WEEK_STATS[key];
-  const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${season}/${week}`);
-  if(!r.ok) throw new Error('HTTP '+r.status);
-  const d = await r.json();
-  WEEK_STATS[key] = d || {};
-  return WEEK_STATS[key];
+  const hit = WEEK_STATS[key];
+  const liveWeek = (+season === +((S.season&&S.season.year)||0)) && (+week === currentNflWeek());
+  const fresh = hit && (!liveWeek || (Date.now()-hit.at < STATS_TTL_MS));
+  if(hit && fresh && !force) return hit.data;          /* finished weeks are final — cache them for good */
+  try{
+    const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${season}/${week}`);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const d = await r.json();
+    WEEK_STATS[key] = { at: Date.now(), data: d || {} };
+    return WEEK_STATS[key].data;
+  }catch(e){
+    if(hit) return hit.data;                           /* network blip: keep showing what we had */
+    throw e;
+  }
 }
 /* starters for a team (bench + IR excluded) */
 function starterPicks(ti){
@@ -3841,6 +3857,12 @@ function gcGoTo(i){
   const sc=document.getElementById('gcScroll'); if(!sc) return;
   sc.scrollTo({ left: i * sc.clientWidth, behavior:'smooth' });
 }
+/* force a fresh pull even if the cache is still warm */
+async function refreshGameCenter(){
+  const wk=+(window.muWeek||1), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
+  try{ await fetchWeekStats(season, wk, true); }catch(e){}
+  renderGameCenter();
+}
 async function renderGameCenter(){
   const el=document.getElementById('gcView'); if(!el) return;
   if(!S.season || !S.season.schedule){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No schedule yet.</p></div>`; return; }
@@ -3854,10 +3876,15 @@ async function renderGameCenter(){
       <button class="btn ghost" ${wk>=REG_WEEKS?'disabled':''} onclick="window.muWeek=${wk+1};renderGameCenter();renderMatchups()">▶</button>
       <label class="sub" style="margin:0">stats from</label>
       <select onchange="window.gcSeason=+this.value;renderGameCenter()">${[2026,2025,2024,2023].map(y=>`<option value="${y}"${y===season?' selected':''}>${y}</option>`).join('')}</select>
-      <span class="sub" style="margin:0">Swipe or use ◀ ▶ to move between matchups.</span>
+      <span class="sub" style="margin:0">Swipe or use ◀ ▶ to move between matchups. · <a href="#" class="poolrefresh" onclick="refreshGameCenter();return false">refresh now</a></span>
     </div>`;
   if(!games.length){ el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">No matchups in week ${wk}.</p></div>`; return; }
-  el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">Loading player stats…</p></div>`;
+  /* keep the panel you're on (and skip the loading flash) when refreshing the same week */
+  const gcKey = `${season}-${wk}`;
+  const sameView = (window._gcKey === gcKey) && el.querySelector('.gc-card');
+  const keepLeft = sameView ? (document.getElementById('gcScroll')||{}).scrollLeft || 0 : 0;
+  window._gcKey = gcKey;
+  if(!sameView) el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">Loading player stats…</p></div>`;
   let stats;
   try{ stats = await fetchWeekStats(season, wk); }
   catch(e){ el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">Couldn't reach the NFL stat feed. <a href="#" class="poolrefresh" onclick="renderGameCenter();return false">retry</a></p></div>`; return; }
@@ -3911,10 +3938,13 @@ async function renderGameCenter(){
     </div>
     <div class="gc-dots">${games.map((g,i)=>`<button class="gc-dot${i===0?' on':''}" onclick="gcGoTo(${i})" aria-label="Matchup ${i+1}"></button>`).join('')}</div>`;
   const sc=document.getElementById('gcScroll');
-  if(sc) sc.addEventListener('scroll', ()=>{
-    const i=Math.round(sc.scrollLeft/Math.max(1,sc.clientWidth));
-    document.querySelectorAll('.gc-dot').forEach((d,j)=>d.classList.toggle('on', j===i));
-  }, {passive:true});
+  if(sc){
+    if(keepLeft){ sc.scrollLeft = keepLeft; }                       /* stay on the matchup you were reading */
+    const syncDots = ()=>{ const i=Math.round(sc.scrollLeft/Math.max(1,sc.clientWidth));
+      document.querySelectorAll('.gc-dot').forEach((d,j)=>d.classList.toggle('on', j===i)); };
+    sc.addEventListener('scroll', syncDots, {passive:true});
+    syncDots();
+  }
 }
 /* commissioner: compute every matchup in a week from real NFL stats and write the scores */
 async function autoScoreWeek(wk, statSeason, silent){
