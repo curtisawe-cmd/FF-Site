@@ -942,6 +942,7 @@ body.has-ticker .applybar{bottom:38px}
       <div class="setrow"><label title="Most draft picks a manager may acquire through trades. 0 = no limit.">Max traded picks / mgr</label><input type="number" id="setMaxPicks" min="0" max="60" placeholder="no limit" title="0 = no limit" onchange="saveFromInputs()"></div>
       <div class="setrow"><label title="Split the league into divisions. Assign each team a division below.">Divisions</label><select id="setDivisions" onchange="S.divisions=+this.value;saveState();renderSettings();renderHome()"><option value="0">None</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
       <div class="setrow"><label title="Scrolling score bar at the bottom of the screen while a week is being scored.">Live score ticker</label><input type="checkbox" id="setTicker" style="width:auto" onchange="S.tickerOff=!this.checked;saveState();window.tickerHidden=false;renderTicker()"></div>
+      <div class="setrow"><label title="While a commissioner has the app open during a live NFL week, scores refresh from the stat feed every 15 minutes.">Auto-score weekly</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
     </div>
   </div>
 
@@ -2107,7 +2108,7 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); if(window.currentView==='trades') renderOffers(); }catch(e){} }, 60000);
+setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); if(window.currentView==='trades') renderOffers(); maybeAutoScore(); }catch(e){} }, 60000);
 /* injury designation badge from Sleeper injury_status */
 function injBadge(inj, body){
   if(!inj) return '';
@@ -2245,6 +2246,85 @@ function renderBreakdown(id){
   <p class="sub" style="font-size:12px;margin-top:8px">Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.</p>`;
 }
 function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || null; }
+/* =====================================================
+   Weekly scoring — real Sleeper week stats × your league's rules.
+   Field names verified against live 2024 week data. Unlike the season-total
+   scorer this includes per-game bonuses and full DST scoring.
+===================================================== */
+function scoreWeekStats(st, pos){
+  if(!st) return null;
+  const g=k=>+(st[k]||0), R=S.scoring||{}, v=k=>+(R[k]||0);
+  let p=0;
+  if(pos==='DEF'){
+    p += g('sack')*v("DST sack") + g('int')*v("DST interception")
+       + g('fum_rec')*v("DST fumble recovered") + g('ff')*v("DST fumble forced")
+       + g('safe')*v("DST safety") + g('def_td')*v("DST TD")            /* def_td, NOT td (that's team TDs) */
+       + g('def_st_td')*v("DST kick/punt return TD") + g('def_2pt')*v("DST 2-pt return");
+    const pa=g('pts_allow');
+    if(pa<=0)       p+=v("Points allowed 0");
+    else if(pa<=6)  p+=v("Points allowed 1-6");
+    else if(pa<=13) p+=v("Points allowed 7-13");
+    else if(pa<=20) p+=v("Points allowed 14-20");
+    else if(pa<=27) p+=v("Points allowed 21-27");
+    else if(pa<=34) p+=v("Points allowed 28-34");
+    else            p+=v("Points allowed 35+");
+    const ya=g('yds_allow');
+    if(st.yds_allow!=null){
+      if(ya<100)      p+=v("Under 100 total yds allowed");
+      else if(ya<200) p+=v("100-199 yds allowed");
+      else if(ya>=500)p+=v("500+ yds allowed");
+    }
+    return Math.round(p*100)/100;
+  }
+  /* offense + kicking */
+  p+=g('pass_yd')*v("Passing yards (per yd)")+g('pass_td')*v("Passing TD")+g('pass_int')*v("Interception thrown")+g('pass_sack')*v("Sacked");
+  p+=g('rush_att')*v("Rushing attempt")+g('rush_yd')*v("Rushing yards (per yd)")+g('rush_td')*v("Rushing TD");
+  p+=g('rec')*v("Reception")+g('rec_yd')*v("Receiving yards (per yd)")+g('rec_td')*v("Receiving TD");
+  p+=(g('kr_td')+g('pr_td'))*v("Kick/punt return TD")+g('fum_rec_td')*v("Fumble recovered for TD")+g('fum_lost')*v("Fumble lost");
+  p+=(g('pass_2pt')+g('rush_2pt')+g('rec_2pt'))*v("2-pt conversion");
+  p+=g('xpm')*v("PAT made")+g('xpmiss')*v("PAT missed");
+  p+=g('fgm_0_19')*v("FG 0-19")+g('fgm_20_29')*v("FG 20-29")+g('fgm_30_39')*v("FG 30-39")+g('fgm_40_49')*v("FG 40-49")+g('fgm_50p')*v("FG 50+");
+  p+=g('fgmiss_0_19')*v("FG missed 0-19")+g('fgmiss_20_29')*v("FG missed 20-29");
+  p+=g('rush_fd')*v("Rushing first down")+g('rec_fd')*v("Receiving first down")
+    +g('pass_cmp')*v("Completion")+(g('pass_att')-g('pass_cmp'))*v("Incompletion")+g('pass_int_td')*v("Pick-six thrown");
+  if(pos==='TE') p+=g('rec')*v("TE premium (per reception)");
+  /* per-game bonuses — derived from raw yardage / longest-TD, not Sleeper's bonus flags */
+  const py=g('pass_yd'), ry=g('rush_yd'), cy=g('rec_yd');
+  if(py>=400) p+=v("400+ pass yds bonus"); else if(py>=300) p+=v("300-399 pass yds bonus");
+  if(ry>=200) p+=v("200+ rush yds bonus"); else if(ry>=100) p+=v("100-199 rush yds bonus");
+  if(cy>=200) p+=v("200+ rec yds bonus");
+  if(g('pass_td_lng')>=50) p+=v("50+ yd pass TD bonus");
+  if(g('rush_td_lng')>=50) p+=v("50+ yd rush TD bonus");
+  if(g('rec_td_lng')>=50)  p+=v("50+ yd rec TD bonus");
+  if(Math.max(g('pass_td_lng'),g('rush_td_lng'),g('rec_td_lng'))>=40) p+=v("40+ yd TD bonus");
+  return Math.round(p*100)/100;
+}
+/* cache of fetched week stats, keyed "season-week" */
+const WEEK_STATS = {};
+async function fetchWeekStats(season, week){
+  const key = `${season}-${week}`;
+  if(WEEK_STATS[key]) return WEEK_STATS[key];
+  const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${season}/${week}`);
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const d = await r.json();
+  WEEK_STATS[key] = d || {};
+  return WEEK_STATS[key];
+}
+/* starters for a team (bench + IR excluded) */
+function starterPicks(ti){
+  const lu = ensureLineup(ti);
+  return teamRoster(ti).filter(p=>{ const s=lu[p.playerId]; return s && s!=='BN' && s!=='IR'; });
+}
+/* per-player scores for one team in a week, from fetched stats */
+function teamWeekDetail(ti, stats){
+  const rows = starterPicks(ti).map(p=>{
+    const st = stats[p.playerId];
+    return { playerId:p.playerId, name:p.name, pos:p.pos, nfl:p.nfl, st,
+             pts: st ? (scoreWeekStats(st, p.pos)||0) : null };
+  });
+  const total = rows.reduce((s,r)=>s+(r.pts||0),0);
+  return { rows, total: Math.round(total*100)/100 };
+}
 function openPlayer(id){
   let ov=document.getElementById('playerModal');
   if(!ov){ ov=document.createElement('div'); ov.id='playerModal'; ov.className='pmodal-overlay';
@@ -2731,7 +2811,7 @@ function onFbUser(user){
     if(btn) btn.innerHTML = '<span class="dot"></span>Sign in';
     try{ applyRole(); rerenderRole(); }catch(e){}
   }
-  if(user){ startLeagueSync(); initClaims(); }
+  if(user){ startLeagueSync(); initClaims(); setTimeout(()=>{ try{ maybeAutoScore(); }catch(e){} }, 2500); }
   else { window.myClaim = null; }
   try{ updateChatBadge(); updateTradeBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
 }
@@ -3641,6 +3721,50 @@ function tickerWeek(){
   for(let w=REG_WEEKS; w>=1; w--) if(weekHasScores(w)) return w;
   return 0;
 }
+/* commissioner: compute every matchup in a week from real NFL stats and write the scores */
+async function autoScoreWeek(wk, statSeason, silent){
+  if(silent){ if(!isAdmin()) return; } else if(!requireAdmin()) return;
+  if(!S.season || !S.season.schedule){ if(!silent) toast('No schedule yet.'); return; }
+  wk = +wk || 1;
+  const season = +statSeason || +(S.season.year) || 2026;
+  const games = S.season.schedule[wk] || [];
+  if(!games.length){ if(!silent) toast('No matchups that week.'); return; }
+  const btn = document.getElementById('autoScoreBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Scoring…'; }
+  try{
+    const stats = await fetchWeekStats(season, wk);
+    if(!stats || !Object.keys(stats).length){ if(!silent) toast(`No NFL stats for ${season} week ${wk} yet.`); return; }
+    let scored = 0, missing = 0;
+    S.season.scores[wk] = S.season.scores[wk] || {};
+    games.forEach((g,m)=>{
+      const A = teamWeekDetail(g[0], stats), B = teamWeekDetail(g[1], stats);
+      missing += A.rows.filter(r=>r.pts===null).length + B.rows.filter(r=>r.pts===null).length;
+      S.season.scores[wk][m] = [A.total, B.total];
+      scored++;
+    });
+    S.season.autoScored = S.season.autoScored || {};
+    S.season.autoScored[wk] = { at: Date.now(), season };
+    saveState();
+    if(window.currentView==='matchups') renderMatchups();
+    renderTicker(); renderHome();
+    if(!silent) toast(`Week ${wk} scored from ${season} stats — ${scored} matchups${missing?` · ${missing} starters had no stats` : ''}`);
+  }catch(e){
+    if(!silent) toast("Couldn't reach the NFL stat feed — try again.");
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Auto-score from NFL stats'; }
+  }
+}
+/* hands-off scoring: while a commissioner has the app open during a live week,
+   refresh that week's scores on a throttle. Server-side cron would need Firebase
+   credentials the app can't hold, so this runs in the commissioner's browser. */
+const AUTOSCORE_EVERY_MS = 15*60*1000;
+async function maybeAutoScore(){
+  if(S.autoScoreOff || !isAdmin() || !S.season || !S.season.schedule) return;
+  const wk = currentNflWeek(); if(!wk) return;                      /* offseason: nothing to do */
+  const last = (((S.season.autoScored||{})[wk])||{}).at || 0;
+  if(Date.now()-last < AUTOSCORE_EVERY_MS) return;
+  await autoScoreWeek(wk, S.season.year, true);
+}
 function dismissTicker(){ window.tickerHidden = true; renderTicker(); }
 function renderTicker(){
   const bar=document.getElementById('scoreTicker'), move=document.getElementById('tickerMove');
@@ -3748,6 +3872,12 @@ function renderMatchups(){
           <span class="admin-only" style="display:contents"><button class="btn ghost" onclick="window.muEdit=!window.muEdit;renderMatchups()">${edit?'Done':'Edit matchups'}</button>
           <button class="btn danger" onclick="if(confirm('Throw out the whole schedule and all scores?')){S.season=null;saveState();window.muWeek=1;renderMatchups();}">Regenerate</button></span>
         </div>
+      </div>
+      <div class="row admin-only" style="gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn" id="autoScoreBtn" onclick="autoScoreWeek(${wk}, document.getElementById('statSeason').value)">Auto-score from NFL stats</button>
+        <label class="sub" style="margin:0">stats from</label>
+        <select id="statSeason" style="max-width:100px">${[2026,2025,2024,2023].map(y=>`<option value="${y}"${y===(+((S.season&&S.season.year))||2026)?' selected':''}>${y}</option>`).join('')}</select>
+        <span class="sub" style="margin:0">Scores every starter with your league's rules.${(S.season.autoScored&&S.season.autoScored[wk])?` Last run ${timeAgo(S.season.autoScored[wk].at)} from ${S.season.autoScored[wk].season} stats.`:''}</span>
       </div>
       ${games.map((g,m)=>{
         const [pa,pb] = mScore(wk,m);
@@ -4373,7 +4503,8 @@ function renderSettings(){
   document.getElementById('setMaxPicks').value = maxPicks() || '';
   document.getElementById('setDivisions').value = String(+S.divisions||0);
   { const sy=document.getElementById('seasonYear'); if(sy) sy.textContent=curDraftYear(); }
-  { const tk=document.getElementById('setTicker'); if(tk) tk.checked = !S.tickerOff; }
+  { const tk=document.getElementById('setTicker'); if(tk) tk.checked = !S.tickerOff;
+    const as=document.getElementById('setAutoScore'); if(as) as.checked = !S.autoScoreOff; }
   renderCommishCard();
   // master manager roster
   renderManagers();
