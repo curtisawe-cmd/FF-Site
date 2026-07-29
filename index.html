@@ -3726,6 +3726,29 @@ function cancelOffer(id){
   const o=offersMap[id]; if(!o||!offerCanCancel(o)) return;
   window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'cancelled', closedAt:Date.now()}).then(()=>toast('Offer withdrawn')).catch(()=>{});
 }
+/* commissioner: kill any offer outright, at any stage */
+async function deleteOffer(id){
+  if(!isAdmin()){ toast('Commissioners only.'); return; }
+  if(!fbOk()) return;
+  const o=offersMap[id]||{};
+  const live = o.status==='pending' || o.status==='accepted';
+  if(!confirm(live
+      ? `Delete this ${o.aName||'?'} ⇄ ${o.bName||'?'} offer? It won't go through and everyone's votes are cleared.`
+      : `Remove this offer from the list? Rosters are not changed.`)) return;
+  try{
+    for(const uid of Object.keys(vetoesFor(id))) await window.FB.dbRemove(`${vetoesPath()}/${id}/${uid}`).catch(()=>{});
+    await window.FB.dbRemove(`${offersPath()}/${id}`);
+    toast('Trade deleted');
+  }catch(e){ toast('Could not delete — try again.'); }
+}
+/* commissioner: remove an entry from the trade history log (does not move players back) */
+function deleteTradeHistory(i){
+  if(!isAdmin()){ toast('Commissioners only.'); return; }
+  const tr=(S.trades||[])[i]; if(!tr) return;
+  if(!confirm(`Remove this trade from the history log?\n\n${tr.a} ⇄ ${tr.b}\n\nThis only deletes the record — it does NOT move the players or picks back.`)) return;
+  S.trades.splice(i,1); saveState(); renderTradeCenter();
+  toast('Removed from trade history');
+}
 function toggleVeto(id){
   if(!window.fbUser){ toast('Sign in to vote.'); openAuth(); return; }
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
@@ -3807,6 +3830,7 @@ function renderOffers(){
     if(offerCanCancel(o)) acts.push(`<button class="btn ghost" onclick="cancelOffer('${o.id}')">Withdraw</button>`);
     if(reviewing && !over && uid) acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${o.id}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`);
     if(reviewing && over && isAdmin()) acts.push(`<button class="btn" onclick="finalizeOffer('${o.id}')">Process now</button>`);
+    if(isAdmin()) acts.push(`<button class="btn danger" style="padding:3px 10px" title="Delete this trade (commissioner)" onclick="deleteOffer('${o.id}')">Delete</button>`);
     return `<div class="card" style="margin-bottom:10px">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
         <h2 style="margin:0;font-size:19px">${esc(o.aName)} <span style="color:var(--chalk-dim)">\u21C4</span> ${esc(o.bName)}${o.counterOf?' <span class="divtag">counter</span>':''}</h2>${status}
@@ -3876,9 +3900,10 @@ function renderTradeCenter(){
     </div>
     <div class="card">
       <h2>Trade History</h2>
-      ${S.trades.length? [...S.trades].reverse().map(tr=>`
+      ${S.trades.length? S.trades.map((tr,i)=>({tr,i})).reverse().map(({tr,i})=>`
         <div class="phase"><span class="tag">${new Date(tr.t).toLocaleDateString([],{month:'short',day:'numeric'})}</span>
-        <span><b>${esc(tr.a)}</b> sent ${tr.aGave.map(esc).join(', ')||'nothing'} to <b>${esc(tr.b)}</b> for ${tr.bGave.map(esc).join(', ')||'nothing'}</span></div>`).join('')
+        <span style="flex:1"><b>${esc(tr.a)}</b> sent ${tr.aGave.map(esc).join(', ')||'nothing'} to <b>${esc(tr.b)}</b> for ${tr.bGave.map(esc).join(', ')||'nothing'}</span>
+        ${isAdmin()?`<button class="btn ghost" style="padding:1px 8px;font-size:12px;flex:0 0 auto" title="Remove from history (does not undo the trade)" onclick="deleteTradeHistory(${i})">✕</button>`:''}</div>`).join('')
       : `<p style="color:var(--chalk-dim)">No trades yet. Somebody's untouchable roster awaits its first lowball offer.</p>`}
     </div>`;
   renderOffers();
