@@ -308,7 +308,11 @@ nav.tabs button{position:relative}
 .cswitch .lbl{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--chalk-dim);min-width:64px}
 .cswitch input:checked ~ .lbl{color:var(--turf-bright);font-weight:700}
 .cswitch.locked{opacity:.55;cursor:default}
-.applybar .btn.ghost{color:var(--chalk-dim)}
+/* green = commit, red = throw away */
+.applybar .btn.apply{background:#1f9d55;border-color:#1f9d55;color:#fff}
+.applybar .btn.apply:hover{background:#178a49;border-color:#178a49}
+.applybar .btn.reject{background:var(--charge);border-color:var(--charge);color:#fff}
+.applybar .btn.reject:hover{filter:brightness(1.08)}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .teamcard .num{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
@@ -1233,8 +1237,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
 </div>
 <div class="applybar" id="applyBar">
   <span class="msg">You've changed settings — not applied yet.</span>
-  <button class="btn ghost" onclick="discardSettings()">Discard</button>
-  <button class="btn" onclick="applySettings()">Apply changes</button>
+  <button class="btn reject" onclick="discardSettings()">Discard</button>
+  <button class="btn apply" onclick="applySettings()">Apply changes</button>
 </div>
 <div class="toast" id="toast"></div>
 <script>
