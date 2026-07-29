@@ -1848,7 +1848,9 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/settings`, (remote)=>{
     if(remote==null){ if(isAdmin()){ try{ window.FB.dbSet(`league/${LEAGUE_ID}/settings`, JSON.stringify(S)); }catch(e){} } return; }
     applyingRemote = true;
-    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_state', raw); S = loadState(); reconcileTeamData(); reRenderLive(); }catch(e){}
+    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_state', raw); S = loadState();
+         try{ fixPlayoffs2025(); }catch(e){}          /* heal the 2025 bracket if the synced copy lost it */
+         reconcileTeamData(); reRenderLive(); }catch(e){}
     applyingRemote = false;
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/draft`, (remote)=>{
@@ -4457,9 +4459,12 @@ if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderH
 syncHeaderH();
 
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
-function fixPlayoffs2025(){   /* correct 2025 bracket from the real NFL.com export (overrides any stale synced data) */
-  if((+S.historyFixVer||0) >= 1) return;
+function fixPlayoffs2025(){   /* restore the real 2025 bracket (NFL.com export) whenever it's missing or empty */
   S.playoffsCustom = S.playoffsCustom || {};
+  const cur = S.playoffsCustom['2025'];
+  const seeded = ((S.history&&S.history.playoffs&&S.history.playoffs['2025'])||[]);
+  if(Array.isArray(cur) && cur.length) return;          /* a real bracket is present (incl. your own edits) — leave it alone */
+  if(!Array.isArray(cur) && seeded.length) return;      /* no override, but the built-in bracket is intact — nothing to fix */
   S.playoffsCustom['2025'] = [
     {week:15, label:"Quarterfinal", sa:1, ta:"MaddaMafia", pa:108.30, sb:8, tb:"uncle skips ribs", pb:147.30, bracket:"championship"},
     {week:15, label:"Quarterfinal", sa:4, ta:"Saquon Bacher", pa:127.90, sb:5, tb:"Nut buster", pb:235.00, bracket:"championship"},
