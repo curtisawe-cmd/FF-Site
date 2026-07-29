@@ -624,6 +624,53 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   *{scroll-behavior:auto !important}
   .btn,.prow .pick,.teamcard{transition:none}
 }
+
+/* =====================================================
+   Broadcast motion layer — event-driven, one-shot only.
+   Every effect is transform/opacity, ~150-400ms, and off
+   entirely under prefers-reduced-motion.
+===================================================== */
+/* press feedback: tappable things give way slightly */
+.btn:active,.prow .pick:active,.pick:active{transform:translateY(1px) scale(.975)}
+.teamcard:active{transform:scale(.99)}
+
+@media (prefers-reduced-motion: no-preference){
+  /* --- lower third: page title slides in behind a red wipe, like a broadcast name plate --- */
+  .view.active > h1{animation:bcTitle 400ms cubic-bezier(.2,.85,.25,1) both;position:relative}
+  .view.active > h1::after{
+    content:'';position:absolute;left:0;bottom:-6px;height:4px;width:clamp(64px,22%,180px);
+    background:linear-gradient(90deg,var(--charge),var(--turf));border-radius:2px;
+    transform-origin:left center;animation:bcWipe 520ms cubic-bezier(.2,.9,.2,1) 90ms both;
+  }
+  @keyframes bcTitle{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:none}}
+  @keyframes bcWipe{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+  /* --- staggered block entrance (top-level cards only, capped) --- */
+  .view.active > .card,.view.active > .grid2,.view.active > .setgrid{
+    animation:bcBlock 340ms cubic-bezier(.2,.85,.25,1) both;
+    animation-delay:calc(var(--bcI,0) * 45ms);
+  }
+  @keyframes bcBlock{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+  /* --- kickoff sweep: one light pass across the hero, like stadium lights --- */
+  .hero{position:relative;overflow:hidden}
+  .hero::before{
+    content:'';position:absolute;top:0;bottom:0;left:-40%;width:38%;z-index:0;pointer-events:none;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);
+    transform:skewX(-16deg);animation:bcSweep 1150ms cubic-bezier(.35,.1,.25,1) 260ms both;
+  }
+  @keyframes bcSweep{from{left:-40%}to{left:120%}}
+
+  /* --- touchdown pop: trophies / champion marks land with weight --- */
+  .td-pop{animation:bcTD 520ms cubic-bezier(.18,1.5,.3,1) both}
+  @keyframes bcTD{0%{transform:scale(.4) rotate(-12deg);opacity:0}55%{transform:scale(1.14) rotate(3deg);opacity:1}100%{transform:scale(1) rotate(0)}}
+
+  /* --- snap-in for the on-the-clock chip so the draft feels live --- */
+  .onclock span{animation:bcSnap 300ms cubic-bezier(.2,.9,.2,1) both}
+  @keyframes bcSnap{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+}
+/* numbers that count up shouldn't jitter the layout */
+.countup{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -2835,6 +2882,19 @@ function updateClaimBadge(){
       line.innerHTML='Role: <b>Manager</b> · '+(Number.isInteger(ti)?esc(teamName(ti)):'<span style="color:var(--muted)">no team yet</span>'); }
   }
 }
+/* ---- broadcast motion helpers ---- */
+function bcReduced(){ try{ return !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){ return false; } }
+/* number the top-level blocks of a view so their entrance staggers (capped so late cards aren't slow) */
+function stageViewBlocks(v){
+  const sec = document.getElementById('view-'+((v==='mock')?'draft':v)); if(!sec) return;
+  let i = 0;
+  [...sec.children].forEach(el=>{
+    const c = el.classList; if(!c) return;
+    if(c.contains('card') || c.contains('grid2') || c.contains('setgrid')){
+      el.style.setProperty('--bcI', String(Math.min(i,5))); i++;
+    }
+  });
+}
 function showView(v){
   const prevView = window.currentView;
   if(prevView==='settings' && v!=='settings' && window.settingsDirty){
@@ -2845,6 +2905,7 @@ function showView(v){
   window.currentView = v;
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
+  stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
   document.getElementById('view-'+domView).classList.add('active');
   const navV = (v==='recaps'||v==='history') ? 'stats' : (v==='polls' ? 'chat' : v);
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===navV));
@@ -3390,7 +3451,7 @@ function renderHistory(){
           const cons = games.filter(g=>g.bracket==='consolation');
           const chWeeks = [...new Set(ch.map(g=>g.week))].sort((a,b)=>a-b);
           const gcard = (g,showLabel) => { const aWin=g.pa>g.pb, sb=g.label==='Fantasy Super Bowl';
-            const brow=(s,t,p,win)=>`<div class="brow ${win?'win':''}"><span><span class="bseed">${s||''}</span>${win&&sb?'\uD83C\uDFC6 ':''}${esc(t||'TBD')}</span><span class="bpts">${(+p).toFixed(2)}</span></div>`;
+            const brow=(s,t,p,win)=>`<div class="brow ${win?'win':''}"><span><span class="bseed">${s||''}</span>${win&&sb?'<span class="td-pop" style="display:inline-block">\uD83C\uDFC6</span> ':''}${esc(t||'TBD')}</span><span class="bpts">${(+p).toFixed(2)}</span></div>`;
             return `<div class="bgame">${showLabel?`<div class="clabel">${esc(g.label)}</div>`:''}${brow(g.sa,g.ta,g.pa,aWin)}${brow(g.sb,g.tb,g.pb,!aWin)}</div>`; };
           const bracketHTML = `<div class="bracket">` + chWeeks.map((w,wi)=>{
             const rg = ch.filter(g=>g.week===w);
