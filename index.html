@@ -3515,12 +3515,15 @@ function sendTradeOffer(){
   const py = +T.pickYear || curDraftYear();
   const blocked = tradeCapBlocked(T.a,T.b,raS,rbS,py); if(blocked){ toast(blocked); return; }
   const id='t'+Date.now()+Math.random().toString(36).slice(2,6);
+  const prior=window.counterOf||null;
   const o={ a:T.a, b:T.b, aName:S.teams[T.a].name, bName:S.teams[T.b].name, fromUid:window.fbUser.uid,
             fromEmail:window.fbUser.email||'', pa:[...T.pa], pb:[...T.pb], ra:raS, rb:rbS, py,
             status:'pending', createdAt:Date.now() };
+  if(prior) o.counterOf=prior;
   window.FB.dbSet(`${offersPath()}/${id}`, o).then(()=>{
-    T.pa=new Set(); T.pb=new Set(); T.ra=new Set(); T.rb=new Set();
-    toast('Offer sent \uD83D\uDCE8'); renderTradeCenter();
+    if(prior) window.FB.dbUpdate(`${offersPath()}/${prior}`, {status:'countered', closedAt:Date.now()}).catch(()=>{});
+    T.pa=new Set(); T.pb=new Set(); T.ra=new Set(); T.rb=new Set(); window.counterOf=null;
+    toast(prior?'Counter sent \uD83D\uDCE8':'Offer sent \uD83D\uDCE8'); renderTradeCenter();
   }).catch(()=>toast('Could not send the offer.'));
 }
 function offerCanAccept(o){ return o.status==='pending' && (isAdmin() || myTeamIndex()===o.b); }
@@ -3534,6 +3537,20 @@ function rejectOffer(id){
   const o=offersMap[id]; if(!o||!offerCanAccept(o)) return;
   window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'rejected', closedAt:Date.now()}).then(()=>toast('Offer rejected')).catch(()=>{});
 }
+/* counter: load the offer into the builder with sides swapped so you send it back on your terms */
+function counterOffer(id){
+  const o=offersMap[id]; if(!o||!offerCanAccept(o)) return;
+  const T=window.tradeSel;
+  T.a=o.b; T.b=o.a;                       /* you become the proposer */
+  T.pa=new Set(o.pb||[]); T.pb=new Set(o.pa||[]);
+  T.ra=new Set((o.rb||[]).map(Number)); T.rb=new Set((o.ra||[]).map(Number));
+  T.pickYear=+o.py||curDraftYear();
+  window.counterOf=id;
+  renderTradeCenter();
+  const el=document.getElementById('tradesView'); if(el) el.scrollIntoView({block:'start'});
+  toast('Adjust the terms, then Send Counter');
+}
+function clearCounter(){ window.counterOf=null; renderTradeCenter(); }
 function cancelOffer(id){
   const o=offersMap[id]; if(!o||!offerCanCancel(o)) return;
   window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'cancelled', closedAt:Date.now()}).then(()=>toast('Offer withdrawn')).catch(()=>{});
@@ -3581,13 +3598,13 @@ function renderOffers(){
       : (over ? (vc>=need?`<span class="divtag">Vetoed</span>`:`<span class="divtag">Review over \u2014 processing</span>`)
               : `<span class="divtag">League review \u00B7 ${tradeTimeLeft(o)}</span>`);
     const acts=[];
-    if(offerCanAccept(o)) acts.push(`<button class="btn" onclick="acceptOffer('${o.id}')">Accept</button><button class="btn ghost" onclick="rejectOffer('${o.id}')">Reject</button>`);
+    if(offerCanAccept(o)) acts.push(`<button class="btn" onclick="acceptOffer('${o.id}')">Accept</button><button class="btn ghost" onclick="counterOffer('${o.id}')">Counter</button><button class="btn ghost" onclick="rejectOffer('${o.id}')">Reject</button>`);
     if(offerCanCancel(o)) acts.push(`<button class="btn ghost" onclick="cancelOffer('${o.id}')">Withdraw</button>`);
     if(reviewing && !over && uid) acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${o.id}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`);
     if(reviewing && over && isAdmin()) acts.push(`<button class="btn" onclick="finalizeOffer('${o.id}')">Process now</button>`);
     return `<div class="card" style="margin-bottom:10px">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
-        <h2 style="margin:0;font-size:19px">${esc(o.aName)} <span style="color:var(--chalk-dim)">\u21C4</span> ${esc(o.bName)}</h2>${status}
+        <h2 style="margin:0;font-size:19px">${esc(o.aName)} <span style="color:var(--chalk-dim)">\u21C4</span> ${esc(o.bName)}${o.counterOf?' <span class="divtag">counter</span>':''}</h2>${status}
       </div>
       <p class="sub" style="margin:8px 0 2px"><b>${esc(o.aName)}</b> sends: ${t.aGave.map(esc).join(', ')||'nothing'}</p>
       <p class="sub" style="margin:0 0 8px"><b>${esc(o.bName)}</b> sends: ${t.bGave.map(esc).join(', ')||'nothing'}</p>
@@ -3642,8 +3659,9 @@ function renderTradeCenter(){
         ${pickList(T.b,'b',T.rb)}
       </div>
     </div>
+    ${window.counterOf?`<div class="notice" style="margin-bottom:10px">Countering <b>${esc((offersMap[window.counterOf]||{}).aName||'an offer')}</b>'s offer — adjust the terms below, then send. <a href="#" onclick="clearCounter();return false" style="color:var(--charge)">cancel</a></div>`:''}
     <div class="row" style="margin-bottom:8px;gap:8px">
-      <button class="btn" onclick="sendTradeOffer()">Send Offer</button>
+      <button class="btn" onclick="sendTradeOffer()">${window.counterOf?'Send Counter':'Send Offer'}</button>
       ${isAdmin()?`<button class="btn ghost" onclick="executeTrade()">Execute now (commish)</button>`:''}
     </div>
     <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then a <b>${Math.round(TRADE_REVIEW_MS/86400000)}-day league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> (a majority) to block a trade. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
