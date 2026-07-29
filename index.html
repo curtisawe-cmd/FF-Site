@@ -2642,6 +2642,29 @@ async function setCommish(uid, on){
        toast(on? `${nm} is now a commissioner ✅` : `${nm} is back to manager`); }
   catch(e){ toast('Could not update — try again.'); renderCommishCard(); }   /* revert the switch */
 }
+/* commissioner: reassign which team a member controls (claim modal promises this) */
+async function setMemberTeam(uid, val){
+  if(!isAdmin()){ toast('Commissioners only.'); renderCommishCard(); return; }
+  if(!fbOk()) return;
+  const rec=(managersMap||{})[uid]||{}, nm=rec.name||rec.email||'that manager';
+  const prev=Number.isInteger(rec.teamIndex)? rec.teamIndex : null;
+  const ti = (val===''||val==null) ? null : +val;
+  if(ti!==null){
+    const holder=(claimsMap||{})[ti];
+    if(holder && holder!==uid){
+      const other=(managersMap||{})[holder]||{};
+      toast(`${teamName(ti)} is already claimed by ${other.name||other.email||'someone'}.`);
+      renderCommishCard(); return;
+    }
+  }
+  try{
+    if(prev!==null && prev!==ti) await window.FB.dbRemove('claims/'+prev).catch(()=>{});
+    if(ti!==null) await window.FB.dbSet('claims/'+ti, uid);
+    await window.FB.dbUpdate('managers/'+uid, { teamIndex: ti });
+    toast(ti===null? `${nm} unassigned` : `${nm} → ${teamName(ti)} ✓`);
+    if(window.fbUser && window.fbUser.uid===uid){ window.myClaim={...(window.myClaim||{}), teamIndex:ti}; updateClaimBadge(); }
+  }catch(e){ toast('Could not reassign — try again.'); renderCommishCard(); }
+}
 async function removeMember(uid){
   if(!isOwner()){ toast('Only the league owner can remove members.'); return; }
   if(!fbOk()) return;
@@ -3968,7 +3991,11 @@ function renderCommishCard(){
   list.innerHTML = accounts.map(a=>{
     const ownerRow = String(a.email||'').toLowerCase()===COMMISH_EMAIL;
     const commish = ownerRow || adminsMap[a.uid]===true;
-    const teamTxt = Number.isInteger(a.teamIndex)? esc(teamName(a.teamIndex)) : '<span style="color:var(--chalk-dim)">no team yet</span>';
+    const teamTxt = `<select style="max-width:190px;font-size:12px;padding:2px 6px" title="Team this manager controls" onchange="setMemberTeam('${a.uid}', this.value)">
+        <option value=""${Number.isInteger(a.teamIndex)?'':' selected'}>— no team —</option>
+        ${(S.teams||[]).map((t,i)=>{ const taken=(claimsMap||{})[i] && (claimsMap||{})[i]!==a.uid;
+          return `<option value="${i}"${i===a.teamIndex?' selected':''}${taken?' disabled':''}>${esc(t.name||('Team '+(i+1)))}${taken?' — taken':''}</option>`; }).join('')}
+      </select>`;
     const badge = ownerRow ? '<span class="divtag">Owner</span>' : '';   /* the toggle already shows commish state */
     const btn = ownerRow
       ? `<label class="cswitch locked" title="The league owner is always a commissioner"><input type="checkbox" checked disabled><span class="track"></span><span class="lbl">Commish</span></label>`
