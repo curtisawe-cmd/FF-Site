@@ -282,6 +282,17 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .applybar{position:fixed;left:0;right:0;bottom:0;z-index:90;display:none;align-items:center;justify-content:center;gap:16px;padding:12px 18px;background:var(--panel-2,#0e1f3d);border-top:2px solid var(--turf);box-shadow:0 -8px 24px rgba(0,0,0,.35)}
 .applybar.on{display:flex}
 .applybar .msg{color:var(--chalk);font-weight:600;font-size:14px}
+/* commissioner on/off switch */
+.cswitch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.cswitch input{position:absolute;opacity:0;width:0;height:0}
+.cswitch .track{width:44px;height:24px;border-radius:999px;background:var(--line);position:relative;transition:background .18s ease;flex:0 0 auto}
+.cswitch .track::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .18s ease}
+.cswitch input:checked + .track{background:var(--turf)}
+.cswitch input:checked + .track::after{transform:translateX(20px)}
+.cswitch input:focus-visible + .track{outline:2px solid var(--turf-bright);outline-offset:2px}
+.cswitch .lbl{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--chalk-dim);min-width:64px}
+.cswitch input:checked ~ .lbl{color:var(--turf-bright);font-weight:700}
+.cswitch.locked{opacity:.55;cursor:default}
 .applybar .btn.ghost{color:var(--chalk-dim)}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
@@ -2624,10 +2635,12 @@ function refreshRoleFromAuth(){
   try{ applyRole(); rerenderRole(); updateClaimBadge(); }catch(e){}
 }
 async function setCommish(uid, on){
-  if(!isOwner()){ toast('Only the league owner can change commissioners.'); return; }
-  if(!fbOk()) return;
-  try{ if(on) await window.FB.dbSet('admins/'+uid, true); else await window.FB.dbRemove('admins/'+uid); toast(on?'Added a commissioner ✅':'Removed commissioner'); }
-  catch(e){ toast('Could not update — try again.'); }
+  if(!isOwner()){ toast('Only the league owner can change commissioners.'); renderCommishCard(); return; }
+  if(!fbOk()){ renderCommishCard(); return; }
+  const who = ((managersMap||{})[uid]||{}); const nm = who.name || who.email || 'that manager';
+  try{ if(on) await window.FB.dbSet('admins/'+uid, true); else await window.FB.dbRemove('admins/'+uid);
+       toast(on? `${nm} is now a commissioner ✅` : `${nm} is back to manager`); }
+  catch(e){ toast('Could not update — try again.'); renderCommishCard(); }   /* revert the switch */
 }
 async function removeMember(uid){
   if(!isOwner()){ toast('Only the league owner can remove members.'); return; }
@@ -3955,10 +3968,12 @@ function renderCommishCard(){
     const ownerRow = String(a.email||'').toLowerCase()===COMMISH_EMAIL;
     const commish = ownerRow || adminsMap[a.uid]===true;
     const teamTxt = Number.isInteger(a.teamIndex)? esc(teamName(a.teamIndex)) : '<span style="color:var(--chalk-dim)">no team yet</span>';
-    const badge = ownerRow ? '<span class="divtag">Owner</span>' : (commish?'<span class="divtag">Commish</span>':'');
-    const btn = (owner && !ownerRow)
-      ? `<button class="btn ${commish?'danger':''}" style="padding:3px 11px;font-size:13px" onclick="setCommish('${a.uid}', ${commish?'false':'true'})">${commish?'Remove commish':'Make commish'}</button>`
-      : '';
+    const badge = ownerRow ? '<span class="divtag">Owner</span>' : '';   /* the toggle already shows commish state */
+    const btn = ownerRow
+      ? `<label class="cswitch locked" title="The league owner is always a commissioner"><input type="checkbox" checked disabled><span class="track"></span><span class="lbl">Commish</span></label>`
+      : (owner
+        ? `<label class="cswitch" title="${commish?'Remove commissioner':'Make commissioner'}"><input type="checkbox" ${commish?'checked':''} onchange="setCommish('${a.uid}', this.checked)"><span class="track"></span><span class="lbl">${commish?'Commish':'Manager'}</span></label>`
+        : `<span class="cswitch locked"><span class="lbl">${commish?'Commish':'Manager'}</span></span>`);
     const rmBtn = (owner && !ownerRow)
       ? `<button class="btn ghost" style="padding:3px 9px;font-size:12px" title="Remove this account from the league" onclick="removeMember('${a.uid}')">✕</button>`
       : '';
