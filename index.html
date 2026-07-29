@@ -3211,13 +3211,14 @@ function renderHistory(){
         <td><input type="number" step="0.01" value="${g.pb}" style="width:80px" onchange="poSet(${i},'pb',+this.value)"></td>
         <td><button class="btn danger" style="padding:2px 8px;font-size:12px" onclick="poDelGame(${i})">\u00D7</button></td>
       </tr>`;
-    const edit = !!window.poEdit;
+    const isCurYear = String(yr)===String(curDraftYear());          /* past seasons are locked history */
+    const edit = !!window.poEdit && isCurYear;
     return `<div class="card" style="margin-bottom:18px">
       <div class="row" style="justify-content:space-between;margin-bottom:6px">
         <h2 style="margin:0">Playoff Bracket</h2>
         <span class="row">
           ${poYears.length?`<select onchange="window.histPOYear=this.value;renderHistory()">${poYears.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Playoffs</option>`).join('')}</select>`:''}
-          ${yr?`<button class="btn ghost" onclick="window.poEdit=!window.poEdit;renderHistory()">${edit?'Done':'Edit'}</button>`:''}
+          ${(yr && isCurYear)?`<button class="btn ghost" onclick="window.poEdit=!window.poEdit;renderHistory()">${edit?'Done':'Edit'}</button>`:''}
           <button class="btn ghost" onclick="poNewBracket()">New bracket\u2026</button>
         </span>
       </div>
