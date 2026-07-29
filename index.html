@@ -721,7 +721,10 @@ body.has-ticker .applybar{bottom:38px}
 .gc-nav:disabled{opacity:.3;cursor:default}
 .gc-nav.prev{left:-6px} .gc-nav.next{right:-6px}
 @media (max-width:900px){ .gc-nav{display:none} }
-#gcView,#tradesView{max-width:900px;margin-left:auto;margin-right:auto}   /* readable width, centred on the page */
+/* centre every page's content instead of letting it stretch across wide monitors */
+section.view{max-width:1100px;margin-left:auto;margin-right:auto}
+#view-draft{max-width:none}                    /* the 12x17 board needs every pixel */
+#gcView,#tradesView{max-width:900px;margin-left:auto;margin-right:auto}   /* these read better narrower */
 .gc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;
   border-bottom:1px solid var(--line)}
 .gc-side{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
