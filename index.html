@@ -2161,6 +2161,15 @@ function openPlayer(id){
   if(!statsLoaded) loadCareerStats().then(()=>{ const o=document.getElementById('playerModal'); if(o && o.dataset.pid===id && o.style.display!=='none') renderPlayerModal(id); });
 }
 function closePlayer(){ const ov=document.getElementById('playerModal'); if(ov) ov.style.display='none'; }
+/* the team the signed-in user adds to (their claimed team; commissioners fall back to the device pick) */
+function addTargetTeam(){ const ti = myTeamIdx(); return (Number.isInteger(ti) && canEditTeam(ti)) ? ti : null; }
+/* add from the Players tab — routes through addWithDrop, which forces a drop when the roster is full */
+function addFromPlayers(pid, ev){
+  if(ev){ ev.stopPropagation(); }
+  const ti = addTargetTeam();
+  if(ti===null){ toast(window.fbUser? 'Claim your team first to add players.' : 'Sign in and claim your team to add players.'); return; }
+  addWithDrop(ti, pid);
+}
 /* key stat columns per position for the season table */
 function statCols(pos){
   if(pos==='QB') return [['Pa Yd','pass_yd'],['Pa TD','pass_td'],['INT','pass_int'],['Ru Yd','rush_yd'],['Ru TD','rush_td']];
@@ -2231,10 +2240,11 @@ function renderPlayers(){
   const eligible=PLAYERS.filter(p=> !recentReady || RECENT_IDS.has(p.id) || p.exp===0 || p.pos==='DEF');
   const draftedN=eligible.reduce((n,p)=>n+(taken.has(p.id)?1:0),0);
   const injCount=eligible.filter(p=>p.inj && !taken.has(p.id)).length;
+  const addTi=addTargetTeam(), canAdd=addTi!==null;
   const st=document.getElementById('plStatus');
-  if(st) st.innerHTML=`${eligible.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
+  if(st) st.innerHTML=`${eligible.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${canAdd?` · adding to <b>${esc(teamName(addTi))}</b> (${rosterCount(addTi)}/${rosterLimit()})`:''}${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
   list.innerHTML=`<div style="overflow-x:auto"><table class="plain plplayers">
-    <tr><th style="width:44px">Pos</th><th>Player</th><th>Team</th><th style="text-align:center">Age</th><th style="text-align:center">Exp</th><th>Injury</th><th>Status</th></tr>
+    <tr><th style="width:44px">Pos</th><th>Player</th><th>Team</th><th style="text-align:center">Age</th><th style="text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
       <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}</span></span></td>
@@ -2243,6 +2253,7 @@ function renderPlayers(){
       <td style="text-align:center;font-family:'IBM Plex Mono',monospace">${p.exp==null?'—':(p.exp===0?'R':p.exp)}</td>
       <td>${p.inj?`${injBadge(p.inj,p.injBody).trim()}${p.injNote?`<div style="color:var(--chalk-dim);font-size:11px;max-width:280px">${esc(p.injNote)}</div>`:''}`:'<span style="color:var(--rb);font-size:13px">Healthy</span>'}</td>
       <td style="color:var(--chalk-dim);font-size:13px">${esc(p.status||'—')}</td>
+      ${canAdd?`<td style="text-align:right"><button class="pick" onclick="addFromPlayers('${p.id}', event)">Add</button></td>`:''}
     </tr>`).join('')}
   </table></div>${total>200?`<p class="sub" style="margin-top:10px">Showing 200 of ${total} — narrow it down with search or the filters.</p>`:(total?'':'<p class="sub" style="margin-top:10px">No players match those filters.</p>')}`;
 }
@@ -3883,6 +3894,7 @@ function addPlayer(ti, pid){
   D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveDraft(); pushTeamData(ti);
   renderTeams(); refreshDraftUI();
+  if(window.currentView==='players') renderPlayers();
   toast(`Added ${p.name}`);
 }
 /* add-with-drop: if there's room just add; if full, force a drop to make room (roster stays at the limit) */
@@ -3918,6 +3930,7 @@ function swapPlayer(ti, dropPid, addPid){
   saveDraft(); saveState(); pushTeamData(ti);
   const ov=document.getElementById('swapModal'); if(ov) ov.style.display='none';
   renderTeams(); refreshDraftUI();
+  if(window.currentView==='players') renderPlayers();
   toast(`Added ${p?p.name:'player'} — a spot was dropped`);
 }
 function freeAgents(q){
