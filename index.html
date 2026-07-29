@@ -1896,7 +1896,10 @@ function startLeagueSync(){
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
-  window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{}; noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
+  startChatSync();                                  /* stream chat from login so unread counts work */
+  window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{};
+    if(window.currentView==='trades') markSeen('trades', tradeMaxTs());     /* you're already looking at it */
+    noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
 }
@@ -2019,7 +2022,7 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); if(window.currentView==='trades') renderOffers(); }catch(e){} }, 60000);
+setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); if(window.currentView==='trades') renderOffers(); }catch(e){} }, 60000);
 /* injury designation badge from Sleeper injury_status */
 function injBadge(inj, body){
   if(!inj) return '';
@@ -2645,6 +2648,7 @@ function onFbUser(user){
   }
   if(user){ startLeagueSync(); initClaims(); }
   else { window.myClaim = null; }
+  try{ updateChatBadge(); updateTradeBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
 }
 window.onFbUser = onFbUser;
 
@@ -2853,7 +2857,8 @@ function showView(v){
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
   if(v==='recaps') renderRecaps();
-  if(v==='chat') initChat();
+  if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); }        /* opening = reading */
+  if(v==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
   if(v==='polls') renderPolls();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
   if(v==='settings'){ renderCommishCard(); }   /* member list arrives async — re-render on every visit */
@@ -3010,6 +3015,39 @@ async function chatSave(){
 }
 let chatStarted = false;
 function chatPath(){ return `league/${LEAGUE_ID}/chat`; }
+/* ---- per-account "read up to" marks (per device) so badges clear once you've looked ---- */
+function seenKey(kind){ const u=(window.fbUser&&window.fbUser.uid)||'anon'; return `ffl_seen_${kind}_${u}`; }
+function getSeen(kind){ const v=+store.get(seenKey(kind)); return isFinite(v)&&v>0 ? v : 0; }
+/* clamp past the newest item on screen too, so a device with a fast clock can't leave a stuck badge */
+function markSeen(kind, floor){ try{ store.set(seenKey(kind), String(Math.max(Date.now(), +floor||0))); }catch(e){} }
+function chatMaxTs(){ return (chatMsgs||[]).reduce((mx,m)=>Math.max(mx, +((m||{}).t)||0), 0); }
+function tradeMaxTs(){ let mx=0; Object.keys(offersMap||{}).forEach(k=>{ const o=offersMap[k]; if(!o) return;
+  mx=Math.max(mx, +o.createdAt||0, +o.acceptedAt||0); }); return mx; }
+/* ---- chat unread badge ---- */
+function chatUnreadCount(){
+  if(!window.fbUser) return 0;
+  const since=getSeen('chat'), me=window.fbUser.uid;
+  return (chatMsgs||[]).filter(m=>m && (+m.t||0)>since && m.uid!==me).length;   /* your own messages never count */
+}
+function updateChatBadge(){
+  const btn=document.querySelector('nav.tabs button[data-view="chat"]'); if(!btn) return;
+  if(!btn.dataset.label) btn.dataset.label=btn.textContent.trim();
+  const n=chatUnreadCount();
+  const cur=btn.querySelector('.tabbadge');
+  if(!n){ if(cur) btn.innerHTML=btn.dataset.label; return; }
+  if(cur && cur.textContent===String(n)) return;
+  btn.innerHTML=`${btn.dataset.label}<span class="tabbadge">${n>99?'99+':n}</span>`;
+}
+/* subscribe as soon as you're signed in, so unread counts work without opening the tab */
+function startChatSync(){
+  if(chatStarted || !fbOk() || !window.fbUser) return;
+  chatStarted = true;
+  window.FB.dbOn(chatPath(), (m)=>{
+    chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)).slice(-300) : [];
+    if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); renderChat(); }   /* you're looking at it */
+    updateChatBadge();
+  });
+}
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
 function initChat(){
   const nm = store.get('ffl_chat_name'); if(nm) document.getElementById('chatName').value = nm;
@@ -3019,12 +3057,8 @@ function initChat(){
     ? 'Trash talk lives here \u2014 everyone signed in sees it live.'
     : 'Sign in to join the league chat \u2014 messages are shared live once you do.';
   if(live){
-    if(!chatStarted){ chatStarted = true;
-      window.FB.dbOn(chatPath(), (m)=>{
-        chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)).slice(-300) : [];
-        renderChat();
-      });
-    } else renderChat();
+    startChatSync();
+    renderChat();
   } else {
     try{ const raw = store.get('ffl_chat'); chatMsgs = raw ? JSON.parse(raw) : []; }catch(e){ chatMsgs = []; }
     renderChat();
@@ -3781,12 +3815,13 @@ function maybeFinalizeTrades(){
 let seenOfferIds = null;
 function tradeAlertCount(){
   if(!window.fbUser) return 0;
-  const mine = myTeamIndex();
+  const mine = myTeamIndex(), since = getSeen('trades');
   let n = 0;
   Object.keys(offersMap||{}).forEach(id=>{
     const o = offersMap[id]; if(!o) return;
-    if(o.status==='pending' && Number.isInteger(mine) && o.b===mine) n++;          /* waiting on you */
-    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)) n++;            /* league review open */
+    /* only count activity you haven't looked at yet */
+    if(o.status==='pending' && Number.isInteger(mine) && o.b===mine){ if((+o.createdAt||0)>since) n++; }
+    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)){ if((+o.acceptedAt||0)>since) n++; }
   });
   return n;
 }
