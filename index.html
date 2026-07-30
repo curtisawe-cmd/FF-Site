@@ -4283,18 +4283,24 @@ async function renderGameCenter(){
   const keepLeft = sameView ? (document.getElementById('gcScroll')||{}).scrollLeft || 0 : 0;
   window._gcKey = gcKey;
   if(!sameView) el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">Loading player stats…</p></div>`;
-  let stats;
+  /* No stats is not an empty screen: we already know the pairings and the rosters, so
+     render the matchups with every player at 0.00 and say why. */
+  let stats, note='';
   try{ stats = await fetchWeekStats(season, wk); }
-  catch(e){ el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">Couldn't reach the NFL stat feed. <a href="#" class="poolrefresh" onclick="renderGameCenter();return false">retry</a></p></div>`; return; }
-  if(!stats || !Object.keys(stats).length){
-    el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">No ${season} week ${wk} stats published yet.</p></div>`; return;
+  catch(e){ stats = null; note = `Couldn't reach the NFL stat feed, so every player is showing 0.00. <a href="#" class="poolrefresh" onclick="renderGameCenter();return false">retry</a>`; }
+  const noStats = !stats || !Object.keys(stats).length;
+  if(noStats){
+    stats = stats || {};
+    if(!note) note = `No ${season} week ${wk} stats published yet. Showing the matchups and rosters with 0.00 until they are.`;
   }
+  const notice = note ? `<div class="card" style="margin-bottom:12px"><p class="sub" style="margin:0">${note}</p></div>` : '';
   const lu = ti => ensureLineup(ti);
   const slotOrder = ['QB','RB','WR','TE','FLEX','K','DEF'];
   const col = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
     const rowsFor = list => list.map(p=>{
-      const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : null;
+      /* with stats in hand a blank means "did not play"; with none at all it just means 0.00 */
+      const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
       const line = statLine(st, p.pos);
       return `<tr>
         <td class="slot"><span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos).toLowerCase()})">${l[p.playerId]||p.pos}</span></td>
@@ -4302,7 +4308,7 @@ async function renderGameCenter(){
             <div style="min-width:0;flex:1">
               <div class="gc-pl pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</div>
               <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}</div>
-              ${line?`<div class="gc-stat">${esc(line)}</div>`:(st?'':`<div class="gc-stat">did not play</div>`)}
+              ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">did not play</div>`)}
             </div></div></td>
         <td class="gc-pts">${pts==null?'—':pts.toFixed(2)}</td></tr>`;
     }).join('');
@@ -4332,10 +4338,10 @@ async function renderGameCenter(){
     </div></section>`;
   }).join('');
   if(layout==='all'){
-    el.innerHTML = head + `<div class="gc-list">${cards}</div>`;
+    el.innerHTML = head + notice + `<div class="gc-list">${cards}</div>`;
     return;                                                        /* every matchup stacked — nothing to scroll */
   }
-  el.innerHTML = head + `
+  el.innerHTML = head + notice + `
     <div class="gc-wrap">
       <button class="gc-nav prev" onclick="gcScrollBy(-1)" aria-label="Previous matchup">◀</button>
       <div class="gc-scroll" id="gcScroll">${cards}</div>
