@@ -786,6 +786,20 @@ table.inj-tbl tr:last-child td{border-bottom:none}
 .gc-nav:disabled{opacity:.3;cursor:default}
 .gc-nav.prev{left:-6px} .gc-nav.next{right:-6px}
 @media (max-width:900px){ .gc-nav{display:none} }
+/* "All matchups": jump pad for hopping card to card. position:fixed so it stays parked
+   on screen when you jump down — it lives inside #gcView, which is display:none unless
+   Game Center is the open sub-tab, so it hides itself. */
+.gc-jump{position:fixed;right:14px;top:50%;transform:translateY(-50%);z-index:70;
+  display:flex;flex-direction:column;align-items:center;gap:5px;padding:7px 6px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel-2);box-shadow:var(--sh-1)}
+.gc-jbtn{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--panel);
+  color:var(--chalk);cursor:pointer;font-size:12px;line-height:1;padding:0;display:grid;place-items:center}
+.gc-jbtn:hover:not(:disabled){border-color:var(--turf);color:var(--turf-bright)}
+.gc-jbtn:disabled{opacity:.3;cursor:default}
+.gc-jnum{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--chalk-dim);font-variant-numeric:tabular-nums}
+/* land the card below the sticky header instead of under it */
+.gc-list .gc-card{scroll-margin-top:calc(var(--hdr-h,72px) + 12px)}
+@media (max-width:560px){ .gc-jump{right:8px;padding:6px 5px} .gc-jbtn{width:28px;height:28px;font-size:11px} }
 /* centre every page's content instead of letting it stretch across wide monitors */
 section.view{max-width:1100px;margin-left:auto;margin-right:auto}
 #view-draft{max-width:none}                    /* the 12x17 board needs every pixel */
@@ -4251,6 +4265,50 @@ function gcGoTo(i){
   const sc=document.getElementById('gcScroll'); if(!sc) return;
   sc.scrollTo({ left: i * sc.clientWidth, behavior:'smooth' });
 }
+/* ---- "All matchups" vertical jump pad ---- */
+function gcCards(){ return [...document.querySelectorAll('#gcView .gc-list .gc-card')]; }
+/* the card you're currently reading = the last one whose top has passed under the header */
+function gcCurrent(){
+  const cards = gcCards(); if(!cards.length) return 0;
+  const line = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h')) || 72) + 14;
+  let idx = 0;
+  cards.forEach((c,i)=>{ if(c.getBoundingClientRect().top <= line + 1) idx = i; });
+  return idx;
+}
+function gcJump(dir){
+  const cards = gcCards(); if(!cards.length) return;
+  /* count from the card we're already heading to, so tapping down twice fast goes 1->3, not 1->2->2 */
+  const base = (typeof window._gcTarget === 'number') ? window._gcTarget : gcCurrent();
+  const i = Math.max(0, Math.min(cards.length-1, base + dir));
+  window._gcTarget = i;
+  clearTimeout(window._gcTargetST);               /* hand back to live detection once the glide is over */
+  window._gcTargetST = setTimeout(()=>{ window._gcTarget = null; gcSyncJump(); }, 900);
+  cards[i].scrollIntoView({ behavior:'smooth', block:'start' });
+  gcSyncJump(i);
+}
+function gcSyncJump(at){
+  const pad = document.getElementById('gcJump'); if(!pad) return;
+  const n = gcCards().length;
+  const i = (typeof at === 'number') ? at : gcCurrent();
+  const prev = pad.querySelector('.gc-jprev'), next = pad.querySelector('.gc-jnext'), num = pad.querySelector('.gc-jnum');
+  if(prev) prev.disabled = i <= 0;
+  if(next) next.disabled = i >= n-1;
+  if(num)  num.textContent = n ? `${i+1}/${n}` : '';
+}
+/* bind once — renderGameCenter redraws on every auto-refresh and would stack listeners */
+if(!window._gcJumpBound){
+  window._gcJumpBound = true;
+  const onGcScroll = ()=>{
+    if(!document.getElementById('gcJump')) return;
+    gcSyncJump(typeof window._gcTarget === 'number' ? window._gcTarget : undefined);
+  };
+  /* Bound twice on purpose. Window catches the normal viewport scroll; the capture-phase
+     document listener catches a non-root scroll box, which is what BODY becomes below 720px
+     (`html,body{overflow-x:hidden}` + `height:100%`) — that event never reaches window.
+     gcSyncJump just recomputes from scroll position, so firing twice is harmless. */
+  window.addEventListener('scroll', onGcScroll, {passive:true});
+  document.addEventListener('scroll', onGcScroll, {passive:true, capture:true});
+}
 /* force a fresh pull even if the cache is still warm */
 async function refreshGameCenter(){
   const wk=+(window.muWeek||1), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
@@ -4338,7 +4396,14 @@ async function renderGameCenter(){
     </div></section>`;
   }).join('');
   if(layout==='all'){
-    el.innerHTML = head + notice + `<div class="gc-list">${cards}</div>`;
+    el.innerHTML = head + notice + `<div class="gc-list">${cards}</div>` +
+      (games.length > 1 ? `<div class="gc-jump" id="gcJump">
+        <button class="gc-jbtn gc-jprev" onclick="gcJump(-1)" aria-label="Previous matchup">&#9650;</button>
+        <span class="gc-jnum"></span>
+        <button class="gc-jbtn gc-jnext" onclick="gcJump(1)" aria-label="Next matchup">&#9660;</button>
+      </div>` : '');
+    window._gcTarget = null; clearTimeout(window._gcTargetST);      /* fresh list, drop any pending jump */
+    gcSyncJump();
     return;                                                        /* every matchup stacked — nothing to scroll */
   }
   el.innerHTML = head + notice + `
