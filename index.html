@@ -5082,17 +5082,24 @@ function swapToSlot(ti, benchPid, starterPid, slot){
   if(!requireTeam(ti)){ return; }
   const lu = ensureLineup(ti);
   const bp = D.picks.find(p=>p.teamIndex===ti && p.playerId===benchPid);
-  if(!bp || lu[benchPid]!=='BN') return;                 /* stale popup — roster changed under it */
+  if(!bp || lu[benchPid]!=='BN'){ renderTeams(); return; }   /* stale popup/select — roster changed under it */
   const st = starterPid ? D.picks.find(p=>p.teamIndex===ti && p.playerId===starterPid) : null;
   if(starterPid && (!st || lu[starterPid]!==slot)) { toast('Lineup changed — try again.'); renderTeams(); return; }
   if(st) lu[starterPid]='BN';
   else { const used=Object.values(lu).filter(s2=>s2===slot).length;
-         if(used >= (+S.roster[slot]||0)){ toast(`${slot} is full — bench someone first.`); return; } }
+         if(used >= (+S.roster[slot]||0)){ toast(`${slot} is full — bench someone first.`); renderTeams(); return; } }
   lu[benchPid]=slot;
   saveState(); pushTeamData(ti);
   closePlayer(); renderTeams();
   if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
   toast(st ? `${bp.name} in · ${st.name} to the bench` : `${bp.name} into ${slot}`);
+}
+/* the My Team slot dropdown: plain values go to setSlot, "SW:slot:starterId" swaps */
+function slotChange(ti, pid, v){
+  if(v && v.startsWith('SW:')){
+    const parts=v.split(':');
+    swapToSlot(ti, pid, parts.slice(2).join(':'), parts[1]);   /* DEF ids are team codes — rejoin just in case */
+  } else setSlot(ti, pid, v);
 }
 /* ---- add / drop free agents ---- */
 window.faQuery=''; window.faPos='ALL';
@@ -5206,9 +5213,19 @@ function renderMyTeam(){
   const consumed = new Set();
   const playerRow = (p, slotLabel) => {
     const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
+    const onBench = lu[p.playerId]==='BN';
+    /* bench player: each occupied eligible slot also offers a direct swap with its starter */
+    const optHtml = opts.map(o=>{
+      let h=`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`;
+      if(onBench && o!=='BN' && o!=='IR')
+        roster.filter(x=>lu[x.playerId]===o).forEach(st2=>{
+          h+=`<option value="SW:${o}:${st2.playerId}">${o} \u2194 ${esc(st2.name)}</option>`;
+        });
+      return h;
+    }).join('');
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
       <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
-      <td style="text-align:right"><select style="width:84px" onchange="setSlot(${mi}, '${p.playerId}', this.value)">${opts.map(o=>`<option value="${o}" ${lu[p.playerId]===o?'selected':''}>${o}</option>`).join('')}</select></td>
+      <td style="text-align:right"><select style="width:84px" onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
