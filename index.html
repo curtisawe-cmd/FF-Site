@@ -3665,7 +3665,8 @@ async function searchGifs(qOverride){
   box.dataset.loaded='1';
   box.innerHTML = `<div class="gif-note" style="grid-column:1/-1">Searching…</div>`;
   const base = q ? 'https://api.giphy.com/v1/gifs/search' : 'https://api.giphy.com/v1/gifs/trending';
-  const url = `${base}?api_key=${encodeURIComponent(key)}&limit=24&rating=pg-13${q?'&q='+encodeURIComponent(q):''}`;
+  /* 'r' is Giphy's most permissive tier — crude/adult-humour, unfiltered */
+  const url = `${base}?api_key=${encodeURIComponent(key)}&limit=24&rating=r${q?'&q='+encodeURIComponent(q):''}`;
   try{
     const r = await fetch(url);
     if(!r.ok) throw new Error('HTTP '+r.status);
