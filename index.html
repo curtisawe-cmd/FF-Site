@@ -722,6 +722,19 @@ body.has-ticker{padding-bottom:50px}
 @media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 11px}
   .tk-side{grid-template-columns:16px 96px 46px;gap:5px} .tk-name,.tk-pts{font-size:11px} }
 
+/* chat: emoji picker, attachments, inline images */
+.chat-ico{flex:0 0 auto;padding:6px 10px;font-size:16px;line-height:1;cursor:pointer}
+.emoji-panel{display:flex;flex-wrap:wrap;gap:2px;max-height:172px;overflow-y:auto;
+  padding:8px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
+.emoji-panel button{background:none;border:none;font-size:21px;line-height:1;padding:4px 5px;border-radius:6px;cursor:pointer}
+.emoji-panel button:hover{background:var(--turf-wash)}
+.chat-img{max-width:260px;max-height:260px;width:auto;height:auto;border-radius:10px;display:block;
+  margin-top:5px;cursor:pointer;background:var(--panel-2)}
+.chat-pend{display:inline-flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--turf);
+  border-radius:10px;background:var(--panel-2);font-size:12px}
+.chat-pend img{width:38px;height:38px;object-fit:cover;border-radius:6px}
+.chat-pend button{background:none;border:none;color:var(--charge);cursor:pointer;font-size:14px;padding:0 2px}
+
 /* standings: identical column geometry across every division table */
 table.standings{table-layout:fixed;width:100%}
 table.standings td,table.standings th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -974,9 +987,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
   </div>
   <div class="card" style="max-width:760px">
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
-    <div class="row" style="border-top:1px solid var(--line);padding-top:12px">
-      <input type="text" id="chatName" placeholder="Your name" style="max-width:130px" onchange="store.set('ffl_chat_name', this.value)">
-      <input type="text" id="chatMsg" placeholder="Say something regrettable…" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')sendChat()">
+    <div id="chatPending" style="display:none;padding:8px 0 0"></div>
+    <div id="emojiPanel" class="emoji-panel" style="display:none"></div>
+    <div class="row" style="border-top:1px solid var(--line);padding-top:12px;gap:6px">
+      <input type="text" id="chatName" placeholder="Your name" style="max-width:120px" onchange="store.set('ffl_chat_name', this.value)">
+      <input type="text" id="chatMsg" placeholder="Say something regrettable…" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')sendChat()" onpaste="chatPaste(event)">
+      <button class="btn ghost chat-ico" title="Emoji" onclick="toggleEmoji()">☺</button>
+      <label class="btn ghost chat-ico" title="Send a photo or GIF">🖼<input type="file" accept="image/*" style="display:none" onchange="chatPickImage(event)"></label>
       <button class="btn" onclick="sendChat()">Send</button>
     </div>
   </div>
@@ -3550,19 +3567,141 @@ function updateChatBadge(){
 function startChatSync(){
   if(chatStarted || !fbOk() || !window.fbUser) return;
   chatStarted = true;
-  window.FB.dbOn(chatPath(), (m)=>{
-    chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)).slice(-300) : [];
+  window.FB.dbOnLast(chatPath(), 150, (m)=>{          /* bounded: messages can carry images now */
+    chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)) : [];
     if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); renderChat(); }   /* you're looking at it */
     updateChatBadge();
+    if(chatMsgs.length >= CHAT_KEEP) pruneChat();      /* trim once we're at the cap */
   });
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
+
+/* ---------- keep only the newest CHAT_KEEP messages ----------
+   Images live inside messages, so history has to be bounded or the database grows
+   forever. Only commissioners may delete (per the rules), so their client does the
+   housekeeping — throttled, since it needs a full read to see past the live window. */
+const CHAT_KEEP = 100;
+const CHAT_PRUNE_EVERY_MS = 10*60*1000;
+let lastChatPrune = 0;
+async function pruneChat(force){
+  if(!isAdmin() || !fbOk() || !window.fbUser) return;
+  if(!force && Date.now()-lastChatPrune < CHAT_PRUNE_EVERY_MS) return;
+  lastChatPrune = Date.now();
+  try{
+    const all = await window.FB.dbGet(chatPath());
+    if(!all) return;
+    const keys = Object.keys(all);
+    if(keys.length <= CHAT_KEEP) return;
+    keys.sort((a,b)=>((all[a]&&all[a].t)||0)-((all[b]&&all[b].t)||0));   /* oldest first */
+    const doomed = keys.slice(0, keys.length - CHAT_KEEP);
+    for(const k of doomed) await window.FB.dbRemove(chatPath()+'/'+k).catch(()=>{});
+    if(doomed.length) toast(`Trimmed ${doomed.length} old chat message${doomed.length===1?'':'s'}`);
+  }catch(e){}
+}
+
+/* ---------- emoji ---------- */
+const CHAT_EMOJI = ('🏈 😂 🤣 💀 🔥 😭 😤 🤡 🖕 😈 🙄 😏 👀 🤷 🤦 🫡 🥶 🤮 🤢 😱 🫠 '
+  +'👍 👎 👏 🙌 💪 🤝 🫵 ✌️ 🤞 🙏 💯 ⚡ 🚨 🎯 🏆 🥇 🥈 🥉 💰 🤑 📉 📈 '
+  +'😎 🥱 😴 🤠 🤓 🥴 😵 🫣 😬 😅 😉 😘 🤔 🧐 😳 🥹 😡 🤬 🗑️ 🚮 '
+  +'🐐 🐍 🦆 🦃 🐔 🍗 🍺 🍻 🌮 🍕 💩 🎣 ⛳ 🛋️ 🩼 🧊 ❄️ ☠️ 🪦 🎉').split(' ').filter(Boolean);
+function toggleEmoji(){
+  const p=document.getElementById('emojiPanel'); if(!p) return;
+  if(p.style.display==='flex'){ p.style.display='none'; return; }
+  if(!p.dataset.built){
+    p.innerHTML = CHAT_EMOJI.map(e=>`<button type="button" onclick="insertEmoji('${e}')" aria-label="${e}">${e}</button>`).join('');
+    p.dataset.built='1';
+  }
+  p.style.display='flex';
+}
+function insertEmoji(e){
+  const i=document.getElementById('chatMsg'); if(!i) return;
+  const s=i.selectionStart??i.value.length, t=i.selectionEnd??s;
+  i.value = i.value.slice(0,s)+e+i.value.slice(t);
+  i.focus(); const pos=s+e.length; try{ i.setSelectionRange(pos,pos); }catch(_){}
+}
+
+/* ---------- photo / GIF attachments ----------
+   Stills are downscaled through a canvas so a phone photo doesn't dump 4MB into
+   the database. GIFs can't be canvas-resized without killing the animation, so
+   they're sent as-is and capped instead. ---------- */
+window.chatAttach = null;                      /* {data, kind, name} */
+const CHAT_IMG_MAX_PX = 1000;
+const CHAT_IMG_MAX_BYTES = 420*1024;           /* ~420KB of base64 per message */
+function chatPickImage(ev){
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value='';
+  if(f) chatLoadFile(f);
+}
+function chatPaste(ev){
+  const items = (ev.clipboardData && ev.clipboardData.items) || [];
+  for(const it of items){
+    if(it.type && it.type.startsWith('image/')){
+      const f = it.getAsFile(); if(f){ ev.preventDefault(); chatLoadFile(f); return; }
+    }
+  }
+}
+function chatLoadFile(f){
+  if(!/^image\//.test(f.type)){ toast('Pick an image or GIF.'); return; }
+  const isGif = /gif/i.test(f.type);
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    if(isGif){                                  /* keep it animated — no canvas pass */
+      if(rd.result.length > CHAT_IMG_MAX_BYTES*1.6){
+        toast('That GIF is too big to send — try a smaller one.'); return;
+      }
+      chatSetAttach(rd.result, 'gif', f.name); return;
+    }
+    const img = new Image();
+    img.onload = ()=>{
+      let w=img.width, h=img.height;
+      const sc = Math.min(1, CHAT_IMG_MAX_PX/Math.max(w,h));
+      w=Math.max(1,Math.round(w*sc)); h=Math.max(1,Math.round(h*sc));
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      let out; try{ out=c.toDataURL('image/jpeg',0.72); }catch(e){ out=rd.result; }
+      if(out.length > CHAT_IMG_MAX_BYTES){
+        try{ out=c.toDataURL('image/jpeg',0.55); }catch(e){}
+      }
+      if(out.length > CHAT_IMG_MAX_BYTES){ toast('That image is too big to send.'); return; }
+      chatSetAttach(out, 'img', f.name);
+    };
+    img.onerror = ()=>toast("Couldn't read that image.");
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(f);
+}
+function chatSetAttach(data, kind, name){
+  window.chatAttach = { data, kind, name:name||'' };
+  renderChatPending();
+}
+function chatClearAttach(){ window.chatAttach=null; renderChatPending(); }
+function renderChatPending(){
+  const el=document.getElementById('chatPending'); if(!el) return;
+  const a=window.chatAttach;
+  if(!a){ el.style.display='none'; el.innerHTML=''; return; }
+  const kb=Math.round(a.data.length/1024);
+  el.style.display='block';
+  el.innerHTML=`<span class="chat-pend"><img src="${a.data}" alt="">
+    <span>${a.kind==='gif'?'GIF':'Photo'} ready · ${kb}KB</span>
+    <button type="button" title="Remove" onclick="chatClearAttach()">✕</button></span>`;
+}
+/* a bare image/GIF link (Giphy, Tenor, imgur…) renders as the picture itself */
+function chatBodyHTML(x){
+  const raw = String(x.m||'');
+  const urlOnly = raw.trim().match(/^https?:\/\/\S+$/i);
+  const looksImg = urlOnly && /\.(gif|png|jpe?g|webp)(\?|$)/i.test(urlOnly[0]);
+  let html = '';
+  if(raw && !(looksImg)) html += `<div>${esc(raw)}</div>`;
+  if(looksImg) html += `<img class="chat-img" src="${esc(urlOnly[0])}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:this.src}))">`;
+  if(x.img) html += `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">`;
+  return html || `<div>${esc(raw)}</div>`;
+}
 function initChat(){
   const nm = store.get('ffl_chat_name'); if(nm) document.getElementById('chatName').value = nm;
   const banner = document.getElementById('chatBanner');
   const live = fbOk() && window.fbUser;
   if(banner) banner.textContent = live
-    ? 'Trash talk lives here \u2014 everyone signed in sees it live.'
+    ? `Trash talk lives here \u2014 everyone signed in sees it live. Emoji, photos and GIFs welcome; the last ${CHAT_KEEP} messages are kept.`
     : 'Sign in to join the league chat \u2014 messages are shared live once you do.';
   if(live){
     startChatSync();
@@ -3575,16 +3714,20 @@ function initChat(){
 async function sendChat(){
   const nameEl = document.getElementById('chatName'), msgEl = document.getElementById('chatMsg');
   const n = (nameEl.value||'').trim(), m = (msgEl.value||'').trim();
+  const att = window.chatAttach;
   if(!n){ toast('Put a name on it \u2014 anonymous trash talk is cowardice.'); nameEl.focus(); return; }
-  if(!m) return;
+  if(!m && !att) return;                          /* a picture on its own is fine */
   store.set('ffl_chat_name', n);
   if(fbOk() && window.fbUser){
     const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
-    try{ await window.FB.dbSet(chatPath()+'/'+key, { uid: window.fbUser.uid, n, m, t: Date.now() }); msgEl.value=''; }
-    catch(e){ toast("Couldn't send \u2014 make sure you're signed in."); }
+    const payload = { uid: window.fbUser.uid, n, m, t: Date.now() };
+    if(att) payload.img = att.data;
+    try{ await window.FB.dbSet(chatPath()+'/'+key, payload); msgEl.value=''; chatClearAttach();
+         const p=document.getElementById('emojiPanel'); if(p) p.style.display='none'; }
+    catch(e){ toast(att? "Couldn't send that image \u2014 it may be too large." : "Couldn't send \u2014 make sure you're signed in."); }
   } else {
-    chatMsgs.push({n, m, t: Date.now()}); msgEl.value='';
-    try{ store.set('ffl_chat', JSON.stringify(chatMsgs.slice(-300))); }catch(e){}
+    chatMsgs.push({n, m, t: Date.now(), img: att?att.data:undefined}); msgEl.value=''; chatClearAttach();
+    try{ store.set('ffl_chat', JSON.stringify(chatMsgs.slice(-50))); }catch(e){}
     renderChat();
   }
 }
@@ -3597,7 +3740,7 @@ function renderChat(){
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
       <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(x.n)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
-      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${esc(x.m)}</div>
+      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${chatBodyHTML(x)}</div>
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
   el.scrollTop = el.scrollHeight;
@@ -5545,7 +5688,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp }
+import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp, query, limitToLast }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
@@ -5576,6 +5719,8 @@ window.FB = {
   dbUpdate: (p, v) => update(ref(db, p), v),
   dbRemove: (p)    => remove(ref(db, p)),
   dbOn:     (p, cb) => onValue(ref(db, p), s => cb(s.val())),   /* live subscribe; returns unsubscribe */
+  /* bounded subscribe — keeps chat from pulling unlimited history (matters once messages carry images) */
+  dbOnLast: (p, n, cb) => onValue(query(ref(db, p), limitToLast(n)), s => cb(s.val())),
   now: serverTimestamp
 };
 
