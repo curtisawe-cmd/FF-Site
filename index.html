@@ -2745,7 +2745,23 @@ function renderPlayerModal(id){
          <span class="sub" style="margin:0">On <b>${esc(teamName(own.teamIndex))}</b></span>
          <button class="btn" style="padding:4px 16px" onclick="tradeForPlayer('${id}')">Propose trade</button>
        </div>` : '';
-  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
+  /* on the bench of a team you manage → one-tap swap into each slot they're eligible for */
+  let swapRow='';
+  if(own && canEditTeam(own.teamIndex)){
+    const ti=own.teamIndex, lu=ensureLineup(ti);
+    if(lu[id]==='BN'){
+      const roster=teamRoster(ti), btns=[];
+      (SLOT_ELIG[own.pos]||[]).forEach(slot=>{
+        const cap=+S.roster[slot]||0; if(!cap) return;
+        const starters=roster.filter(p=>lu[p.playerId]===slot);
+        if(starters.length<cap) btns.push(`<button class="btn" style="padding:4px 14px" onclick="swapToSlot(${ti},'${id}',null,'${slot}')">Move to ${slot}</button>`);
+        starters.forEach(st=>btns.push(`<button class="btn ghost" style="padding:4px 14px" onclick="swapToSlot(${ti},'${id}','${st.playerId}','${slot}')">Swap with ${esc(st.name)}${slot!==own.pos?` (${slot})`:''}</button>`));
+      });
+      if(btns.length) swapRow=`<div class="row" style="gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+        <span class="sub" style="margin:0">On the bench ·</span>${btns.join('')}</div>`;
+    }
+  }
+  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${swapRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
   if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
@@ -5059,6 +5075,24 @@ function setSlot(ti, pid, slot){
     if(used >= (+S.roster.IR||0)){ toast('IR slot is full.'); renderTeams(); return; }
   }
   lu[pid]=slot; saveState(); pushTeamData(ti); renderTeams();
+}
+/* one-tap swap from the player popup: promote a bench player into `slot`, benching
+   `starterPid` if someone holds it (empty slot -> straight promotion, no one benched) */
+function swapToSlot(ti, benchPid, starterPid, slot){
+  if(!requireTeam(ti)){ return; }
+  const lu = ensureLineup(ti);
+  const bp = D.picks.find(p=>p.teamIndex===ti && p.playerId===benchPid);
+  if(!bp || lu[benchPid]!=='BN') return;                 /* stale popup — roster changed under it */
+  const st = starterPid ? D.picks.find(p=>p.teamIndex===ti && p.playerId===starterPid) : null;
+  if(starterPid && (!st || lu[starterPid]!==slot)) { toast('Lineup changed — try again.'); renderTeams(); return; }
+  if(st) lu[starterPid]='BN';
+  else { const used=Object.values(lu).filter(s2=>s2===slot).length;
+         if(used >= (+S.roster[slot]||0)){ toast(`${slot} is full — bench someone first.`); return; } }
+  lu[benchPid]=slot;
+  saveState(); pushTeamData(ti);
+  closePlayer(); renderTeams();
+  if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
+  toast(st ? `${bp.name} in · ${st.name} to the bench` : `${bp.name} into ${slot}`);
 }
 /* ---- add / drop free agents ---- */
 window.faQuery=''; window.faPos='ALL';
