@@ -735,6 +735,11 @@ table.inj-tbl tr:last-child td{border-bottom:none}
 .inj-sev.s2{background:#c26a00}
 .inj-sev.s1{background:#8a6d00}
 @media (max-width:760px){ .inj-hideSm{display:none} }
+/* injury detail inside the player popup */
+.inj-box{margin-top:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+  border-left:3px solid var(--charge);background:var(--panel-2)}
+.inj-box.ok{border-left-color:#1f9d55}
+.inj-ok{color:#3ecf80;font-weight:700;font-size:13px;margin-right:8px}
 
 /* =====================================================
    Game Center — one swipeable panel per matchup
@@ -2284,6 +2289,37 @@ const INJ_INFO = {
   'Questionable':{ sev:1, out:'Game-time decision — check before kickoff and have a backup ready.' }
 };
 function injInfoFor(status){ return INJ_INFO[String(status||'')] || { sev:1, out:'Listed on the injury report — check before kickoff.' }; }
+/* the same injury detail, rendered inside the player popup */
+function injuryBlock(m){
+  if(!m) return '';
+  const pid = m.id || m.playerId || '';
+  const meta = (PLAYERS||[]).find(p=>p.id===pid) || m;      /* PLAYERS carries injNote/status */
+  const status = meta.inj || m.inj;
+  const note = (S.injNotes||{})[pid] || '';
+  if(!status){
+    return `<div class="inj-box ok"><span class="inj-ok">✔ Healthy</span><span class="inj-note">No injury designation on the NFL feed.</span></div>`;
+  }
+  const info = injInfoFor(status);
+  const ti = ownerOfPlayer(pid);
+  const owner = ti!==null ? (S.teams[ti]?.name || 'Team '+(ti+1)) : 'Free agent';
+  return `<div class="inj-box">
+    <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="eyebrow" style="margin:0">Injury report</span>
+      <span class="inj-sev s${info.sev}">${esc(status)}</span>
+      <span class="inj-what">${esc(meta.injBody || m.injBody || 'Undisclosed')}</span>
+      ${(meta.injNote)?`<span class="inj-note">· ${esc(meta.injNote)}</span>`:''}
+      <span style="flex:1"></span>
+      <span class="inj-note">${esc(owner)}</span>
+    </div>
+    <div class="inj-out" style="margin-top:6px">${esc(info.out)}</div>
+    <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+      <span class="inj-note" style="flex:0 0 auto">Expected return:</span>
+      ${isAdmin()
+        ? `<input class="inj-ret" style="max-width:190px" type="text" placeholder="e.g. Week 9" value="${esc(note)}" onchange="setInjNote('${pid}', this.value); renderPlayerModal('${pid}')">`
+        : (note ? `<b>${esc(note)}</b>` : `<span class="inj-note">not set by the commissioner</span>`)}
+    </div>
+  </div>`;
+}
 function ownerOfPlayer(pid){
   const pick = (realDraft().picks||[]).find(p=>p.playerId===pid);
   return pick ? pick.teamIndex : null;
@@ -2349,8 +2385,8 @@ function renderInjuries(){
       const isMine = p.ti!==null && p.ti===mine;
       const note = (S.injNotes||{})[p.id] || '';
       return `<tr>
-        <td>${playerFace(p,32)}</td>
-        <td><div class="inj-what pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}</div>
+        <td><span class="pstat" onclick="openPlayer('${p.id}')" title="Open player report">${playerFace(p,32)}</span></td>
+        <td><div class="inj-what pstat" onclick="openPlayer('${p.id}')" title="Open player report">${esc(p.name)}</div>
             <div class="inj-note">${p.pos} · ${esc(p.team||'FA')}</div></td>
         <td class="inj-hideSm"><span class="inj-owner${isMine?' mine':''}">${esc(owner)}${isMine?' (you)':''}</span></td>
         <td><span class="inj-sev s${p.info.sev}">${esc(p.inj)}</span></td>
@@ -2598,7 +2634,7 @@ function renderPlayerModal(id){
       <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${[...CAREER_YEARS].reverse().map(y=>`<option value="${y}"${y===2025?' selected':''}>${y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
-  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
+  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
   if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
