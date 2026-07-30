@@ -715,6 +715,28 @@ body.has-ticker{padding-bottom:38px}
 @media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 12px;font-size:12px} }
 
 /* =====================================================
+   Injury report
+===================================================== */
+#injView{max-width:1000px;margin-left:auto;margin-right:auto}
+table.inj-tbl{width:100%;border-collapse:collapse;font-size:13px}
+table.inj-tbl th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--chalk-dim);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.inj-tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.inj-tbl tr:last-child td{border-bottom:none}
+.inj-what{font-weight:600}
+.inj-note{color:var(--chalk-dim);font-size:11px;line-height:1.3}
+.inj-out{color:var(--chalk-dim);font-size:11.5px;line-height:1.35}
+.inj-owner{font-size:11.5px;color:var(--chalk-dim);white-space:nowrap}
+.inj-owner.mine{color:var(--turf-bright);font-weight:700}
+.inj-ret{width:100%;font-size:12px;padding:3px 6px}
+.inj-sev{display:inline-block;min-width:34px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10px;
+  font-weight:700;padding:2px 6px;border-radius:4px;background:#0c1420;color:#fff;white-space:nowrap}
+.inj-sev.s3{background:var(--charge)}
+.inj-sev.s2{background:#c26a00}
+.inj-sev.s1{background:#8a6d00}
+@media (max-width:760px){ .inj-hideSm{display:none} }
+
+/* =====================================================
    Game Center — one swipeable panel per matchup
 ===================================================== */
 .gc-wrap{position:relative}
@@ -868,7 +890,12 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
 <section class="view" id="view-players">
   <h1>Players</h1>
   <p class="sub">Live NFL player index — injury reports, team, status, age &amp; experience, straight from the feed. Updates within ~24 hours; hit refresh for the latest.</p>
-  <div class="card">
+  <div class="row plsub" style="gap:8px;margin-bottom:16px">
+    <button class="btn" data-sub="all" onclick="setPlTab('all')">All Players</button>
+    <button class="btn ghost" data-sub="inj" onclick="setPlTab('inj')">Injury Report</button>
+  </div>
+  <div id="injView" style="display:none"></div>
+  <div class="card" id="plCard">
     <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
       <input type="text" id="plSearch" placeholder="Search player, team, or college…" style="flex:1;min-width:180px;max-width:360px" oninput="window.plQuery=this.value;renderPlayers()">
       <select id="plTeam" onchange="window.plTeam=this.value;renderPlayers()"><option value="ALL">All teams</option></select>
@@ -2234,8 +2261,111 @@ async function loadPlayers(force){
     try{ store.set('ffl_players_v2', JSON.stringify({ts:window.plUpdated, list:PLAYERS})); }catch(e){}
   }catch(e){ if(st) st.innerHTML='Couldn’t reach the player feed (needs internet). <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">retry</a>'; playersLoading=false; return; }
   playersLoading=false; renderPlayers();
+  if(window.plTab==='inj') renderInjuries();          /* keep the injury report in step with the feed */
 }
 function ensurePlayers(){ if(playersReady) renderPlayers(); else if(!playersLoading) loadPlayers(); }
+
+/* =====================================================
+   Injury report — what's wrong, what the designation means,
+   and a league-kept note for expected return.
+===================================================== */
+/* Sleeper gives status + body part + short note; it does NOT publish an expected
+   return date, so that column is a note the commissioner keeps by hand. */
+const INJ_INFO = {
+  'IR':          { sev:3, out:'On injured reserve — out long term; must be activated to play again.' },
+  'PUP':         { sev:3, out:'Physically unable to perform — ineligible until activated.' },
+  'Out':         { sev:3, out:'Will not play this week. Start someone else.' },
+  'Sus':         { sev:3, out:'Suspended — ineligible to play.' },
+  'Suspended':   { sev:3, out:'Suspended — ineligible to play.' },
+  'NA':          { sev:3, out:'Not active — not currently with the team.' },
+  'DNR':         { sev:3, out:'Did not report to the team.' },
+  'COV':         { sev:3, out:'On the COVID list — availability unclear.' },
+  'Doubtful':    { sev:2, out:'Unlikely to play — treat as out unless you hear otherwise.' },
+  'Questionable':{ sev:1, out:'Game-time decision — check before kickoff and have a backup ready.' }
+};
+function injInfoFor(status){ return INJ_INFO[String(status||'')] || { sev:1, out:'Listed on the injury report — check before kickoff.' }; }
+function ownerOfPlayer(pid){
+  const pick = (realDraft().picks||[]).find(p=>p.playerId===pid);
+  return pick ? pick.teamIndex : null;
+}
+function setInjNote(pid, val){
+  if(!requireAdmin()) { renderInjuries(); return; }
+  S.injNotes = S.injNotes || {};
+  const v = String(val||'').trim();
+  if(v) S.injNotes[pid] = v; else delete S.injNotes[pid];
+  saveState();
+}
+function setPlTab(t){
+  window.plTab = t;
+  document.querySelectorAll('.plsub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
+  const card=document.getElementById('plCard'), inj=document.getElementById('injView');
+  if(card) card.style.display = t==='inj' ? 'none':'block';
+  if(inj)  inj.style.display  = t==='inj' ? 'block':'none';
+  if(t==='inj') renderInjuries();
+}
+window.injScope = 'rostered';
+function injuryRows(){
+  const rows = (PLAYERS||[]).filter(p=>p.inj).map(p=>{
+    const ti = ownerOfPlayer(p.id);
+    return { ...p, ti, info: injInfoFor(p.inj) };
+  });
+  const mine = myTeamIdx();
+  const scope = window.injScope;
+  const filtered = rows.filter(r=>{
+    if(scope==='mine')     return Number.isInteger(mine) && r.ti===mine;
+    if(scope==='rostered') return r.ti!==null;
+    if(scope==='free')     return r.ti===null;
+    return true;
+  });
+  filtered.sort((a,b)=> (b.info.sev-a.info.sev) || (a.rank||9e9)-(b.rank||9e9));
+  return filtered;
+}
+function renderInjuries(){
+  const el=document.getElementById('injView'); if(!el) return;
+  if(!playersReady){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">Loading the injury feed…</p></div>`; ensurePlayers(); return; }
+  const rows = injuryRows(), mine = myTeamIdx(), admin = isAdmin();
+  const totalInj = (PLAYERS||[]).filter(p=>p.inj).length;
+  const scopeBtn = (v,label)=>`<button class="btn ${window.injScope===v?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.injScope='${v}';renderInjuries()">${label}</button>`;
+  const head = `
+    <div class="card" style="margin-bottom:14px">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+        ${scopeBtn('rostered','On rosters')}
+        ${Number.isInteger(mine)?scopeBtn('mine','My team'):''}
+        ${scopeBtn('free','Free agents')}
+        ${scopeBtn('all','Everyone')}
+        <span style="flex:1"></span>
+        <span class="sub" style="margin:0">${rows.length} shown · ${totalInj} flagged league-wide${window.plUpdated?` · feed updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true).then(()=>renderInjuries());return false">refresh</a></span>
+      </div>
+    </div>`;
+  if(!rows.length){
+    el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">No injuries in this group. ${window.injScope==='rostered'?'Nobody on a roster is banged up right now.':''}</p></div>`;
+    return;
+  }
+  el.innerHTML = head + `<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto"><table class="inj-tbl">
+    <tr><th style="width:44px"></th><th>Player</th><th class="inj-hideSm">Fantasy team</th><th>Status</th><th>Injury</th>
+        <th class="inj-hideSm">What it means</th><th style="min-width:150px">Expected return</th></tr>
+    ${rows.map(p=>{
+      const owner = p.ti!==null ? (S.teams[p.ti]?.name||'Team '+(p.ti+1)) : 'Free agent';
+      const isMine = p.ti!==null && p.ti===mine;
+      const note = (S.injNotes||{})[p.id] || '';
+      return `<tr>
+        <td>${playerFace(p,32)}</td>
+        <td><div class="inj-what pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}</div>
+            <div class="inj-note">${p.pos} · ${esc(p.team||'FA')}</div></td>
+        <td class="inj-hideSm"><span class="inj-owner${isMine?' mine':''}">${esc(owner)}${isMine?' (you)':''}</span></td>
+        <td><span class="inj-sev s${p.info.sev}">${esc(p.inj)}</span></td>
+        <td><div class="inj-what">${esc(p.injBody||'Undisclosed')}</div>
+            ${p.injNote?`<div class="inj-note">${esc(p.injNote)}</div>`:''}
+            ${p.status && p.status!=='Active'?`<div class="inj-note">${esc(p.status)}</div>`:''}</td>
+        <td class="inj-hideSm"><div class="inj-out">${esc(p.info.out)}</div></td>
+        <td>${admin
+              ? `<input class="inj-ret" type="text" placeholder="e.g. Week 9" value="${esc(note)}" onchange="setInjNote('${p.id}', this.value)">`
+              : (note? `<span class="inj-what">${esc(note)}</span>` : `<span class="inj-note">not set</span>`)}</td>
+      </tr>`;
+    }).join('')}
+  </table></div></div>
+  <p class="sub" style="margin:10px 0 0;max-width:760px">Status, body part and notes come live from the NFL feed. <b>Expected return isn't published by the feed</b> — commissioners can type it in here when it's known, and everyone sees it.</p>`;
+}
 
 /* ---- player detail: career fantasy points (league scoring) + projection ---- */
 const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
@@ -3116,7 +3246,7 @@ function showView(v){
   if(v==='home') renderHome();
   if(v==='teams') renderTeams();
   if(v==='matchups'){ renderMatchups(); setMuTab(window.muTab||'board'); }
-  if(v==='players') ensurePlayers();
+  if(v==='players'){ ensurePlayers(); setPlTab(window.plTab||'all'); }
   if(v==='trades') renderTradeCenter();
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
