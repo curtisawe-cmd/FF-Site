@@ -826,9 +826,11 @@ section.view{max-width:1100px;margin-left:auto;margin-right:auto}
 .gc-band{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--chalk-dim);padding:6px 10px 2px}
 table.gc-tbl{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
-table.gc-tbl td{padding:4px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+table.gc-tbl td{padding:3px 7px;border-bottom:1px solid var(--line);vertical-align:middle}
 table.gc-tbl tr:last-child td{border-bottom:none}
-table.gc-tbl .slot{width:38px}
+/* NOT .slot — that's the draft board's empty-pick square (dashed border, clamped 42-60px tall)
+   and it was leaking in here, dotting every row and forcing them twice as high as they need. */
+table.gc-tbl .gc-slot{width:38px}
 table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .gc-pl{font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gc-meta{color:var(--chalk-dim);font-size:10px;line-height:1.25}
@@ -4376,7 +4378,7 @@ async function renderGameCenter(){
       const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
       const line = statLine(st, p.pos);
       return `<tr>
-        <td class="slot">${slotTag(l[p.playerId]||p.pos, p.pos)}</td>
+        <td class="gc-slot">${slotTag(l[p.playerId]||p.pos, p.pos)}</td>
         <td><div class="row" style="gap:7px;align-items:flex-start;flex-wrap:nowrap">${playerFace(p,26)}
             <div style="min-width:0;flex:1">
               <div class="gc-pl pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</div>
