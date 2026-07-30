@@ -4321,7 +4321,16 @@ async function renderGameCenter(){
   const wk = +(window.muWeek||1);
   const season = +(window.gcSeason || (S.season&&S.season.year) || 2026);
   const layout = window.gcLayout || (window.gcLayout = 'all');   /* show every matchup unless you pick swipe */
-  const games = S.season.schedule[wk] || [];
+  /* Your own matchup reads first — that's the one everyone opens Game Center for. Per manager:
+     myTeamIdx() is their claimed team (or their device pick when signed out), so each person
+     gets a different order. Copy before reordering: S.season.schedule is live league state
+     that syncs to Firebase, and sorting it in place would reshuffle it for everyone. */
+  let games = S.season.schedule[wk] || [];
+  const mineTi = myTeamIdx();
+  if(Number.isInteger(mineTi)){
+    const m = games.findIndex(g => g[0]===mineTi || g[1]===mineTi);
+    if(m > 0) games = [games[m], ...games.slice(0,m), ...games.slice(m+1)];
+  }
   const head = `
     <div class="row" style="gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <button class="btn ghost" ${wk<=1?'disabled':''} onclick="window.muWeek=${wk-1};renderGameCenter();renderMatchups()">◀</button>
