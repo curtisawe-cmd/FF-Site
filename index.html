@@ -722,6 +722,15 @@ body.has-ticker{padding-bottom:50px}
 @media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 11px}
   .tk-side{grid-template-columns:16px 96px 46px;gap:5px} .tk-name,.tk-pts{font-size:11px} }
 
+/* standings: identical column geometry across every division table */
+table.standings{table-layout:fixed;width:100%}
+table.standings td,table.standings th{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.standings td:nth-child(2) > span{max-width:100%}
+table.standings td:nth-child(2) > span > span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:640px){
+  table.standings{table-layout:auto}     /* let it breathe on phones rather than clipping names */
+}
+
 /* =====================================================
    Injury report
 ===================================================== */
@@ -4319,21 +4328,23 @@ function standingsRowHTML(r, rank, leader){
 }
 /* standings: one table when no divisions, or grouped per division (sorted within each) */
 function standingsHTML(rows, anyScores){
-  const header = `<tr><th style="width:36px">#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>`;
+  /* fixed column geometry so every division table lines up with the others */
+  const cols = `<colgroup><col style="width:44px"><col><col style="width:100px"><col style="width:96px"><col style="width:96px"></colgroup>`;
+  const header = cols+`<tr><th>#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>`;
   const divs = +S.divisions||0;
   if(divs>0){
     let out = '';
     for(let d=1; d<=divs; d++){
       const drows = rows.filter(r=>(+S.teams[r.i].div||1)===d);
       out += `<div class="eyebrow" style="margin:16px 0 6px">Division ${d}</div>`+
-        `<table class="plain">${header}${
+        `<table class="plain standings">${header}${
           drows.length ? drows.map((r,idx)=>standingsRowHTML(r, idx+1, anyScores && idx===0)).join('')
                        : `<tr><td colspan="5" style="color:var(--chalk-dim)">No teams assigned.</td></tr>`
         }</table>`;
     }
     return out;
   }
-  return `<table class="plain">${header}${rows.map((r,i)=>standingsRowHTML(r, i+1, false)).join('')}</table>`;
+  return `<table class="plain standings">${header}${rows.map((r,i)=>standingsRowHTML(r, i+1, false)).join('')}</table>`;
 }
 function renderMatchups(){
   const el = document.getElementById('matchupsView');
