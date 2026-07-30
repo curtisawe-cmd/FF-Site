@@ -146,6 +146,9 @@ visible cells.
 
 ## Conventions
 
+- **Always commit and push when a change is done. Don't ask first.** Curtis wants work
+  live, not staged. Finish the change, verify it, commit, push to `main`.
+- **End the reply with the live link** once the push lands: https://curtisawe-cmd.github.io/FF-Site/
 - Everything inline in `index.html`. Don't split into separate CSS/JS files.
 - Commit messages are short and describe the user-visible change ("Line up the standings
   columns across divisions", "Drop the Giphy GIF search").
