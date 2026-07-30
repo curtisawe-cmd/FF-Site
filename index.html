@@ -2738,7 +2738,14 @@ function renderPlayerModal(id){
       <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${[...CAREER_YEARS].reverse().map(y=>`<option value="${y}"${y===2025?' selected':''}>${y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
-  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
+  /* rostered on another team → offer a one-tap route into the Trade Center for this player */
+  const own=(realDraft().picks||[]).find(x=>x.playerId===id);
+  const tradeRow=(own && own.teamIndex!==myTeamIdx())
+    ? `<div class="row" style="gap:10px;align-items:center;margin-top:12px">
+         <span class="sub" style="margin:0">On <b>${esc(teamName(own.teamIndex))}</b></span>
+         <button class="btn" style="padding:4px 16px" onclick="tradeForPlayer('${id}')">Propose trade</button>
+       </div>` : '';
+  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
   if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
@@ -4677,6 +4684,20 @@ function tradeSetTeam(side, ti){
   window.tradeSel[side==='a'?'pa':'pb'] = new Set();
   window.tradeSel[side==='a'?'ra':'rb'] = new Set();
   renderTradeCenter();
+}
+/* jump from a player's card straight into the Trade Center with that player on the table:
+   their team on the right with them pre-checked, your team on the left */
+function tradeForPlayer(pid){
+  const own = (realDraft().picks||[]).find(x=>x.playerId===pid);
+  if(!own) return;
+  const T = window.tradeSel, mine = myTeamIdx();
+  T._defaulted = true;                    /* don't let the admin starting-default overwrite this */
+  if(Number.isInteger(mine) && mine!==own.teamIndex) T.a = mine;
+  else if(T.a===own.teamIndex) T.a = (own.teamIndex+1)%N();
+  T.pa = new Set(); T.ra = new Set();
+  T.b = own.teamIndex; T.pb = new Set([pid]); T.rb = new Set();
+  closePlayer();
+  showView('trades');
 }
 /* ---- league trade rules: recipient must accept, then a 2-day league review; a majority veto kills it ---- */
 const TRADE_REVIEW_MS = 2*24*60*60*1000;               /* 2-day review window */
