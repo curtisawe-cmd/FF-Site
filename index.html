@@ -687,7 +687,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* =====================================================
    Live score ticker — broadcast bottom line
 ===================================================== */
-.ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:38px;
+.ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:50px;
   background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28)}
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:#fff;
@@ -697,22 +697,30 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .ticker-move{display:inline-flex;align-items:center;white-space:nowrap;will-change:transform;animation:tickerRoll 46s linear infinite}
 .ticker:hover .ticker-move,.ticker:focus-within .ticker-move{animation-play-state:paused}
 @keyframes tickerRoll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.tk-game{display:inline-flex;align-items:center;gap:7px;padding:0 18px;font-size:13px;color:var(--chalk-dim);border-right:1px solid var(--line)}
-.tk-name{font-weight:600;color:var(--chalk)}
-.tk-pts{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+/* one matchup = two stacked rows; fixed columns so every game lines up */
+.tk-game{display:inline-grid;grid-template-rows:1fr 1fr;align-content:center;gap:2px;
+  padding:0 16px;border-right:1px solid var(--line)}
+.tk-side{display:grid;grid-template-columns:18px 132px 54px;align-items:center;gap:7px}
+.tk-logo{display:flex;align-items:center;justify-content:center}
+.tk-logo .team-logo,.tk-logo .avatar{width:18px !important;height:18px !important}
+.tk-name{font-weight:600;color:var(--chalk);font-size:12px;line-height:1.15;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-pts{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:12px;
+  text-align:right;color:var(--chalk-dim)}
 .tk-lead .tk-name{color:var(--turf-bright)}
 .tk-lead .tk-pts{color:var(--turf-bright);font-weight:700}
 .ticker-x{flex:0 0 auto;background:none;border:none;border-left:1px solid var(--line);color:var(--chalk-dim);
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
-body.has-ticker{padding-bottom:38px}
+body.has-ticker{padding-bottom:50px}
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
   .ticker-move{animation:none}
   .ticker-track{overflow-x:auto}      /* swipe/scroll it manually instead */
   .ticker-dot{animation:none}
 }
-@media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 12px;font-size:12px} }
+@media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 11px}
+  .tk-side{grid-template-columns:16px 96px 46px;gap:5px} .tk-name,.tk-pts{font-size:11px} }
 
 /* =====================================================
    Injury report
@@ -4260,14 +4268,14 @@ function renderTicker(){
   const items = games.map((g,m)=>{
     const [a,b] = mScore(wk,m);
     if(a==null && b==null) return '';
-    const nm = ti => { const t=(S.teams||[])[ti]; const n=(t&&t.name)||('Team '+(ti+1)); return n.length>20? n.slice(0,19)+'…' : n; };
     const sa = a==null?'—':(+a).toFixed(1), sb = b==null?'—':(+b).toFixed(1);
     const aLead = a!=null && b!=null && +a>+b, bLead = a!=null && b!=null && +b>+a;
-    return `<span class="tk-game">
-      <span class="${aLead?'tk-lead':''}"><span class="tk-name">${esc(nm(g[0]))}</span> <span class="tk-pts">${sa}</span></span>
-      <span style="opacity:.5">vs</span>
-      <span class="${bLead?'tk-lead':''}"><span class="tk-pts">${sb}</span> <span class="tk-name">${esc(nm(g[1]))}</span></span>
-    </span>`;
+    const side = (ti, score, lead) => { const t=(S.teams||[])[ti];
+      return `<span class="tk-side${lead?' tk-lead':''}">
+        <span class="tk-logo">${teamMarkHTML(t,18)}</span>
+        <span class="tk-name">${esc((t&&t.name)||('Team '+(ti+1)))}</span>
+        <span class="tk-pts">${score}</span></span>`; };
+    return `<span class="tk-game">${side(g[0],sa,aLead)}${side(g[1],sb,bLead)}</span>`;
   }).filter(Boolean);
   if(!items.length) return hide();
   const lbl=document.getElementById('tickerLabel');
