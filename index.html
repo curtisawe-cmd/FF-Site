@@ -1191,6 +1191,15 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     </div>
 
     <div class="card">
+      <h2>Trade Alarm Lines</h2>
+      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set.</p>
+      <textarea id="setTradeLines" rows="6" placeholder="One line per message…" onchange="saveTradeLines(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="tradeAlarm('Nut buster and Prater\'s Leg — test alarm')">Test alarm</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Mock Draft Trash Talk</h2>
       <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
       <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
@@ -1463,6 +1472,7 @@ const DEFAULTS = {
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
+  tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
@@ -3093,15 +3103,23 @@ const PICK_INSULTS=[
   "You absolute muppet","Not the sharpest, huh?","Do you even know the rules?","Big dumb move, champ",
   "Clown behavior","That was idiotic"
 ];
+const TRADE_LINES=[
+  "TRADE ACCEPTED","Deal's done","Somebody got fleeced","A trade has been made","Shots fired",
+  "The board just moved","Handshake complete","Someone's rebuilding","Blockbuster","Papers signed"
+];
 function saveInsults(val){ S.alarmInsults = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
-function pickAlarm(why){
-  const pool=(S.alarmInsults && S.alarmInsults.length) ? S.alarmInsults : PICK_INSULTS;
-  const big=pool[Math.floor(Math.random()*pool.length)];
+function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+/* the full-screen shout. `kind` picks which word pool and icon it uses. */
+function bigAlarm(pool, fallback, icon, sub){
+  const lines=(pool && pool.length) ? pool : fallback;
+  const big=lines[Math.floor(Math.random()*lines.length)];
   const el=document.createElement('div'); el.className='alarm-overlay';
-  el.innerHTML=`<div class="alarm-flash"></div><div class="alarm-box"><div class="alarm-ico">⚠</div><div class="alarm-big">${esc(big)}</div><div class="alarm-sub">${esc(why||'')}</div></div>`;
+  el.innerHTML=`<div class="alarm-flash"></div><div class="alarm-box"><div class="alarm-ico">${icon}</div><div class="alarm-big">${esc(big)}</div><div class="alarm-sub">${esc(sub||'')}</div></div>`;
   document.body.appendChild(el);
   setTimeout(()=>el.remove(), 5100);
 }
+function pickAlarm(why){ bigAlarm(S.alarmInsults, PICK_INSULTS, '⚠', why); }
+function tradeAlarm(sub){ bigAlarm(S.tradeAlarmLines, TRADE_LINES, '🤝', sub); }
 function makePick(playerId){
   if(!requireAdmin()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
@@ -5124,9 +5142,13 @@ function updateTradeBadge(){
   if(cur && cur.textContent === String(n)) return;                                 /* no needless re-animation */
   btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${n}</span>`;
 }
+let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
 function noticeNewOffers(){
   const ids = Object.keys(offersMap||{});
-  if(seenOfferIds === null){ seenOfferIds = new Set(ids); updateTradeBadge(); return; }   /* first load: no catch-up spam */
+  const nowAccepted = ids.filter(id=>(offersMap[id]||{}).status==='accepted');
+  if(seenOfferIds === null){                                          /* first load: no catch-up spam */
+    seenOfferIds = new Set(ids); acceptedOfferIds = new Set(nowAccepted); updateTradeBadge(); return;
+  }
   const mine = myTeamIndex();
   ids.forEach(id=>{
     if(seenOfferIds.has(id)) return;
@@ -5134,6 +5156,14 @@ function noticeNewOffers(){
     const o = offersMap[id]; if(!o || o.status!=='pending' || !window.fbUser) return;
     if(Number.isInteger(mine) && o.b===mine) toast(`📨 ${o.aName} sent you a trade offer`);
   });
+  /* a trade just flipped to accepted — shout it on every screen in the league */
+  nowAccepted.forEach(id=>{
+    if(acceptedOfferIds.has(id)) return;
+    acceptedOfferIds.add(id);
+    const o = offersMap[id]; if(!o) return;
+    try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`); }catch(e){}
+  });
+  acceptedOfferIds = new Set(nowAccepted);       /* forget closed ones so a re-accept can fire again */
   updateTradeBadge();
 }
 function renderOffers(){
@@ -5562,6 +5592,7 @@ function renderSettings(){
   renderManagers();
   renderPrizes();
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
+  { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
   if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
     const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18); }
