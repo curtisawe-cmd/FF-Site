@@ -2497,6 +2497,11 @@ function setPlTab(t){
   if(t==='inj') renderInjuries();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
 }
+/* Add button on an empty roster slot: jump to the Players tab filtered to that position */
+function addFromSlot(slot){
+  window.plPos = (slot==='BN'||slot==='IR') ? 'ALL' : slot;
+  showView('players'); setPlTab('all'); renderPlayers();
+}
 window.injScope = 'rostered';
 function injuryRows(){
   const rows = (PLAYERS||[]).filter(p=>p.inj).map(p=>{
@@ -5316,14 +5321,16 @@ function renderMyTeam(){
       <td style="text-align:right"><select style="width:84px" onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
+  /* every unfilled slot renders as an Empty row with an Add button that jumps to the
+     Players tab, pre-filtered to the position the hole is for */
+  const emptyRow = s2 => `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td>
+    <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn" style="padding:2px 9px;font-size:12px" title="Find a player for this slot" onclick="addFromSlot('${s2}')">Add</button>`:''}</td></tr>`;
   order.forEach(s2=>{
     const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
     if(id){ consumed.add(id); slotRows.push(playerRow(pById[id], s2)); }
-    else slotRows.push(`<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`);
+    else slotRows.push(emptyRow(s2));
   });
-  /* bench and IR pad out to their caps with Empty rows, so a dropped player leaves a
-     visible hole instead of the section quietly shrinking */
-  const emptyRow = s2 => `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`;
+  /* bench and IR pad out to their caps, so a dropped player leaves a visible hole */
   const bnFilled = roster.filter(p=>lu[p.playerId]==='BN');
   const benchRows = bnFilled.map(p=>playerRow(p,'BN')).join('')
     + Array(Math.max(0,(+S.roster.BN||0)-bnFilled.length)).fill(emptyRow('BN')).join('');
