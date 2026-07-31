@@ -35,6 +35,10 @@
 
   --gold:#e8a200;        /* trophies & champions only */
 
+  /* text that sits ON --turf / --charge. White for most teams, flipped to ink for the
+     light-coloured ones (Saints gold, Chargers powder blue) by applyTeamTheme(). */
+  --on-turf:#fff; --on-charge:#fff;
+
   /* position encodings */
   --qb:#e23b4e; --rb:#1fa463; --wr:#2f7ff0; --te:#f0891d; --k:#9b55e6; --def:#8a6a44;
   --danger:#c60c30;
@@ -80,6 +84,7 @@
   --neon-soft:rgba(90,160,255,.60);
 
   --gold:#ffca3a;
+  --on-turf:#fff; --on-charge:#fff;
 
   --qb:#f0596a; --rb:#2fc482; --wr:#5b9bff; --te:#ff9f3a; --k:#b47bff; --def:#b08a5a;
   --danger:#ff5a5a;
@@ -146,7 +151,7 @@ h2{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;lett
 @media(max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}   /* plain 1fr lets wide content blow the card out on narrow phones */
 .btn{
   font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
-  background:var(--turf);color:#fff;padding:10px 20px;border-radius:var(--r-ctrl);
+  background:var(--turf);color:var(--on-turf);padding:10px 20px;border-radius:var(--r-ctrl);
   box-shadow:var(--sh-pop);transition:background .15s ease,transform .08s ease,box-shadow .15s ease;
 }
 .btn:hover{background:var(--turf-deep);transform:translateY(-1px);box-shadow:var(--sh-pop)}
@@ -198,7 +203,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 }
 .autodraft-toggle{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--chalk-dim);cursor:pointer;padding:6px 12px;border:1px solid var(--line-strong);border-radius:999px;background:var(--panel);transition:color .15s,border-color .15s,background .15s}
 .autodraft-toggle input{width:auto;margin:0;cursor:pointer}
-.autodraft-toggle:has(input:checked){color:#fff;background:var(--charge);border-color:var(--charge);box-shadow:0 0 14px -2px var(--charge)}
+.autodraft-toggle:has(input:checked){color:var(--on-charge);background:var(--charge);border-color:var(--charge);box-shadow:0 0 14px -2px var(--charge)}
 .clock.warn{color:var(--gold)}
 .clock.crit{color:var(--charge);animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{opacity:.35}}
@@ -277,7 +282,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow .pmeta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--chalk-dim)}
 .prow .pick{
   font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;
-  background:var(--turf);color:#fff;border-radius:var(--r-chip);padding:4px 12px;transition:background .12s ease,transform .08s ease;
+  background:var(--turf);color:var(--on-turf);border-radius:var(--r-chip);padding:4px 12px;transition:background .12s ease,transform .08s ease;
 }
 .prow .pick:hover{background:var(--turf-deep);transform:translateY(-1px)}
 .prow .pick:active{transform:translateY(1px) scale(.97)}
@@ -302,7 +307,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 /* nav tab alert badge */
 nav.tabs button{position:relative}
 .tabbadge{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 5px;margin-left:6px;
-  border-radius:999px;background:var(--charge);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
+  border-radius:999px;background:var(--charge);color:var(--on-charge);font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;
   vertical-align:middle;box-shadow:0 0 0 2px rgba(198,12,48,.25);animation:badgePop .25s ease-out}
 @keyframes badgePop{from{transform:scale(.4)}to{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.tabbadge{animation:none}}
@@ -559,7 +564,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 .role-btn{display:inline-flex;align-items:center;gap:7px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line-strong);border-radius:999px;padding:6px 14px;box-shadow:var(--sh-1);cursor:pointer;transition:color .15s,border-color .15s,background .15s}
 .role-btn:hover{color:var(--chalk);border-color:var(--turf)}
 .role-btn .dot{width:11px;height:11px;border-radius:50%;background:var(--chalk-dim)}
-:root[data-role="admin"] .role-btn{color:#fff;background:var(--turf);border-color:var(--turf)}
+:root[data-role="admin"] .role-btn{color:var(--on-turf);background:var(--turf);border-color:var(--turf)}
 :root[data-role="admin"] .role-btn .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.2)}
 :root[data-role="user"] .admin-only{display:none !important}
 :root[data-role="user"] nav.tabs button[data-view="settings"]{display:none}
@@ -628,7 +633,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 }
 
 /* ---------- global polish ---------- */
-::selection{background:var(--turf);color:#fff}
+::selection{background:var(--turf);color:var(--on-turf)}
 /* ---------- mobile: compact scrollable nav + no sideways page scroll ---------- */
 @media(max-width:640px){
   html,body{overflow-x:hidden}
@@ -709,7 +714,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:50px;
   background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28)}
 .ticker.on{display:flex}
-.ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:#fff;
+.ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
   font-family:'Anton',sans-serif;font-size:13px;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
 .ticker-dot{width:7px;height:7px;border-radius:50%;background:#fff;margin-right:7px;flex:0 0 auto;animation:blink 1.3s ease-in-out infinite}
 .ticker-track{flex:1;min-width:0;overflow:hidden;position:relative;display:flex;align-items:center}
@@ -1164,6 +1169,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <h2>League</h2>
     <div class="setgrid">
       <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
+      <div class="setrow"><label title="Recolours the whole site in an NFL team's colours — buttons, headings, glows and backgrounds. Applies to everyone in the league.">Team colors</label><select id="setTeamTheme" style="max-width:220px" onchange="setTeamTheme(this.value)"></select></div>
       <div class="setrow"><label>Pick clock</label><select id="setTimer" onchange="saveFromInputs()"><option value="60">1 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
       <div class="setrow"><label>Draft rounds</label><input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()"></div>
       <div class="setrow"><label>Keeper round</label><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"></div>
@@ -1473,6 +1479,7 @@ const DEFAULTS = {
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
+  teamTheme: 'BUF',      /* NFL team whose colours skin the site; BUF = the hand-tuned original */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
@@ -2187,6 +2194,7 @@ function pushDraftRemote(){
 }
 function reRenderLive(){
   try{
+    applyTeamTheme(S && S.teamTheme);        /* commish may have reskinned the league */
     const v = window.currentView || 'home';
     if(v==='draft' || v==='mock') refreshDraftUI(); else showView(v);
     renderHome();
@@ -4025,7 +4033,7 @@ function renderChat(){
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
       <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
-      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${chatBodyHTML(x)}</div>
+      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px">${chatBodyHTML(x)}</div>
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
   el.scrollTop = el.scrollHeight;
@@ -5673,6 +5681,12 @@ function renderSettings(){
   // master manager roster
   renderManagers();
   renderPrizes();
+  { const tt=document.getElementById('setTeamTheme');
+    if(tt){ const cur=S.teamTheme||'BUF';
+      if(!tt.options.length) tt.innerHTML = Object.keys(NFL_TEAMS)
+        .sort((a,b)=>NFL_TEAMS[a][0].localeCompare(NFL_TEAMS[b][0]))
+        .map(c=>`<option value="${c}">${esc(NFL_TEAMS[c][0])}</option>`).join('');
+      tt.value=cur; } }
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
@@ -5884,12 +5898,128 @@ function toast(msg){
 /* =====================================================
    Theme (light "day game" / dark "under the lights")
 ===================================================== */
+/* ============ NFL team colour themes ============
+   Two real team colours in, a whole palette out. Deriving the shades beats hand-authoring
+   32 teams x 2 modes x 16 vars, and lets us guarantee contrast instead of hoping. */
+const NFL_TEAMS = {
+  ARI:['Arizona Cardinals','#97233F','#000000'],      ATL:['Atlanta Falcons','#A71930','#000000'],
+  BAL:['Baltimore Ravens','#241773','#9E7C0C'],       BUF:['Buffalo Bills','#00338D','#C60C30'],
+  CAR:['Carolina Panthers','#0085CA','#101820'],      CHI:['Chicago Bears','#0B162A','#C83803'],
+  CIN:['Cincinnati Bengals','#FB4F14','#000000'],     CLE:['Cleveland Browns','#311D00','#FF3C00'],
+  DAL:['Dallas Cowboys','#003594','#869397'],         DEN:['Denver Broncos','#FB4F14','#002244'],
+  DET:['Detroit Lions','#0076B6','#B0B7BC'],          GB :['Green Bay Packers','#203731','#FFB612'],
+  HOU:['Houston Texans','#03202F','#A71930'],         IND:['Indianapolis Colts','#002C5F','#A2AAAD'],
+  JAX:['Jacksonville Jaguars','#006778','#D7A22A'],   KC :['Kansas City Chiefs','#E31837','#FFB81C'],
+  LAC:['Los Angeles Chargers','#0080C6','#FFC20E'],   LAR:['Los Angeles Rams','#003594','#FFA300'],
+  LV :['Las Vegas Raiders','#000000','#A5ACAF'],      MIA:['Miami Dolphins','#008E97','#FC4C02'],
+  MIN:['Minnesota Vikings','#4F2683','#FFC62F'],      NE :['New England Patriots','#002244','#C60C30'],
+  NO :['New Orleans Saints','#D3BC8D','#101820'],     NYG:['New York Giants','#0B2265','#A71930'],
+  NYJ:['New York Jets','#125740','#FFFFFF'],          PHI:['Philadelphia Eagles','#004C54','#A5ACAF'],
+  PIT:['Pittsburgh Steelers','#101820','#FFB612'],    SEA:['Seattle Seahawks','#002244','#69BE28'],
+  SF :['San Francisco 49ers','#AA0000','#B3995D'],    TB :['Tampa Bay Buccaneers','#D50A0A','#FF7900'],
+  TEN:['Tennessee Titans','#0C2340','#4B92DB'],       WAS:['Washington Commanders','#5A1414','#FFB612']
+};
+function hex2rgb(h){ h=String(h||'').replace('#','');
+  if(h.length===3) h=h.split('').map(c=>c+c).join('');
+  const n=parseInt(h,16)||0; return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgb2hex(r,g,b){ const c=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+  return '#'+c(r)+c(g)+c(b); }
+function hex2hsl(hex){ let [r,g,b]=hex2rgb(hex).map(v=>v/255);
+  const mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2, d=mx-mn;
+  let h=0,s=0;
+  if(d){ s = l>0.5 ? d/(2-mx-mn) : d/(mx+mn);
+    h = mx===r ? ((g-b)/d+(g<b?6:0)) : mx===g ? ((b-r)/d+2) : ((r-g)/d+4); h*=60; }
+  return [h,s,l]; }
+function hsl2hex(h,s,l){
+  h=((h%360)+360)%360/360; s=Math.max(0,Math.min(1,s)); l=Math.max(0,Math.min(1,l));
+  if(!s){ const v=l*255; return rgb2hex(v,v,v); }
+  const q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+  const f=t=>{ t=(t+1)%1;
+    if(t<1/6) return p+(q-p)*6*t;
+    if(t<1/2) return q;
+    if(t<2/3) return p+(q-p)*(2/3-t)*6;
+    return p; };
+  return rgb2hex(f(h+1/3)*255, f(h)*255, f(h-1/3)*255); }
+function relLum(hex){ const [r,g,b]=hex2rgb(hex).map(v=>{ v/=255;
+    return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); });
+  return 0.2126*r+0.7152*g+0.0722*b; }
+function contrastRatio(a,b){ const x=relLum(a), y=relLum(b);
+  return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05); }
+/* walk lightness until `hex` clears `min` contrast against `against` */
+function fitContrast(hex, against, min, dir){
+  let [h,s,l]=hex2hsl(hex);
+  for(let i=0;i<60 && contrastRatio(hsl2hex(h,s,l), against)<min; i++) l += dir*0.015;
+  return hsl2hex(h,s,Math.max(0,Math.min(1,l))); }
+function rgbaOf(hex, a){ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; }
+function applyTeamTheme(code){
+  const el=document.documentElement;
+  const VARS=['--turf','--turf-bright','--turf-deep','--turf-wash','--charge','--charge-wash',
+    '--neon','--neon-soft','--bg','--bg-2','--panel','--panel-2','--line','--line-strong','--chalk','--chalk-dim',
+    '--on-turf','--on-charge','--panel-grad-a','--panel-grad-b','--hero-grad-a','--hero-grad-b',
+    '--board-bg','--clock-bg'];
+  const team=NFL_TEAMS[code];
+  /* Bills is the hand-tuned palette already in the stylesheet — drop the overrides for it */
+  if(!team || code==='BUF'){ VARS.forEach(v=>el.style.removeProperty(v)); return; }
+  const dark = el.getAttribute('data-theme')==='dark';
+  const primary=team[1];
+  let accent=team[2];
+  /* a white/black "second colour" makes a useless accent — lean on the primary instead */
+  const [,aSat,aLit]=hex2hsl(accent);
+  if(aSat<0.12 || aLit>0.9 || aLit<0.06){ const [ph,ps]=hex2hsl(primary); accent=hsl2hex(ph, Math.max(ps,0.55), dark?0.62:0.45); }
+  const bgRef = dark ? '#04122b' : '#e9eff8';
+  const set=(k,v)=>el.style.setProperty(k,v);
+  if(dark){
+    const turf = fitContrast(primary, bgRef, 4.5, +1);
+    set('--turf', turf);
+    set('--turf-bright', hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.min(0.82, hex2hsl(turf)[2]+0.14)));
+    set('--turf-deep',   hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.min(0.78, hex2hsl(turf)[2]+0.08)));
+    const ch = fitContrast(accent, bgRef, 4.5, +1);
+    set('--charge', ch); set('--charge-wash', rgbaOf(ch,.16));
+    set('--turf-wash', rgbaOf(turf,.16));
+    set('--neon', hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.min(0.72, hex2hsl(turf)[2]+0.10)));
+    set('--neon-soft', rgbaOf(turf,.60));
+  } else {
+    const turf = fitContrast(primary, '#ffffff', 4.5, -1);      /* white button text */
+    set('--turf', turf);
+    set('--turf-bright', hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.min(0.55, hex2hsl(turf)[2]+0.18)));
+    set('--turf-deep',   hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.max(0.05, hex2hsl(turf)[2]-0.08)));
+    const ch = fitContrast(accent, '#ffffff', 4.0, -1);
+    set('--charge', ch); set('--charge-wash', rgbaOf(ch,.10));
+    set('--turf-wash', rgbaOf(turf,.09));
+    set('--neon', hsl2hex(hex2hsl(turf)[0], hex2hsl(turf)[1], Math.min(0.55, hex2hsl(turf)[2]+0.18)));
+    set('--neon-soft', rgbaOf(turf,.40));
+  }
+  /* pick the text colour that actually reads on each surface. Saints gold and Chargers powder
+     blue are far too light for white text — they get ink instead. */
+  const ink='#0b1220';
+  const onOf=c=>contrastRatio(c,'#ffffff') >= contrastRatio(c,ink) ? '#ffffff' : ink;
+  set('--on-turf',   onOf(el.style.getPropertyValue('--turf').trim()));
+  set('--on-charge', onOf(el.style.getPropertyValue('--charge').trim()));
+  /* re-tint the neutrals to the team's hue, keeping the tuned lightness so text stays readable.
+     A colourless primary (Raiders, Steelers) gets true greys instead of a bogus red tint. */
+  const [ph,ps]=hex2hsl(primary);
+  const NEUTRALS = dark
+    ? { '--bg':'#04122b','--bg-2':'#071a38','--panel':'#0b2247','--panel-2':'#123063',
+        '--line':'#1c3a6e','--line-strong':'#2c5090','--chalk':'#eaf1ff','--chalk-dim':'#9fb4d6',
+        '--panel-grad-a':'#0c2650','--panel-grad-b':'#071a38','--hero-grad-a':'#0e2c5c',
+        '--hero-grad-b':'#051530','--board-bg':'#061c3d','--clock-bg':'#010c1f' }
+    : { '--bg':'#e9eff8','--bg-2':'#dbe6f4','--panel':'#ffffff','--panel-2':'#e9f1fb',
+        '--line':'#ccdaee','--line-strong':'#adc2e0','--chalk':'#0a1b3d','--chalk-dim':'#586a88',
+        '--panel-grad-a':'#ffffff','--panel-grad-b':'#e8f0fb','--hero-grad-a':'#ffffff',
+        '--hero-grad-b':'#d7e6f8','--board-bg':'#d8e6f6','--clock-bg':'#0a1b3d' };
+  Object.keys(NEUTRALS).forEach(k=>{
+    const [,s,l]=hex2hsl(NEUTRALS[k]);
+    set(k, ps<0.15 ? hsl2hex(0,0,l) : hsl2hex(ph, s, l));
+  });
+}
+function setTeamTheme(code){ S.teamTheme=code||'BUF'; saveState(); applyTeamTheme(S.teamTheme); }
 function applyTheme(t){
   t = (t==='dark') ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', t);
   const lbl = document.getElementById('themeLabel');
   if(lbl) lbl.textContent = (t==='dark') ? 'Lights on' : 'Lights out';
   store.set('ffl_theme', t);
+  applyTeamTheme(S && S.teamTheme);          /* shades differ per mode — recompute on every switch */
 }
 function toggleTheme(){
   const cur = document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light';
