@@ -1180,35 +1180,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <div id="prizesView"></div>
   </div>
 
-  <div class="grid2" style="margin-bottom:18px">
-    <div class="card">
-      <h2>Draft Alarm Insults</h2>
-      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
-      <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Trade Alarm Lines</h2>
-      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set.</p>
-      <textarea id="setTradeLines" rows="6" placeholder="One line per message…" onchange="saveTradeLines(this.value)"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="tradeAlarm('Nut buster and Prater\'s Leg — test alarm')">Test alarm</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Mock Draft Trash Talk</h2>
-      <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
-      <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="trashTalk()">Test animation</button>
-      </div>
-    </div>
-
-  </div>
 
   <div class="card" id="commishCard" style="margin-bottom:18px;display:none">
     <div class="row" style="align-items:baseline">
@@ -1295,6 +1266,37 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
       <button class="btn" onclick="exportLeague()">Export League File</button>
       <button class="btn ghost" onclick="document.getElementById('importFile').click()">Import League File</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importLeague(event)">
+    </div>
+  </div>
+
+  <!-- alarms and other noise-makers live down here, out of the way of real league settings -->
+  <div class="eyebrow" style="margin:26px 0 10px">Alarms &amp; noise</div>
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="card">
+      <h2>Draft Alarm Insults</h2>
+      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
+      <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Trade Alarm Lines</h2>
+      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set.</p>
+      <textarea id="setTradeLines" rows="6" placeholder="One line per message…" onchange="saveTradeLines(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="tradeAlarm('Nut buster and Prater\'s Leg — test alarm')">Test alarm</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Mock Draft Trash Talk</h2>
+      <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
+      <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="trashTalk()">Test animation</button>
+      </div>
     </div>
   </div>
 
