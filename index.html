@@ -1010,6 +1010,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <button class="btn ghost" data-sub="polls" onclick="showView('polls')">Polls</button>
   </div>
   <div class="card" style="max-width:760px">
+    <div id="chatOnline" class="row" style="display:none;gap:7px;align-items:center;padding:0 0 9px;border-bottom:1px solid var(--line);margin-bottom:6px;flex-wrap:wrap"></div>
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
     <div id="chatPending" style="display:none;padding:8px 0 0"></div>
     <div id="emojiPanel" class="emoji-panel" style="display:none"></div>
@@ -2140,6 +2141,7 @@ function startLeagueSync(){
   });
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
+    if(window.currentView==='chat') renderChatOnline();
     try{ updateChatBadge(); updateTradeBadge(); }catch(e){} });   /* another device may have advanced your read marks */
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
@@ -3345,7 +3347,9 @@ function startPresence(){
   if(window._presenceST || !fbOk()) return;
   const beat = ()=>{ if(window.fbUser && !document.hidden){
     try{ window.FB.dbUpdate('managers/'+myUid(), { lastSeen: window.FB.now() }).catch(()=>{}); }catch(e){} } };
-  window._presenceST = setInterval(()=>{ beat(); if(window.currentView==='settings') renderCommishCard(); }, 60000);
+  window._presenceST = setInterval(()=>{ beat();
+    if(window.currentView==='settings') renderCommishCard();
+    if(window.currentView==='chat') renderChatOnline(); }, 60000);
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) beat(); });
 }
 function openClaim(){
@@ -3425,7 +3429,7 @@ function showView(v){
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
   if(v==='recaps') renderRecaps();
-  if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); }        /* opening = reading */
+  if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); renderChatOnline(); }   /* opening = reading */
   if(v==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
   if(v==='polls') renderPolls();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
@@ -3624,6 +3628,19 @@ function updateChatBadge(){
   btn.innerHTML=`${btn.dataset.label}<span class="tabbadge">${n>99?'99+':n}</span>`;
 }
 /* subscribe as soon as you're signed in, so unread counts work without opening the tab */
+/* who's in the room: everyone whose presence heartbeat landed in the last 2.5 minutes */
+function renderChatOnline(){
+  const el=document.getElementById('chatOnline'); if(!el) return;
+  const now=Date.now();
+  const on=Object.values(managersMap||{})
+    .filter(a=>(+a.lastSeen||0) && now-(+a.lastSeen)<150000)
+    .map(a=>String(a.name||a.email||'Manager').split(' ')[0])
+    .sort((a,b)=>a.localeCompare(b));
+  if(!on.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='flex';
+  el.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rb);box-shadow:0 0 6px var(--rb);flex:0 0 auto"></span>
+    <span class="sub" style="margin:0;font-size:12px"><b style="color:var(--rb)">${on.length} online</b> · ${on.map(esc).join(' · ')}</span>`;
+}
 function startChatSync(){
   if(chatStarted || !fbOk() || !window.fbUser) return;
   chatStarted = true;
