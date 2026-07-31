@@ -951,8 +951,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
   <div class="row plsub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="all" onclick="setPlTab('all')">All Players</button>
     <button class="btn ghost" data-sub="inj" onclick="setPlTab('inj')">Injury Report</button>
+    <button class="btn ghost" data-sub="news" onclick="setPlTab('news')">Player News</button>
   </div>
   <div id="injView" style="display:none"></div>
+  <div id="newsView" style="display:none"></div>
   <div class="card" id="plCard">
     <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
       <input type="text" id="plSearch" placeholder="Search player, team, or college…" style="flex:1;min-width:180px;max-width:360px" oninput="window.plQuery=this.value;renderPlayers()">
@@ -2373,6 +2375,55 @@ function normName(s){
     .replace(/[^a-z ]/g,'')
     .replace(/\s+/g,' ').trim();
 }
+/* ---- Player News tab: ESPN's NFL news feed, cached 30 minutes ----
+   (ESPN's per-player fantasy news endpoint 500s, so this is the tagged general feed) */
+const NEWS_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50';
+const NEWS_TTL_MS = 30*60*1000;
+let NEWS = { at:0, arts:null };
+try{ const c=JSON.parse(store.get('ffl_news_v1')||'null'); if(c && c.arts) NEWS=c; }catch(e){}
+async function fetchNews(force){
+  if(!force && NEWS.arts && Date.now()-NEWS.at < NEWS_TTL_MS) return null;   /* fresh enough */
+  try{
+    const r = await fetch(NEWS_URL);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    const arts = (j.articles||[]).map(a=>({
+      h: a.headline||'', d: a.description||'', t: Date.parse(a.published||a.lastModified||'')||0,
+      link: (((a.links||{}).web)||{}).href||'',
+      img: (((a.images||[])[0])||{}).url||'',
+      players: (a.categories||[]).filter(c=>c.type==='athlete' && c.description).map(c=>({id:c.athleteId, name:c.description})),
+      teams: (a.categories||[]).filter(c=>c.type==='team' && c.description).map(c=>c.description)
+    })).filter(a=>a.h).sort((x,y)=>y.t-x.t);
+    NEWS = { at:Date.now(), arts };
+    try{ store.set('ffl_news_v1', JSON.stringify(NEWS)); }catch(e){}
+    return arts;
+  }catch(e){ return null; }
+}
+/* stay current while someone parks on the tab: refetch whenever the cache passes 30 minutes */
+setInterval(()=>{ if(window.currentView==='players' && window.plTab==='news')
+  fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }, 60000);
+function renderNews(){
+  const el=document.getElementById('newsView'); if(!el) return;
+  const arts=NEWS.arts;
+  if(!arts){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">Loading the news feed…</p></div>`; return; }
+  const rows = arts.map(a=>{
+    const who = a.players.length
+      ? a.players.map(p=>`<span class="row" style="gap:5px;align-items:center;display:inline-flex">${p.id?`<img src="https://a.espncdn.com/i/headshots/nfl/players/full/${p.id}.png" alt="" loading="lazy" style="width:22px;height:22px;border-radius:50%;object-fit:cover;background:var(--panel-2)" onerror="this.style.display='none'">`:''}<b style="font-size:12.5px">${esc(p.name)}</b></span>`).join(' ')
+      : (a.teams.length?`<b style="font-size:12.5px;color:var(--chalk-dim)">${esc(a.teams.slice(0,2).join(' · '))}</b>`:'');
+    return `<div class="row" style="gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line)">
+      ${a.img?`<img src="${esc(a.img)}" alt="" loading="lazy" style="width:72px;height:52px;border-radius:8px;object-fit:cover;flex:0 0 auto;background:var(--panel-2)" onerror="this.style.display='none'">`:''}
+      <div style="min-width:0;flex:1">
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px">${who}<span class="sub" style="margin:0;font-size:11px">${a.t?timeAgo(a.t):''}</span></div>
+        ${a.link?`<a href="${esc(a.link)}" target="_blank" rel="noopener" style="font-weight:700;line-height:1.25;color:var(--text,inherit)">${esc(a.h)}</a>`:`<b style="line-height:1.25">${esc(a.h)}</b>`}
+        ${a.d?`<div class="sub" style="margin:3px 0 0;font-size:12.5px;line-height:1.45">${esc(a.d)}</div>`:''}
+      </div></div>`;
+  }).join('');
+  el.innerHTML=`<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;flex-wrap:wrap">
+      <h2 style="margin:0">Player News</h2>
+      <span class="sub" style="margin:0;font-size:12px">updated ${timeAgo(NEWS.at)} · refreshes every 30 min · <a href="#" class="poolrefresh" onclick="fetchNews(true).then(()=>renderNews());return false">refresh now</a></span>
+    </div>${rows||'<p class="sub" style="margin:8px 0 0">Nothing in the feed right now.</p>'}</div>`;
+}
 async function fetchEspnInjuries(force){
   if(!force && ESPN_INJ.map && Date.now()-ESPN_INJ.at < ESPN_TTL_MS) return ESPN_INJ.map;
   try{
@@ -2439,10 +2490,12 @@ function ownerOfPlayer(pid){
 function setPlTab(t){
   window.plTab = t;
   document.querySelectorAll('.plsub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
-  const card=document.getElementById('plCard'), inj=document.getElementById('injView');
-  if(card) card.style.display = t==='inj' ? 'none':'block';
+  const card=document.getElementById('plCard'), inj=document.getElementById('injView'), news=document.getElementById('newsView');
+  if(card) card.style.display = t==='all' ? 'block':'none';
   if(inj)  inj.style.display  = t==='inj' ? 'block':'none';
+  if(news) news.style.display = t==='news' ? 'block':'none';
   if(t==='inj') renderInjuries();
+  if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
 }
 window.injScope = 'rostered';
 function injuryRows(){
