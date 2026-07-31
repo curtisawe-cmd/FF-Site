@@ -575,7 +575,12 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 :root[data-role="admin"] .role-btn{color:var(--on-turf);background:var(--turf);border-color:var(--turf)}
 :root[data-role="admin"] .role-btn .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.2)}
 :root[data-role="user"] .admin-only{display:none !important}
-:root[data-role="user"] nav.tabs button[data-view="settings"]{display:none}
+/* managers get Settings read-only, so the tab stays visible */
+:root[data-role="user"] #view-settings button{display:none}
+:root[data-role="user"] #view-settings input:disabled,
+:root[data-role="user"] #view-settings select:disabled,
+:root[data-role="user"] #view-settings textarea:disabled{
+  opacity:.75;cursor:default;background:var(--panel-2);color:var(--chalk-dim)}
 :root[data-role="user"] .viewer-only{display:inline-flex !important;align-items:center}
 :root[data-role="user"] #matchupsView input[type=number]{pointer-events:none;background:var(--panel-2);opacity:.75}
 
@@ -1172,7 +1177,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
 <!-- ============ SETTINGS ============ -->
 <section class="view" id="view-settings">
   <h1>League Settings</h1>
-  <p class="sub">Everything here is yours to change — this is the whole point of leaving NFL.com.</p>
+  <p class="sub admin-only">Everything here is yours to change — this is the whole point of leaving NFL.com.</p>
+  <div class="notice viewer-note" id="settingsViewerNote" style="display:none;margin-bottom:18px">
+    Read-only — this is how the league is set up. Only the commissioner can change it.
+  </div>
 
   <div class="card" style="margin-bottom:18px">
     <h2>League</h2>
@@ -1274,7 +1282,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <button class="btn" onclick="startNextSeason()">Start Next Season</button>
   </div>
 
-  <div class="card">
+  <div class="card admin-only">
     <h2>Save / Share League File</h2>
     <p class="sub" style="margin-bottom:10px">Your settings save automatically in this browser. Export a league file as a backup or to move to another computer — it also captures draft results.</p>
     <div class="row">
@@ -1284,9 +1292,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     </div>
   </div>
 
-  <!-- alarms and other noise-makers live down here, out of the way of real league settings -->
-  <div class="eyebrow" style="margin:26px 0 10px">Alarms &amp; noise</div>
-  <div class="grid2" style="margin-bottom:18px">
+  <!-- alarms and other noise-makers live down here, out of the way of real league settings.
+       admin-only: managers must never see the insults before they get screamed at them -->
+  <div class="eyebrow admin-only" style="margin:26px 0 10px">Alarms &amp; noise</div>
+  <div class="grid2 admin-only" style="margin-bottom:18px">
     <div class="card">
       <h2>Draft Alarm Insults</h2>
       <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
@@ -1315,7 +1324,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     </div>
   </div>
 
-  <div class="card tabflash-card" style="margin-top:18px;max-width:420px;opacity:.75">
+  <div class="card tabflash-card admin-only" style="margin-top:18px;max-width:420px;opacity:.75">
     <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
       <h2 style="margin:0;font-size:15px">Tab Flash <span style="color:var(--chalk-dim);font-weight:400">🔒</span></h2>
       <button class="btn ghost" style="padding:2px 10px;font-size:12px" id="tfLockBtn" onclick="toggleTabFlashLock()">Unlock</button>
@@ -3608,7 +3617,7 @@ function showView(v){
     if(confirm('You changed some settings — apply them to the league?\n\nOK = apply · Cancel = discard')) applySettings();
     else discardSettings();
   }
-  if(v==='settings' && !isAdmin()){ toast("Settings are commissioner-only."); v='home'; }
+  /* managers may read the league's setup; lockSettingsForViewers() makes it look-don't-touch */
   window.currentView = v;
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
@@ -3630,7 +3639,7 @@ function showView(v){
   if(v==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
   if(v==='polls') renderPolls();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
-  if(v==='settings'){ renderCommishCard(); }   /* member list arrives async — re-render on every visit */
+  if(v==='settings'){ renderSettings(); renderCommishCard(); }   /* values + member list refresh on every visit */
   if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
   updateApplyBar();
   updateGhost();
@@ -5750,6 +5759,19 @@ function renderSettings(){
       : `<input type="text" style="min-width:240px" value="${esc(cur)}" onchange="setRule(${idx}, this.value)">`;
     return `<div class="setrow"><label>${esc(k)}</label>${control}</div>`;
   }).join('');
+  lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
+}
+/* Managers read the league's setup; only the commissioner edits it. Note this is UI only —
+   the real guarantee is the database rules, which reject writes from anyone unauthorised. */
+function lockSettingsForViewers(){
+  const sec=document.getElementById('view-settings'); if(!sec) return;
+  const lock=!isAdmin();
+  sec.querySelectorAll('input,select,textarea').forEach(el=>{
+    if(lock){ if(!el.disabled){ el.disabled=true; el.dataset.viewerLocked='1'; } }
+    else if(el.dataset.viewerLocked){ el.disabled=false; delete el.dataset.viewerLocked; }
+  });
+  const note=document.getElementById('settingsViewerNote');
+  if(note) note.style.display = lock ? 'block' : 'none';
 }
 function setRule(idx, val){
   const key = Object.keys(S.rules||{})[idx];
