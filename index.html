@@ -2304,7 +2304,7 @@ function injInfo(id){
   const kind=s==='Questionable'?'q':(s==='Doubtful'?'d':((s==='Sus'||s==='Suspended')?'sus':'out'));
   return { cls: serious?' hurt':'', flag:`<span class="inj-flag ${kind}" title="${esc(s+(p.injBody?' — '+p.injBody:''))}">${abbr}</span>` };
 }
-function draftedIds(){ return new Set(D.picks.map(p=>p.playerId)); }
+function draftedIds(){ return new Set(D.picks.filter(p=>!p.cut).map(p=>p.playerId)); }   /* cut players are free agents again */
 
 /* =====================================================
    Players tab — live NFL player index (Sleeper feed)
@@ -2484,7 +2484,7 @@ function injuryBlock(m){
   </div>`;
 }
 function ownerOfPlayer(pid){
-  const pick = (realDraft().picks||[]).find(p=>p.playerId===pid);
+  const pick = (realDraft().picks||[]).find(p=>p.playerId===pid && !p.cut);
   return pick ? pick.teamIndex : null;
 }
 function setPlTab(t){
@@ -2806,7 +2806,7 @@ function renderPlayerModal(id){
       <div id="pbrk"></div>`;
   }
   /* rostered on another team → offer a one-tap route into the Trade Center for this player */
-  const own=(realDraft().picks||[]).find(x=>x.playerId===id);
+  const own=(realDraft().picks||[]).find(x=>x.playerId===id && !x.cut);
   const tradeRow=(own && own.teamIndex!==myTeamIdx())
     ? `<div class="row" style="gap:10px;align-items:center;margin-top:12px">
          <span class="sub" style="margin:0">On <b>${esc(teamName(own.teamIndex))}</b></span>
@@ -2997,13 +2997,15 @@ function paintClock(){
   el.textContent = `${m}:${String(s).padStart(2,'0')}`;
   el.className = 'clock' + (timeLeft<=10?' crit':(timeLeft<=30?' warn':''));
 }
-function currentPickIndex(){ return D.picks.length; }
+/* next draft slot = board picks made so far. Count only real board picks: FA pickups sit at
+   pickIndex -1, and cut picks still consumed their draft slot so they count. */
+function currentPickIndex(){ return D.picks.filter(p=>+p.pickIndex>=0).length; }
 
 /* manual picks obey the same roster rules the auto-draft uses: starters before bench, respect position caps */
 function pickAllowed(teamIdx, pos){
   const caps=positionCaps();
   const counts={}; POS_LIST.forEach(p=>counts[p]=0);
-  D.picks.filter(p=>p.teamIndex===teamIdx).forEach(p=>{ if(p.pos in counts) counts[p.pos]++; });
+  D.picks.filter(p=>p.teamIndex===teamIdx && !p.cut).forEach(p=>{ if(p.pos in counts) counts[p.pos]++; });
   if(counts[pos] >= (caps[pos]||0)) return {ok:false, why:`Your roster is already full at ${pos}.`};
   const st=starterState(teamIdx);
   if(!st.complete && !st.open(pos)) return {ok:false, why:`Starters first — fill your lineup before drafting a bench ${pos}.`};
@@ -3049,7 +3051,7 @@ function starterReq(){ const r=S.roster; return {QB:+r.QB||0, RB:+r.RB||0, WR:+r
 function starterState(teamIdx){
   const req = starterReq();
   const counts = {QB:0,RB:0,WR:0,TE:0,K:0,DEF:0};
-  D.picks.filter(p=>p.teamIndex===teamIdx).forEach(p=>{ if(p.pos in counts) counts[p.pos]++; });
+  D.picks.filter(p=>p.teamIndex===teamIdx && !p.cut).forEach(p=>{ if(p.pos in counts) counts[p.pos]++; });
   let surplus = 0; ['RB','WR','TE'].forEach(P=>surplus += Math.max(0, counts[P]-req[P]));
   const flexFilled = Math.min(req.FLEX, surplus);
   const open = P => (counts[P] < req[P]) || (['RB','WR','TE'].includes(P) && flexFilled < req.FLEX);
@@ -3061,7 +3063,7 @@ function bestAvailableForClockTeam(){
   const tIdx = ownerForPick(currentPickIndex());
   const taken = draftedIds();
   const counts = {}; POS_LIST.forEach(p=>counts[p]=0);
-  D.picks.filter(p=>p.teamIndex===tIdx).forEach(p=>counts[p.pos]++);
+  D.picks.filter(p=>p.teamIndex===tIdx && !p.cut).forEach(p=>counts[p.pos]++);
   const caps = positionCaps();
   const st = starterState(tIdx);
   if(!st.complete){
@@ -3354,10 +3356,9 @@ function reconcileMoves(){
   all.forEach(m=>{
     if(!Array.isArray(D.picks)) D.picks=[];
     if(m.type==='drop'){
-      D.picks = D.picks.filter(p=>!(p.teamIndex===m.ti && p.playerId===m.playerId));
-      if(S.lineups && S.lineups[m.ti]) delete S.lineups[m.ti][m.playerId];
+      cutPick(m.ti, m.playerId);                        /* flags board picks cut, removes FA pickups */
     } else if(m.type==='add'){
-      if(!D.picks.some(p=>p.playerId===m.playerId)){    /* never duplicate or steal a rostered player */
+      if(!D.picks.some(p=>p.playerId===m.playerId && !p.cut)){   /* never duplicate or steal a rostered player (cut = free again) */
         D.picks.push({ pickIndex:-1, teamIndex:m.ti, playerId:m.playerId, name:m.name, pos:m.pos, nfl:m.nfl, auto:false, add:true });
       }
     }
@@ -3577,7 +3578,7 @@ function renderRosterMini(){
   if(!D.started){ el.innerHTML = `<span style="color:var(--chalk-dim)">On-the-clock team's roster shows here.</span>`; return; }
   const tIdx = D.finished ? null : ownerForPick(currentPickIndex());
   if(tIdx===null){ el.innerHTML = `<b>Draft complete.</b> See the Teams tab for full rosters.`; return; }
-  const picks = D.picks.filter(p=>p.teamIndex===tIdx);
+  const picks = D.picks.filter(p=>p.teamIndex===tIdx && !p.cut);
   el.innerHTML = `<div class="eyebrow" style="margin-bottom:4px">${esc(S.teams[tIdx].name)} so far</div>` +
     (picks.map(p=>`<div class="rr"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>${playerFace(p,22)}<b>${esc(p.name)}</b>${injById(p.playerId)}</div>`).join('') || `<span style="color:var(--chalk-dim)">No picks yet.</span>`);
 }
@@ -4797,7 +4798,7 @@ function tradeSetTeam(side, ti){
 /* jump from a player's card straight into the Trade Center with that player on the table:
    their team on the right with them pre-checked, your team on the left */
 function tradeForPlayer(pid){
-  const own = (realDraft().picks||[]).find(x=>x.playerId===pid);
+  const own = (realDraft().picks||[]).find(x=>x.playerId===pid && !x.cut);
   if(!own) return;
   const T = window.tradeSel, mine = myTeamIdx();
   T._defaulted = true;                    /* don't let the admin starting-default overwrite this */
@@ -4832,8 +4833,8 @@ function tradePartsText(o){
 function applyTradeParts(ai, bi, paIds, pbIds, raS, rbS, py){
   const d = realDraft();
   const nmA = S.teams[ai].name, nmB = S.teams[bi].name;
-  const giveA = d.picks.filter(p=>p.teamIndex===ai && (paIds||[]).includes(p.playerId));
-  const giveB = d.picks.filter(p=>p.teamIndex===bi && (pbIds||[]).includes(p.playerId));
+  const giveA = d.picks.filter(p=>p.teamIndex===ai && !p.cut && (paIds||[]).includes(p.playerId));
+  const giveB = d.picks.filter(p=>p.teamIndex===bi && !p.cut && (pbIds||[]).includes(p.playerId));
   giveA.forEach(p=>{ p.teamIndex = bi; if(S.lineups[ai]) delete S.lineups[ai][p.playerId]; (S.lineups[bi]=S.lineups[bi]||{})[p.playerId]='BN'; });
   giveB.forEach(p=>{ p.teamIndex = ai; if(S.lineups[bi]) delete S.lineups[bi][p.playerId]; (S.lineups[ai]=S.lineups[ai]||{})[p.playerId]='BN'; });
   if(giveA.length||giveB.length) saveRealDraft(d);
@@ -4866,8 +4867,8 @@ function executeTrade(){
   const blocked = tradeCapBlocked(T.a,T.b,raS,rbS,py); if(blocked){ toast(blocked); return; }
   const d = realDraft();
   const nmA=S.teams[T.a].name, nmB=S.teams[T.b].name;
-  const aPrev=d.picks.filter(p=>p.teamIndex===T.a && T.pa.has(p.playerId)).map(p=>p.name).concat(raS.map(r=>`${py} R${r} pick`));
-  const bPrev=d.picks.filter(p=>p.teamIndex===T.b && T.pb.has(p.playerId)).map(p=>p.name).concat(rbS.map(r=>`${py} R${r} pick`));
+  const aPrev=d.picks.filter(p=>p.teamIndex===T.a && !p.cut && T.pa.has(p.playerId)).map(p=>p.name).concat(raS.map(r=>`${py} R${r} pick`));
+  const bPrev=d.picks.filter(p=>p.teamIndex===T.b && !p.cut && T.pb.has(p.playerId)).map(p=>p.name).concat(rbS.map(r=>`${py} R${r} pick`));
   if(!confirm(`COMMISSIONER OVERRIDE \u2014 executes now, no acceptance or league review.\n\n${nmA} sends: ${aPrev.join(', ')||'nothing'}\n${nmB} sends: ${bPrev.join(', ')||'nothing'}\n\nExecute?`)) return;
   applyTradeParts(T.a,T.b,[...T.pa],[...T.pb],raS,rbS,py);
   T.pa=new Set(); T.pb=new Set(); T.ra=new Set(); T.rb=new Set();
@@ -5068,7 +5069,7 @@ function renderTradeCenter(){
          return `<option value="${i}"${i===T[side]?' selected':''}${i===other?' disabled':''}>${esc(t.name)}${i===other?' — already picked':''}</option>`;
        }).join('')}</select>`;
   const rosterList = (ti, side, selSet) => {
-    const roster = d.picks.filter(p=>p.teamIndex===ti);
+    const roster = d.picks.filter(p=>p.teamIndex===ti && !p.cut);
     if(!roster.length) return `<p style="color:var(--chalk-dim)">No players \u2014 roster fills in from the draft.</p>`;
     return roster.map(p=>`
       <label class="row" style="padding:4px 0;gap:8px;cursor:pointer">
@@ -5078,7 +5079,7 @@ function renderTradeCenter(){
         <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</span><span style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span>
       </label>`).join('');
   };
-  const cnt = ti => d.picks.filter(p=>p.teamIndex===ti).length;
+  const cnt = ti => d.picks.filter(p=>p.teamIndex===ti && !p.cut).length;
   const after = side => side==='a' ? cnt(T.a)-T.pa.size+T.pb.size : cnt(T.b)-T.pb.size+T.pa.size;
   const py = +window.tradeSel.pickYear || curDraftYear();
   const yearOpts = Array.from({length:4},(_,i)=>curDraftYear()+i).map(y=>`<option value="${y}"${y===py?' selected':''}>${y}${y===curDraftYear()?' (this draft)':''}</option>`).join('');
@@ -5136,10 +5137,10 @@ function myTeamIdx(){
   if(Number.isInteger(claimed)) return claimed;   /* logged-in manager: locked to their claimed team */
   const v = store.get('ffl_my_team'); return v===null? null : +v;
 }
-function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti); }
+function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti && !p.cut); }
 /* roster size limit = all starter slots + bench (IR is a separate reserve, not counted) */
 function rosterLimit(){ return ['QB','RB','WR','TE','FLEX','K','DEF','BN'].reduce((n,k)=>n+(+S.roster[k]||0),0); }
-function rosterCount(ti){ const lu=S.lineups[ti]||{}; return D.picks.filter(p=>p.teamIndex===ti && lu[p.playerId]!=='IR').length; }
+function rosterCount(ti){ const lu=S.lineups[ti]||{}; return D.picks.filter(p=>p.teamIndex===ti && !p.cut && lu[p.playerId]!=='IR').length; }
 function ensureLineup(ti){
   const lu = S.lineups[ti] = S.lineups[ti] || {};
   const roster = teamRoster(ti);
@@ -5174,9 +5175,9 @@ function setSlot(ti, pid, slot){
 function swapToSlot(ti, benchPid, starterPid, slot){
   if(!requireTeam(ti)){ return; }
   const lu = ensureLineup(ti);
-  const bp = D.picks.find(p=>p.teamIndex===ti && p.playerId===benchPid);
+  const bp = D.picks.find(p=>p.teamIndex===ti && p.playerId===benchPid && !p.cut);
   if(!bp || lu[benchPid]!=='BN'){ renderTeams(); return; }   /* stale popup/select — roster changed under it */
-  const st = starterPid ? D.picks.find(p=>p.teamIndex===ti && p.playerId===starterPid) : null;
+  const st = starterPid ? D.picks.find(p=>p.teamIndex===ti && p.playerId===starterPid && !p.cut) : null;
   if(starterPid && (!st || lu[starterPid]!==slot)) { toast('Lineup changed — try again.'); renderTeams(); return; }
   if(st) lu[starterPid]='BN';
   else { const used=Object.values(lu).filter(s2=>s2===slot).length;
@@ -5196,13 +5197,23 @@ function slotChange(ti, pid, v){
 }
 /* ---- add / drop free agents ---- */
 window.faQuery=''; window.faPos='ALL';
+/* Dropping NEVER erases the draft board — the board is the record of the draft and only a
+   reset clears it. An original draft pick gets flagged cut (sticker stays put, player goes
+   back to the pool); only FA pickups (pickIndex -1, never on the board) actually leave. */
+function cutPick(ti, pid){
+  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
+  if(!p) return null;
+  if(+p.pickIndex>=0) p.cut = true;
+  else D.picks = D.picks.filter(x=>x!==p);
+  if(S.lineups && S.lineups[ti]) delete S.lineups[ti][pid];
+  return p;
+}
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
-  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid);
+  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return;
   if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
-  D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===pid));
-  if(S.lineups[ti]) delete S.lineups[ti][pid];
+  cutPick(ti, pid);
   saveDraft(); saveState(); pushTeamData(ti); pushMove(ti,'drop',p);
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
@@ -5227,7 +5238,7 @@ function addWithDrop(ti, pid){
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   if(rosterCount(ti) < rosterLimit()){ addPlayer(ti, pid); return; }
-  const roster = D.picks.filter(x=>x.teamIndex===ti && (S.lineups[ti]||{})[x.playerId]!=='IR');
+  const roster = D.picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR');
   let ov=document.getElementById('swapModal');
   if(!ov){ ov=document.createElement('div'); ov.id='swapModal'; ov.className='pmodal-overlay';
     ov.addEventListener('click',e=>{ if(e.target===ov) ov.style.display='none'; }); document.body.appendChild(ov); }
@@ -5246,9 +5257,7 @@ function addWithDrop(ti, pid){
 }
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
-  const dropped = D.picks.find(x=>x.teamIndex===ti && x.playerId===dropPid);
-  D.picks = D.picks.filter(x=>!(x.teamIndex===ti && x.playerId===dropPid));
-  if(S.lineups[ti]) delete S.lineups[ti][dropPid];
+  const dropped = cutPick(ti, dropPid);
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
   if(p) D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveDraft(); saveState(); pushTeamData(ti);
@@ -5367,7 +5376,7 @@ function renderTeams(){
   el.style.display = sub2==='all'?'grid':'none';
   if(sub2==='my'){ renderMyTeam(); return; }
   el.innerHTML = S.teams.map((t,i)=>{
-    const picks = D.picks.filter(p=>p.teamIndex===i);
+    const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
     return `<div class="card team-card">
       <div class="team-head">${teamMarkHTML(t,46)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
       (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
