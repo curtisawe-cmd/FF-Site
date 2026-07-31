@@ -854,10 +854,8 @@ section.view{max-width:1100px;margin-left:auto;margin-right:auto}
 .gc-tot.win{color:var(--turf-bright)}
 .gc-vs{font-family:'Anton',sans-serif;color:var(--chalk-dim);font-size:11px;letter-spacing:.1em;flex:0 0 auto}
 .gc-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}   /* two teams, always two columns */
-@media (max-width:560px){ .gc-grid{grid-template-columns:1fr} }
 .gc-col{min-width:0;padding:2px 0}
 .gc-col + .gc-col{border-left:1px solid var(--line)}
-@media (max-width:560px){ .gc-col + .gc-col{border-left:none;border-top:1px solid var(--line)} }
 .gc-band{font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--chalk-dim);padding:6px 10px 2px}
 table.gc-tbl{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
@@ -874,6 +872,21 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
 .gc-dots{display:flex;justify-content:center;gap:6px;margin-top:4px}
 .gc-dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:none;padding:0;cursor:pointer}
 .gc-dot.on{background:var(--turf)}
+@media (max-width:560px){
+  /* both starting lineups stay side by side on phones — everything in the row is compressed
+     (smaller position chips, no faces, tighter numbers) so two ~170px columns fit at 375px.
+     Must sit AFTER the base .gc-tbl rules or those win on source order. */
+  table.gc-tbl{font-size:11px}
+  table.gc-tbl td{padding:3px 4px}
+  table.gc-tbl .gc-slot{width:27px}
+  .gc-tbl .postag{min-width:23px;font-size:9px;padding:1px 3px;letter-spacing:.02em}
+  table.gc-tbl .gc-pts{width:41px;font-size:10.5px}
+  .gc-tbl .pface{display:none}
+  .gc-pl{font-size:11px}
+  .gc-meta{font-size:9px}
+  .gc-stat{font-size:9px}
+  .gc-band{padding:5px 6px 2px}
+}
 </style>
 </head>
 <body>
