@@ -834,6 +834,14 @@ table.inj-tbl tr:last-child td{border-bottom:none}
 @media (max-width:560px){ .gc-jump{right:8px;padding:6px 5px} .gc-jbtn{width:28px;height:28px;font-size:11px} }
 /* centre every page's content instead of letting it stretch across wide monitors */
 section.view{max-width:1100px;margin-left:auto;margin-right:auto}
+/* a card that caps its own width (My Team 760, chat 760, some settings cards) was hugging
+   the left edge of the 1100px page. Auto side margins centre those; full-width cards are
+   unaffected because auto resolves to 0 when there's no spare room. */
+section.view > .card,
+#myTeamView > .card, #injView > .card, #newsView > .card,
+#recapsView > .card, #statsView > .card, #historyView > .card, #pollsView > .card{
+  margin-left:auto;margin-right:auto;
+}
 /* big dim word behind each page saying where you are — same treatment as ROSTER on the
    managers card. Deliberately NO overflow:hidden on the section: that would turn it into a
    scroll container and kill the draft pool's position:sticky. The pseudo-element clips
