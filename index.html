@@ -834,6 +834,19 @@ table.inj-tbl tr:last-child td{border-bottom:none}
 @media (max-width:560px){ .gc-jump{right:8px;padding:6px 5px} .gc-jbtn{width:28px;height:28px;font-size:11px} }
 /* centre every page's content instead of letting it stretch across wide monitors */
 section.view{max-width:1100px;margin-left:auto;margin-right:auto}
+/* big dim word behind each page saying where you are — same treatment as ROSTER on the
+   managers card. Deliberately NO overflow:hidden on the section: that would turn it into a
+   scroll container and kill the draft pool's position:sticky. The pseudo-element clips
+   itself instead, so an over-long label can never widen the page. */
+section.view[data-ghost]{position:relative}
+section.view[data-ghost]::before{
+  content:attr(data-ghost);position:absolute;right:0;top:-6px;pointer-events:none;user-select:none;
+  max-width:100%;overflow:hidden;white-space:nowrap;
+  font-family:'Anton',sans-serif;font-size:clamp(46px,9vw,126px);line-height:1;
+  color:var(--turf);opacity:.05;letter-spacing:.02em;z-index:0;
+}
+section.view[data-ghost] > *{position:relative;z-index:1}
+:root[data-theme="dark"] section.view[data-ghost]::before{color:var(--turf-bright);opacity:.085}
 #view-draft{max-width:none}                    /* the 12x17 board needs every pixel */
 #gcView,#tradesView{max-width:900px;margin-left:auto;margin-right:auto}   /* these read better narrower */
 .gc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;
@@ -2542,6 +2555,7 @@ function setPlTab(t){
   if(news) news.style.display = t==='news' ? 'block':'none';
   if(t==='inj') renderInjuries();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
+  updateGhost();
 }
 /* Add button on an empty roster slot: jump to the Players tab filtered to that position */
 function addFromSlot(slot){
@@ -3548,6 +3562,21 @@ function showView(v){
   if(v==='settings'){ renderCommishCard(); }   /* member list arrives async — re-render on every visit */
   if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
   updateApplyBar();
+  updateGhost();
+}
+/* the big dim word behind each page. Sub-tabs retitle it, so Matchups reads GAME CENTER
+   once you switch over and Players reads INJURIES or NEWS. */
+const GHOST_LABEL = { home:'LEAGUE', draft:'DRAFT ROOM', mock:'MOCK DRAFT', players:'PLAYERS',
+  matchups:'MATCHUPS', teams:'TEAMS', trades:'TRADES', chat:'CHAT', polls:'POLLS',
+  stats:'STATS', recaps:'RECAPS', history:'HISTORY', settings:'SETTINGS' };
+function updateGhost(){
+  const v = window.currentView; if(!v) return;
+  let label = GHOST_LABEL[v] || '';
+  if(v==='matchups' && window.muTab==='gc') label = 'GAME CENTER';
+  if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='news') label='PLAYER NEWS'; }
+  if(v==='teams' && window.teamsSub==='my') label = 'MY TEAM';
+  const sec = document.getElementById('view-' + (v==='mock' ? 'draft' : v));
+  if(sec) sec.setAttribute('data-ghost', label);
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{ noteTabClick(); showView(b.dataset.view); }));
 document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
@@ -4433,6 +4462,7 @@ function setMuTab(t){
   if(board) board.style.display = t==='gc' ? 'none':'block';
   if(gc)    gc.style.display    = t==='gc' ? 'block':'none';
   if(t==='gc') renderGameCenter();
+  updateGhost();
 }
 function gcScrollBy(dir){
   const sc=document.getElementById('gcScroll'); if(!sc) return;
@@ -5423,6 +5453,7 @@ function renderTeams(){
   document.getElementById('myTeamView').style.display = sub2==='my'?'block':'none';
   const el = document.getElementById('teamsView');
   el.style.display = sub2==='all'?'grid':'none';
+  updateGhost();
   if(sub2==='my'){ renderMyTeam(); return; }
   el.innerHTML = S.teams.map((t,i)=>{
     const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
