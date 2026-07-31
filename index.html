@@ -1190,7 +1190,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <h2>League</h2>
     <div class="setgrid">
       <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
-      <div class="setrow"><label title="The colours managers see until they pick their own in the header. Each manager can override this for themselves.">Team colors (league default)</label><select id="setTeamTheme" style="max-width:220px" onchange="setTeamTheme(this.value)"></select></div>
       <div class="setrow"><label>Pick clock</label><select id="setTimer" onchange="saveFromInputs()"><option value="60">1 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
       <div class="setrow"><label>Draft rounds</label><input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()"></div>
       <div class="setrow"><label>Keeper round</label><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"></div>
@@ -1501,7 +1500,6 @@ const DEFAULTS = {
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
-  teamTheme: 'BUF',      /* NFL team whose colours skin the site; BUF = the hand-tuned original */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
@@ -5726,12 +5724,6 @@ function renderSettings(){
   // master manager roster
   renderManagers();
   renderPrizes();
-  { const tt=document.getElementById('setTeamTheme');
-    if(tt){ const cur=S.teamTheme||'BUF';
-      if(!tt.options.length) tt.innerHTML = Object.keys(NFL_TEAMS)
-        .sort((a,b)=>NFL_TEAMS[a][0].localeCompare(NFL_TEAMS[b][0]))
-        .map(c=>`<option value="${c}">${esc(NFL_TEAMS[c][0])}</option>`).join('');
-      tt.value=cur; } }
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
@@ -6070,11 +6062,11 @@ function applyTeamTheme(code){
     set(k, ps<0.15 ? hsl2hex(0,0,l) : hsl2hex(ph, s, l));
   });
 }
-/* Colours are a personal choice. Your own pick wins; the commissioner's setting is only the
-   default for anyone who hasn't picked. '' means "follow the league". */
+/* Colours are entirely a personal choice — no league-wide setting. Buffalo is the site's
+   own hand-tuned palette, so it stands in as the default. */
 function myTeamTheme(){
   const mine = store.get('ffl_team_theme');
-  return (mine && NFL_TEAMS[mine]) ? mine : ((S && S.teamTheme) || 'BUF');
+  return (mine && NFL_TEAMS[mine]) ? mine : 'BUF';
 }
 function setMyTeamTheme(code){
   store.set('ffl_team_theme', code||'');
@@ -6086,14 +6078,12 @@ function setMyTeamTheme(code){
 function syncTeamPicker(){
   const sel=document.getElementById('myTeamTheme'); if(!sel) return;
   if(!sel.options.length){
-    sel.innerHTML = `<option value="">League colours</option>` + Object.keys(NFL_TEAMS)
+    sel.innerHTML = Object.keys(NFL_TEAMS)
       .sort((a,b)=>NFL_TEAMS[a][0].localeCompare(NFL_TEAMS[b][0]))
       .map(c=>`<option value="${c}">${esc(NFL_TEAMS[c][0])}</option>`).join('');
   }
-  sel.value = store.get('ffl_team_theme') || '';
+  sel.value = myTeamTheme();
 }
-/* commissioner's league-wide default (Settings) */
-function setTeamTheme(code){ S.teamTheme=code||'BUF'; saveState(); applyTeamTheme(myTeamTheme()); }
 function applyTheme(t){
   t = (t==='dark') ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', t);
