@@ -565,6 +565,9 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
   color:var(--chalk-dim);background-color:var(--panel);border:1px solid var(--line-strong);
   border-radius:999px;padding:6px 28px 6px 13px;box-shadow:var(--sh-1);max-width:168px;cursor:pointer}
 .team-picker:hover{color:var(--chalk);border-color:var(--turf)}
+/* loud while previewing, so a commissioner never wonders why their controls vanished */
+.role-preview.previewing{color:var(--on-charge);background:var(--charge);border-color:var(--charge)}
+.role-preview.previewing .dot{background:var(--on-charge);box-shadow:none}
 @media(max-width:720px){ .team-picker{max-width:132px;font-size:12px;padding:5px 26px 5px 11px} }
 .theme-toggle .dot{width:11px;height:11px;border-radius:50%;background:var(--charge);box-shadow:0 0 0 3px var(--charge-wash)}
 :root[data-theme="dark"] .theme-toggle .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.18)}
@@ -950,6 +953,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
   <select class="team-picker" id="myTeamTheme" title="Skin the site in a team's colours — your choice only, nobody else sees it" onchange="setMyTeamTheme(this.value)" aria-label="Team colours"></select>
+  <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
 </header>
 
 <main>
@@ -3389,9 +3393,27 @@ window.onFbUser = onFbUser;
 let adminsMap = {}, managersMap = {};
 function isOwner(){ return !!(window.fbUser && (window.fbUser.email||'').toLowerCase()===COMMISH_EMAIL); }
 function computeAdmin(){ if(!window.fbUser) return false; if(isOwner()) return true; return adminsMap[window.fbUser.uid]===true; }
+/* A commissioner can drop into a manager's view to check what everyone else sees. It's a
+   preview, not a permission change — the account is still a commissioner and the database
+   rules are untouched, so this can't be used to gain or lose real access. */
+function viewingAsManager(){ return store.get('ffl_view_as')==='manager'; }
+function toggleViewAs(){
+  if(!computeAdmin()) return;                       /* only real commissioners get the preview */
+  store.set('ffl_view_as', viewingAsManager() ? '' : 'manager');
+  refreshRoleFromAuth(); rerenderRole();
+  toast(viewingAsManager() ? 'Viewing as a manager' : 'Back to commissioner ✓');
+}
+function syncRolePreviewBtn(){
+  const b=document.getElementById('rolePreview'); if(!b) return;
+  b.style.display = computeAdmin() ? 'inline-flex' : 'none';
+  const lbl=document.getElementById('rolePreviewLabel');
+  if(lbl) lbl.textContent = viewingAsManager() ? 'Back to commish' : 'View as manager';
+  b.classList.toggle('previewing', viewingAsManager());
+}
 function refreshRoleFromAuth(){
-  const admin = computeAdmin();
+  const admin = computeAdmin() && !viewingAsManager();
   store.set('ffl_role', admin?'admin':'user');
+  syncRolePreviewBtn();
   const btn=document.getElementById('authBtn');
   if(btn && window.fbUser){ const label = admin ? 'Commish' : (window.fbUser.displayName || (window.fbUser.email||'').split('@')[0] || 'Manager'); btn.innerHTML='<span class="dot"></span>'+label; }
   try{ applyRole(); rerenderRole(); updateClaimBadge(); }catch(e){}
