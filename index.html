@@ -1276,10 +1276,17 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
         Continue with Google
       </button>
       <div class="auth-or">or</div>
-      <input id="authEmail" type="email" placeholder="Email" autocomplete="email">
-      <input id="authPass" type="password" placeholder="Password" autocomplete="current-password">
-      <div class="auth-err" id="authErr"></div>
-      <button class="auth-primary" id="authSubmit" onclick="authSubmit()">Sign in</button>
+      <!-- a real <form> with username/current-password tokens is what makes iOS and Android
+           offer their Face ID / fingerprint keychain autofill and save the password on login -->
+      <!-- window. prefix is load-bearing: inline handlers resolve names against the form's
+           elements first, and the submit button's id="authSubmit" shadows the function —
+           bare authSubmit() throws and the browser then GET-submits the password into the URL -->
+      <form id="authForm" onsubmit="window.authSubmit();return false">
+        <input id="authEmail" name="email" type="email" placeholder="Email" autocomplete="username">
+        <input id="authPass" name="password" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go">
+        <div class="auth-err" id="authErr"></div>
+        <button class="auth-primary" id="authSubmit" type="submit">Sign in</button>
+      </form>
       <div class="auth-toggle"><span id="authToggleTxt">New to the league?</span> <a href="#" id="authToggleLink" onclick="toggleAuthMode();return false">Create an account</a></div>
     </div>
     <div id="authAccount" style="display:none">
