@@ -2217,7 +2217,8 @@ function startLeagueSync(){
   });
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
-    if(window.currentView==='chat') renderChatOnline();
+    if(window.currentView==='chat'){ renderChatOnline(); syncChatIdentity(); renderChat(); }   /* names resolve off managersMap */
+    if(window.currentView==='polls') renderPolls();
     try{ updateChatBadge(); updateTradeBadge(); }catch(e){} });   /* another device may have advanced your read marks */
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
@@ -3455,6 +3456,20 @@ function pushTeamData(ti){
   try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null })).catch(()=>{}); }catch(e){}
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
+/* The league's manager name for an account — what people are called in chat, polls and the
+   online list. Comes off the team they claimed (Settings > team > Manager), so renaming a
+   manager there renames them everywhere. Falls back to the account name, then `fallback`. */
+function managerNameFor(uid, fallback){
+  const r = (typeof managersMap!=='undefined' && managersMap) ? managersMap[uid] : null;
+  if(r){
+    const ti = r.teamIndex;
+    const mg = Number.isInteger(ti) && S.teams && S.teams[ti] ? String(S.teams[ti].manager||'').trim() : '';
+    if(mg) return mg;
+    const acc = String(r.name || String(r.email||'').split('@')[0] || '').trim();
+    if(acc) return acc;
+  }
+  return fallback || 'Manager';
+}
 function initClaims(){
   if(!fbOk() || !window.fbUser) return;
   if(!claimsStarted){ claimsStarted = true;
@@ -3783,9 +3798,9 @@ function updateChatBadge(){
 function renderChatOnline(){
   const el=document.getElementById('chatOnline'); if(!el) return;
   const now=Date.now();
-  const on=Object.values(managersMap||{})
-    .filter(a=>(+a.lastSeen||0) && now-(+a.lastSeen)<150000)
-    .map(a=>String(a.name||a.email||'Manager').split(' ')[0])
+  const on=Object.keys(managersMap||{})
+    .filter(uid=>{ const a=managersMap[uid]; return (+a.lastSeen||0) && now-(+a.lastSeen)<150000; })
+    .map(uid=>managerNameFor(uid))
     .sort((a,b)=>a.localeCompare(b));
   if(!on.length){ el.style.display='none'; el.innerHTML=''; return; }
   el.style.display='flex';
@@ -3926,8 +3941,19 @@ function chatBodyHTML(x){
   if(x.img) html += `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">`;
   return html || `<div>${esc(raw)}</div>`;
 }
+/* signed in: you post as your league manager name, not whatever you type. Runs again when
+   managersMap lands, since that can arrive after the chat view is already open. */
+function syncChatIdentity(){
+  const nameEl = document.getElementById('chatName'); if(!nameEl) return;
+  const mine = (window.fbUser && typeof managersMap!=='undefined' && managersMap && managersMap[window.fbUser.uid])
+    ? managerNameFor(window.fbUser.uid, '') : '';
+  if(mine){ nameEl.value = mine; nameEl.readOnly = true; nameEl.title = 'Your league manager name — set it in Settings'; }
+  else { nameEl.readOnly = false; nameEl.title = ''; }
+}
 function initChat(){
-  const nm = store.get('ffl_chat_name'); if(nm) document.getElementById('chatName').value = nm;
+  const nameEl = document.getElementById('chatName');
+  const nm = store.get('ffl_chat_name'); if(nm) nameEl.value = nm;
+  syncChatIdentity();
   const banner = document.getElementById('chatBanner');
   const live = fbOk() && window.fbUser;
   if(banner) banner.textContent = live
@@ -3965,11 +3991,14 @@ function renderChat(){
   const el = document.getElementById('chatList');
   if(!el) return;
   const me = (document.getElementById('chatName')?.value||'').trim();
+  const myU = window.fbUser && window.fbUser.uid;
   el.innerHTML = chatMsgs.length ? chatMsgs.map(x=>{
-    const mine = me && x.n===me;
+    const mine = (myU && x.uid) ? x.uid===myU : (me && x.n===me);
+    /* resolve by uid so a manager rename retitles their old messages too */
+    const who = x.uid ? managerNameFor(x.uid, x.n) : (x.n || 'Manager');
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
-      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(x.n)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
+      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
       <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'#fff':'var(--chalk)'};border-radius:12px;padding:8px 12px">${chatBodyHTML(x)}</div>
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
@@ -4050,7 +4079,7 @@ function renderPolls(){
         ${controls}
       </div>
       <div class="poll-opts">${rows}</div>
-      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(myVote?' · you voted':(myUid?' · tap an option to vote':''))}${poll.createdBy?` · by ${esc(String(poll.createdBy).split('@')[0])}`:''}</p>
+      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(myVote?' · you voted':(myUid?' · tap an option to vote':''))}${(poll.createdByUid||poll.createdBy)?` · by ${esc(managerNameFor(poll.createdByUid, String(poll.createdBy||'').split('@')[0]))}`:''}</p>
     </div>`;
   }).join('') : `<div class="card"><p class="sub" style="margin:0">No polls yet.${myUid?' Post one above.':''}</p></div>`;
   el.innerHTML = create + list;
@@ -5507,7 +5536,7 @@ function renderCommishCard(){
       ? `<span style="color:var(--rb);font-weight:700;font-size:12px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rb);box-shadow:0 0 6px var(--rb);vertical-align:baseline"></span> Online now</span>`
       : (+a.lastSeen ? `<span class="sub" style="margin:0;font-size:12px;white-space:nowrap">Seen ${timeAgo(+a.lastSeen)}</span>` : '');
     return `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:0"><b>${esc(a.name||a.email||'Manager')}</b> ${badge} ${pres}
+      <div style="min-width:0"><b>${esc(managerNameFor(a.uid, a.name||a.email||'Manager'))}</b> ${badge} ${pres}
         <div class="sub" style="margin:2px 0 0">${esc(a.email||'')} · ${teamTxt}</div></div>
       <div class="row" style="gap:6px;flex:0 0 auto">${btn}${rmBtn}</div></div>`;
   }).join('');
