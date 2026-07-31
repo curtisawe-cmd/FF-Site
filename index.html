@@ -4959,7 +4959,20 @@ function vetoesPath(){ return `league/${LEAGUE_ID}/tradeVetoes`; }   /* separate
 let offersMap = {}, vetoesMap = {};
 function vetoesFor(id){ return (vetoesMap&&vetoesMap[id])||{}; }
 function reviewEndsAt(o){ return (+o.acceptedAt||0) + TRADE_REVIEW_MS; }
-function vetoCount(id){ return Object.keys(vetoesFor(id)).length; }
+/* the two managers in a trade don't get a vote on their own deal. Matches on the account
+   that sent it and on whoever claimed either team, so it holds even if a commissioner
+   built the trade on someone's behalf. */
+function tradeInvolvesUid(o, uid){
+  if(!o || !uid) return false;
+  if(o.fromUid === uid) return true;
+  const ti = ((typeof managersMap!=='undefined' && managersMap) ? (managersMap[uid]||{}) : {}).teamIndex;
+  return Number.isInteger(ti) && (ti===o.a || ti===o.b);
+}
+/* ineligible votes never count, even if one was already sitting in the database */
+function vetoCount(id){
+  const o = offersMap[id];
+  return Object.keys(vetoesFor(id)).filter(uid=>!tradeInvolvesUid(o, uid)).length;
+}
 function tradeTimeLeft(o){
   const ms = reviewEndsAt(o) - Date.now();
   if(ms<=0) return 'review over';
@@ -5097,6 +5110,7 @@ function toggleVeto(id){
   if(!window.fbUser){ toast('Sign in to vote.'); openAuth(); return; }
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
   if(Date.now()>reviewEndsAt(o)){ toast('The review window has closed.'); return; }
+  if(tradeInvolvesUid(o, window.fbUser.uid)){ toast("You're in this trade — you don't get a vote on it."); return; }
   const uid=window.fbUser.uid, has=!!vetoesFor(id)[uid];
   const p=`${vetoesPath()}/${id}/${uid}`;
   (has? window.FB.dbRemove(p) : window.FB.dbSet(p, true)).then(()=>toast(has?'Veto withdrawn':'Veto recorded')).catch(()=>toast('Could not record your vote.'));
@@ -5176,7 +5190,8 @@ function renderOffers(){
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   if(!list.length){ el.innerHTML=`<p class="sub" style="margin:0">No pending offers.</p>`; return; }
   el.innerHTML=list.map(o=>{
-    const t=tradePartsText(o), need=vetoNeeded(), vc=vetoCount(o.id), iVetoed=!!vetoesFor(o.id)[uid];
+    const t=tradePartsText(o), need=vetoNeeded(), vc=vetoCount(o.id);
+    const inTrade=tradeInvolvesUid(o, uid), iVetoed=!inTrade && !!vetoesFor(o.id)[uid];
     const reviewing=o.status==='accepted', over=reviewing&&Date.now()>=reviewEndsAt(o);
     const status = o.status==='pending'
       ? `<span class="divtag">Awaiting ${esc(o.bName)}</span>`
@@ -5185,7 +5200,11 @@ function renderOffers(){
     const acts=[];
     if(offerCanAccept(o)) acts.push(`<button class="btn" onclick="acceptOffer('${o.id}')">Accept</button><button class="btn ghost" onclick="counterOffer('${o.id}')">Counter</button><button class="btn ghost" onclick="rejectOffer('${o.id}')">Reject</button>`);
     if(offerCanCancel(o)) acts.push(`<button class="btn ghost" onclick="cancelOffer('${o.id}')">Withdraw</button>`);
-    if(reviewing && !over && uid) acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${o.id}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`);
+    if(reviewing && !over && uid){
+      inTrade
+        ? acts.push(`<span class="sub" style="margin:0">You're in this trade &mdash; no vote.</span>`)
+        : acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${o.id}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`);
+    }
     if(reviewing && over && isAdmin()) acts.push(`<button class="btn" onclick="finalizeOffer('${o.id}')">Process now</button>`);
     if(isAdmin()) acts.push(`<button class="btn danger" style="padding:3px 10px" title="Delete this trade (commissioner)" onclick="deleteOffer('${o.id}')">Delete</button>`);
     return `<div class="card" style="margin-bottom:10px">
@@ -5269,7 +5288,7 @@ function renderTradeCenter(){
       <button class="btn" onclick="sendTradeOffer()">${window.counterOf?'Send Counter':'Send Offer'}</button>
       ${isAdmin()?`<button class="btn ghost" onclick="executeTrade()">Execute now (commish)</button>`:''}
     </div>
-    <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then a <b>${Math.round(TRADE_REVIEW_MS/86400000)}-day league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> to block a trade. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
+    <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then a <b>${Math.round(TRADE_REVIEW_MS/86400000)}-day league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> to block a trade. The two managers in the deal don't get a vote on it. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
     <div class="card" style="margin-bottom:18px">
       <h2>Pending Offers &amp; Reviews</h2>
       <div id="offersView" style="margin-top:10px"></div>
