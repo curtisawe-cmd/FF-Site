@@ -3329,13 +3329,24 @@ function initClaims(){
     });
   }
   /* upsert a lightweight registry record so every signed-in account is listed (promotable) */
-  try{ window.FB.dbUpdate('managers/'+myUid(), { email: window.fbUser.email||'', name:(window.fbUser.displayName||(window.fbUser.email||'').split('@')[0]||'Manager') }).catch(()=>{}); }catch(e){}
+  try{ window.FB.dbUpdate('managers/'+myUid(), { email: window.fbUser.email||'', name:(window.fbUser.displayName||(window.fbUser.email||'').split('@')[0]||'Manager'), lastSeen: window.FB.now() }).catch(()=>{}); }catch(e){}
+  startPresence();
   window.FB.dbGet('managers/'+myUid()).then(rec=>{
     window.myClaim = rec || null;
     updateClaimBadge();
     try{ updateTradeBadge(); }catch(e){}   /* badge depends on which team is yours */
     if(!isAdmin() && (!rec || !Number.isInteger(rec.teamIndex))) openClaim();  /* first-time manager: prompt */
   }).catch(()=>{});
+}
+/* presence heartbeat: signed-in visible tabs stamp managers/{uid}/lastSeen once a minute.
+   No onDisconnect needed — "online" just means a heartbeat landed in the last 2.5 minutes.
+   The same tick re-renders the commish card so "online" ages out even with nobody typing. */
+function startPresence(){
+  if(window._presenceST || !fbOk()) return;
+  const beat = ()=>{ if(window.fbUser && !document.hidden){
+    try{ window.FB.dbUpdate('managers/'+myUid(), { lastSeen: window.FB.now() }).catch(()=>{}); }catch(e){} } };
+  window._presenceST = setInterval(()=>{ beat(); if(window.currentView==='settings') renderCommishCard(); }, 60000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) beat(); });
 }
 function openClaim(){
   const ov=document.getElementById('claimOverlay'); if(!ov) return;
@@ -5283,8 +5294,9 @@ function renderCommishCard(){
   const hint=document.getElementById('commishHint'); if(hint) hint.textContent = isOwner()? 'You are the league owner' : 'Owner-managed';
   const list=document.getElementById('commishList'); if(!list) return;
   const owner=isOwner();
+  const onNow = a => (+a.lastSeen||0) && (Date.now()-(+a.lastSeen)) < 150000;   /* heartbeat is 60s; allow one miss */
   const accounts = Object.keys(managersMap||{}).map(uid=>({uid, ...(managersMap[uid]||{})}))
-    .sort((a,b)=>String(a.name||a.email||'').localeCompare(String(b.name||b.email||'')));
+    .sort((a,b)=> (onNow(b)-onNow(a)) || String(a.name||a.email||'').localeCompare(String(b.name||b.email||'')));
   if(!accounts.length){ list.innerHTML = `<p class="sub" style="margin:0">No one has signed in yet. Managers show up here once they log in.</p>`; return; }
   list.innerHTML = accounts.map(a=>{
     const ownerRow = String(a.email||'').toLowerCase()===COMMISH_EMAIL;
@@ -5303,8 +5315,11 @@ function renderCommishCard(){
     const rmBtn = (owner && !ownerRow)
       ? `<button class="btn ghost" style="padding:3px 9px;font-size:12px" title="Remove this account from the league" onclick="removeMember('${a.uid}')">✕</button>`
       : '';
+    const pres = onNow(a)
+      ? `<span style="color:var(--rb);font-weight:700;font-size:12px;white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--rb);box-shadow:0 0 6px var(--rb);vertical-align:baseline"></span> Online now</span>`
+      : (+a.lastSeen ? `<span class="sub" style="margin:0;font-size:12px;white-space:nowrap">Seen ${timeAgo(+a.lastSeen)}</span>` : '');
     return `<div class="row" style="justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)">
-      <div style="min-width:0"><b>${esc(a.name||a.email||'Manager')}</b> ${badge}
+      <div style="min-width:0"><b>${esc(a.name||a.email||'Manager')}</b> ${badge} ${pres}
         <div class="sub" style="margin:2px 0 0">${esc(a.email||'')} · ${teamTxt}</div></div>
       <div class="row" style="gap:6px;flex:0 0 auto">${btn}${rmBtn}</div></div>`;
   }).join('');
