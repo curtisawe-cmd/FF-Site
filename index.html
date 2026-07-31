@@ -558,6 +558,14 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 }
 .theme-toggle:hover{color:var(--chalk);border-color:var(--turf);background:var(--turf-wash)}
 .theme-toggle:active{transform:scale(.96)}
+/* personal team-colour picker, styled to sit beside the lights toggle.
+   background-COLOR only — the shorthand would wipe the shared arrow background-image. */
+.team-picker{
+  font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;letter-spacing:.05em;
+  color:var(--chalk-dim);background-color:var(--panel);border:1px solid var(--line-strong);
+  border-radius:999px;padding:6px 28px 6px 13px;box-shadow:var(--sh-1);max-width:168px;cursor:pointer}
+.team-picker:hover{color:var(--chalk);border-color:var(--turf)}
+@media(max-width:720px){ .team-picker{max-width:132px;font-size:12px;padding:5px 26px 5px 11px} }
 .theme-toggle .dot{width:11px;height:11px;border-radius:50%;background:var(--charge);box-shadow:0 0 0 3px var(--charge-wash)}
 :root[data-theme="dark"] .theme-toggle .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.18)}
 /* admin / viewer role */
@@ -936,6 +944,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
   </nav>
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
+  <select class="team-picker" id="myTeamTheme" title="Skin the site in a team's colours — your choice only, nobody else sees it" onchange="setMyTeamTheme(this.value)" aria-label="Team colours"></select>
 </header>
 
 <main>
@@ -1169,7 +1178,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
     <h2>League</h2>
     <div class="setgrid">
       <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
-      <div class="setrow"><label title="Recolours the whole site in an NFL team's colours — buttons, headings, glows and backgrounds. Applies to everyone in the league.">Team colors</label><select id="setTeamTheme" style="max-width:220px" onchange="setTeamTheme(this.value)"></select></div>
+      <div class="setrow"><label title="The colours managers see until they pick their own in the header. Each manager can override this for themselves.">Team colors (league default)</label><select id="setTeamTheme" style="max-width:220px" onchange="setTeamTheme(this.value)"></select></div>
       <div class="setrow"><label>Pick clock</label><select id="setTimer" onchange="saveFromInputs()"><option value="60">1 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
       <div class="setrow"><label>Draft rounds</label><input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()"></div>
       <div class="setrow"><label>Keeper round</label><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"></div>
@@ -2194,7 +2203,7 @@ function pushDraftRemote(){
 }
 function reRenderLive(){
   try{
-    applyTeamTheme(S && S.teamTheme);        /* commish may have reskinned the league */
+    applyTeamTheme(myTeamTheme());           /* commish may have moved the league default */
     const v = window.currentView || 'home';
     if(v==='draft' || v==='mock') refreshDraftUI(); else showView(v);
     renderHome();
@@ -3518,6 +3527,11 @@ function initClaims(){
   startPresence();
   window.FB.dbGet('managers/'+myUid()).then(rec=>{
     window.myClaim = rec || null;
+    /* colour choice follows the account onto a new device */
+    if(rec && typeof rec.teamTheme==='string' && rec.teamTheme!==store.get('ffl_team_theme')){
+      store.set('ffl_team_theme', rec.teamTheme);
+      applyTeamTheme(myTeamTheme()); syncTeamPicker();
+    }
     updateClaimBadge();
     try{ updateTradeBadge(); }catch(e){}   /* badge depends on which team is yours */
     if(!isAdmin() && (!rec || !Number.isInteger(rec.teamIndex))) openClaim();  /* first-time manager: prompt */
@@ -6012,14 +6026,38 @@ function applyTeamTheme(code){
     set(k, ps<0.15 ? hsl2hex(0,0,l) : hsl2hex(ph, s, l));
   });
 }
-function setTeamTheme(code){ S.teamTheme=code||'BUF'; saveState(); applyTeamTheme(S.teamTheme); }
+/* Colours are a personal choice. Your own pick wins; the commissioner's setting is only the
+   default for anyone who hasn't picked. '' means "follow the league". */
+function myTeamTheme(){
+  const mine = store.get('ffl_team_theme');
+  return (mine && NFL_TEAMS[mine]) ? mine : ((S && S.teamTheme) || 'BUF');
+}
+function setMyTeamTheme(code){
+  store.set('ffl_team_theme', code||'');
+  applyTeamTheme(myTeamTheme());
+  syncTeamPicker();
+  /* mirror onto your account so the choice follows you to another device */
+  try{ if(fbOk() && window.fbUser) window.FB.dbUpdate('managers/'+window.fbUser.uid, { teamTheme: code||'' }).catch(()=>{}); }catch(e){}
+}
+function syncTeamPicker(){
+  const sel=document.getElementById('myTeamTheme'); if(!sel) return;
+  if(!sel.options.length){
+    sel.innerHTML = `<option value="">League colours</option>` + Object.keys(NFL_TEAMS)
+      .sort((a,b)=>NFL_TEAMS[a][0].localeCompare(NFL_TEAMS[b][0]))
+      .map(c=>`<option value="${c}">${esc(NFL_TEAMS[c][0])}</option>`).join('');
+  }
+  sel.value = store.get('ffl_team_theme') || '';
+}
+/* commissioner's league-wide default (Settings) */
+function setTeamTheme(code){ S.teamTheme=code||'BUF'; saveState(); applyTeamTheme(myTeamTheme()); }
 function applyTheme(t){
   t = (t==='dark') ? 'dark' : 'light';
   document.documentElement.setAttribute('data-theme', t);
   const lbl = document.getElementById('themeLabel');
   if(lbl) lbl.textContent = (t==='dark') ? 'Lights on' : 'Lights out';
   store.set('ffl_theme', t);
-  applyTeamTheme(S && S.teamTheme);          /* shades differ per mode — recompute on every switch */
+  applyTeamTheme(myTeamTheme());             /* shades differ per mode — recompute on every switch */
+  syncTeamPicker();
 }
 function toggleTheme(){
   const cur = document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light';
