@@ -5321,8 +5321,15 @@ function renderMyTeam(){
     if(id){ consumed.add(id); slotRows.push(playerRow(pById[id], s2)); }
     else slotRows.push(`<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`);
   });
-  const benchRows = roster.filter(p=>lu[p.playerId]==='BN').map(p=>playerRow(p,'BN')).join('');
-  const irRows = roster.filter(p=>lu[p.playerId]==='IR').map(p=>playerRow(p,'IR')).join('');
+  /* bench and IR pad out to their caps with Empty rows, so a dropped player leaves a
+     visible hole instead of the section quietly shrinking */
+  const emptyRow = s2 => `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`;
+  const bnFilled = roster.filter(p=>lu[p.playerId]==='BN');
+  const benchRows = bnFilled.map(p=>playerRow(p,'BN')).join('')
+    + Array(Math.max(0,(+S.roster.BN||0)-bnFilled.length)).fill(emptyRow('BN')).join('');
+  const irFilled = roster.filter(p=>lu[p.playerId]==='IR');
+  const irRows = irFilled.map(p=>playerRow(p,'IR')).join('')
+    + Array(Math.max(0,(+S.roster.IR||0)-irFilled.length)).fill(emptyRow('IR')).join('');
   el.innerHTML = `
     <div class="card" style="max-width:760px">
       <div class="row" style="justify-content:space-between">
