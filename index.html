@@ -895,14 +895,18 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:'IBM Plex Mono',mon
 .gc-dot.on{background:var(--turf)}
 @media (max-width:560px){
   /* both starting lineups stay side by side on phones — everything in the row is compressed
-     (smaller position chips, no faces, tighter numbers) so two ~170px columns fit at 375px.
-     Must sit AFTER the base .gc-tbl rules or those win on source order. */
+     (smaller position chips, smaller thumbnails, tighter numbers) so two ~170px columns fit
+     at 375px. Must sit AFTER the base .gc-tbl rules or those win on source order. */
   table.gc-tbl{font-size:11px}
-  table.gc-tbl td{padding:3px 4px}
-  table.gc-tbl .gc-slot{width:27px}
-  .gc-tbl .postag{min-width:23px;font-size:9px;padding:1px 3px;letter-spacing:.02em}
-  table.gc-tbl .gc-pts{width:41px;font-size:10.5px}
-  .gc-tbl .pface{display:none}
+  table.gc-tbl td{padding:3px 3px}
+  table.gc-tbl .gc-slot{width:25px}
+  .gc-tbl .postag{min-width:21px;font-size:8.5px;padding:1px 2px;letter-spacing:0}
+  table.gc-tbl .gc-pts{width:38px;font-size:10.5px}
+  /* keep the thumbnails, just shrink them. playerFace() writes width/height as an inline
+     style, so these have to out-rank it. */
+  .gc-tbl .pface{width:19px !important;height:19px !important}
+  .gc-tbl .pface .pface-i{font-size:8px !important}
+  .gc-tbl .row{gap:4px !important}
   .gc-pl{font-size:11px}
   .gc-meta{font-size:9px}
   .gc-stat{font-size:9px}
