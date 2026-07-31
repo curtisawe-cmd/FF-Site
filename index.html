@@ -4959,6 +4959,31 @@ function vetoesPath(){ return `league/${LEAGUE_ID}/tradeVetoes`; }   /* separate
 let offersMap = {}, vetoesMap = {};
 function vetoesFor(id){ return (vetoesMap&&vetoesMap[id])||{}; }
 function reviewEndsAt(o){ return (+o.acceptedAt||0) + TRADE_REVIEW_MS; }
+/* Everything an offer promises, as comparable keys. You can shop the same player to two
+   managers, but the moment one deal is accepted the other is promising something already
+   gone — picks included, since a round can only be traded once too. */
+function offerAssets(o){
+  const s=new Set(); if(!o) return s;
+  (o.pa||[]).forEach(id=>s.add('p:'+id));
+  (o.pb||[]).forEach(id=>s.add('p:'+id));
+  const py = o.py || curDraftYear();
+  (o.ra||[]).forEach(r=>s.add(`k:${o.a}:${r}:${py}`));
+  (o.rb||[]).forEach(r=>s.add(`k:${o.b}:${r}:${py}`));
+  return s;
+}
+function offersConflict(a, b){
+  const A = offerAssets(a);
+  for(const k of offerAssets(b)) if(A.has(k)) return true;
+  return false;
+}
+/* a live deal (accepted, still in review or later) that already claims one of these assets */
+function conflictingLiveOffer(o, skipId){
+  return Object.keys(offersMap||{}).find(oid=>{
+    if(oid===skipId) return false;
+    const x = offersMap[oid];
+    return x && x.status==='accepted' && offersConflict(o, x);
+  }) || null;
+}
 /* the two managers in a trade don't get a vote on their own deal. Matches on the account
    that sent it and on whoever claimed either team, so it holds even if a commissioner
    built the trade on someone's behalf. */
@@ -5053,12 +5078,36 @@ function sendTradeOffer(){
     toast(prior?'Counter sent \uD83D\uDCE8':'Offer sent \uD83D\uDCE8'); renderTradeCenter();
   }).catch(()=>toast('Could not send the offer.'));
 }
-function offerCanAccept(o){ return o.status==='pending' && (isAdmin() || myTeamIndex()===o.b); }
+function offerCanAccept(o){
+  if(o.status!=='pending') return false;
+  if(conflictingLiveOffer(o, o.id)) return false;      /* a live deal already claimed one of these */
+  return isAdmin() || myTeamIndex()===o.b;
+}
 function offerCanCancel(o){ return o.status==='pending' && (isAdmin() || (window.fbUser && o.fromUid===window.fbUser.uid)); }
 function acceptOffer(id){
-  const o=offersMap[id]; if(!o||!offerCanAccept(o)) return;
+  const o=offersMap[id] && {...offersMap[id], id};   /* stored offers don't carry their own id */
+  if(!o||!offerCanAccept(o)) return;
+  /* someone else already accepted a deal for one of these players/picks */
+  const clash = conflictingLiveOffer(o, id);
+  if(clash){ const c=offersMap[clash];
+    toast(`Too late \u2014 ${esc(c.aName)} \u21c4 ${esc(c.bName)} already took one of these.`);
+    return; }
   window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'accepted', acceptedAt:Date.now()})
-    .then(()=>toast(`Accepted \u2014 ${Math.round(TRADE_REVIEW_MS/86400000)}-day league review starts now`)).catch(()=>toast('Could not accept.'));
+    .then(()=>{
+      voidOffersSupersededBy(id);
+      toast(`Accepted \u2014 ${Math.round(TRADE_REVIEW_MS/86400000)}-day league review starts now`);
+    }).catch(()=>toast('Could not accept.'));
+}
+/* accepting a deal kills every other pending offer that promised the same player or pick */
+function voidOffersSupersededBy(id){
+  const won = offersMap[id]; if(!won) return;
+  Object.keys(offersMap||{}).forEach(oid=>{
+    if(oid===id) return;
+    const other = offersMap[oid];
+    if(!other || other.status!=='pending') return;
+    if(!offersConflict(won, other)) return;
+    window.FB.dbUpdate(`${offersPath()}/${oid}`, {status:'superseded', closedAt:Date.now(), supersededBy:id}).catch(()=>{});
+  });
 }
 function rejectOffer(id){
   const o=offersMap[id]; if(!o||!offerCanAccept(o)) return;
@@ -5159,11 +5208,14 @@ function updateTradeBadge(){
   btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${n}</span>`;
 }
 let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
+const supersededSeen = new Set();            /* only tell you once that your offer was voided */
 function noticeNewOffers(){
   const ids = Object.keys(offersMap||{});
   const nowAccepted = ids.filter(id=>(offersMap[id]||{}).status==='accepted');
   if(seenOfferIds === null){                                          /* first load: no catch-up spam */
-    seenOfferIds = new Set(ids); acceptedOfferIds = new Set(nowAccepted); updateTradeBadge(); return;
+    seenOfferIds = new Set(ids); acceptedOfferIds = new Set(nowAccepted);
+    ids.forEach(id=>{ if((offersMap[id]||{}).status==='superseded') supersededSeen.add(id); });
+    updateTradeBadge(); return;
   }
   const mine = myTeamIndex();
   ids.forEach(id=>{
@@ -5178,6 +5230,15 @@ function noticeNewOffers(){
     acceptedOfferIds.add(id);
     const o = offersMap[id]; if(!o) return;
     try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`); }catch(e){}
+  });
+  /* your offer got voided because someone else landed one of those players first */
+  ids.forEach(id=>{
+    const o = offersMap[id];
+    if(!o || o.status!=='superseded' || supersededSeen.has(id)) return;
+    supersededSeen.add(id);
+    if(!window.fbUser) return;
+    const yours = o.fromUid===window.fbUser.uid || (Number.isInteger(mine) && (o.a===mine || o.b===mine));
+    if(yours) toast(`Offer voided — a player in ${o.aName} ⇄ ${o.bName} went elsewhere first`);
   });
   acceptedOfferIds = new Set(nowAccepted);       /* forget closed ones so a re-accept can fire again */
   updateTradeBadge();
