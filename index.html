@@ -2809,14 +2809,16 @@ function starterPicks(ti){
   return teamRoster(ti).filter(p=>{ const s=lu[p.playerId]; return s && s!=='BN' && s!=='IR'; });
 }
 /* per-player scores for one team in a week, from fetched stats */
+/* Scores are shown to one decimal, so round each player there FIRST and total the rounded
+   values — otherwise the team total wouldn't equal the column of player scores above it. */
 function teamWeekDetail(ti, stats){
+  const r1 = n => Math.round(n*10)/10;
   const rows = starterPicks(ti).map(p=>{
     const st = stats[p.playerId];
     return { playerId:p.playerId, name:p.name, pos:p.pos, nfl:p.nfl, st,
-             pts: st ? (scoreWeekStats(st, p.pos)||0) : null };
+             pts: st ? r1(scoreWeekStats(st, p.pos)||0) : null };
   });
-  const total = rows.reduce((s,r)=>s+(r.pts||0),0);
-  return { rows, total: Math.round(total*100)/100 };
+  return { rows, total: r1(rows.reduce((s,r)=>s+(r.pts||0),0)) };
 }
 function openPlayer(id){
   let ov=document.getElementById('playerModal');
@@ -4125,7 +4127,7 @@ function renderRecaps(){
   const plr = (H.pointsLeaders||[]).find(r=>String(r.year)===yr);
   const twr = (H.teamWeeks||[]).find(r=>String(r.year)===yr);
   const pwr = (H.playerWeeks||[]).find(r=>String(r.year)===yr);
-  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
   const strip = [];
   if(champ) strip.push(`\uD83C\uDFC6 <b>${esc(champ.team)}</b>${mgrOf(yr,champ.team)?` (${esc(mgrOf(yr,champ.team))})`:''}`);
   if(plr) strip.push(`Points leader: <b>${esc(plr.team)}</b> \u00B7 ${fmt(plr.pts)}`);
@@ -4158,7 +4160,7 @@ function renderStats(){
   R.to = Math.min(Math.max(+R.to||rMax, rMin), rMax);
   if(R.from > R.to) [R.from, R.to] = [R.to, R.from];
   const {fr, multiMgr, b2bMgr} = franchiseData(R.from, R.to);
-  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
   const rows = Object.entries(fr);
   const pct = v => { const g=v.w+v.l+v.t; return g? v.w/g : 0; };
   const lead = (title, pick, val) => { const r=[...rows].sort(pick)[0]; return r? `<div class="card"><div class="eyebrow">${title}</div><h2 style="margin-bottom:2px">${esc(r[0])}</h2><div style="font-family:'IBM Plex Mono',monospace;font-size:22px;color:var(--turf)">${val(r[1])}</div></div>` : ''; };
@@ -4222,7 +4224,7 @@ function setStatsSort(key){
 function renderHistory(){
   const H = S.history;
   const {mgrOf} = franchiseData();
-  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
   const pl = [...H.pointsLeaders].sort((a,b)=>b.year-a.year);
   const best = [...pl].sort((a,b)=>b.pts-a.pts)[0];
   const worst = [...pl].sort((a,b)=>a.pts-b.pts)[0];
@@ -4255,15 +4257,15 @@ function renderHistory(){
   const poHTML = (()=>{ const yr = String(window.histPOYear||''); const games = PO[yr]||[];
     const weeks = [...new Set(games.map(g=>g.week))].sort((a,b)=>a-b);
     const row = g => { const aWin = g.pa>g.pb, sb = g.label==='Fantasy Super Bowl';
-      const side = (s,t,p,win) => `<td style="${win?'font-weight:600':'color:var(--chalk-dim)'}">${win&&sb?'\uD83C\uDFC6 ':''}(${s}) ${esc(t)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;${win?'font-weight:600':'color:var(--chalk-dim)'}">${(+p).toFixed(2)}</td>`;
+      const side = (s,t,p,win) => `<td style="${win?'font-weight:600':'color:var(--chalk-dim)'}">${win&&sb?'\uD83C\uDFC6 ':''}(${s}) ${esc(t)}</td><td style="text-align:right;font-family:'IBM Plex Mono',monospace;${win?'font-weight:600':'color:var(--chalk-dim)'}">${(+p).toFixed(1)}</td>`;
       return `<tr><td style="color:var(--chalk-dim);font-size:12px;white-space:nowrap">${esc(g.label)}</td>${side(g.sa,g.ta,g.pa,aWin)}${side(g.sb,g.tb,g.pb,!aWin)}</tr>`; };
     const editRow = (g,i) => `
       <tr>
         <td style="white-space:nowrap"><input type="number" value="${g.week}" style="width:56px" onchange="poSet(${i},'week',+this.value)"> <input type="text" value="${esc(g.label)}" style="width:130px" onchange="poSet(${i},'label',this.value)"></td>
         <td><input type="number" value="${g.sa}" style="width:48px" onchange="poSet(${i},'sa',+this.value)"> <input type="text" list="poTeams" value="${esc(g.ta)}" style="width:150px" onchange="poSet(${i},'ta',this.value)"></td>
-        <td><input type="number" step="0.01" value="${g.pa}" style="width:80px" onchange="poSet(${i},'pa',+this.value)"></td>
+        <td><input type="number" step="0.1" value="${g.pa}" style="width:80px" onchange="poSet(${i},'pa',+this.value)"></td>
         <td><input type="number" value="${g.sb}" style="width:48px" onchange="poSet(${i},'sb',+this.value)"> <input type="text" list="poTeams" value="${esc(g.tb)}" style="width:150px" onchange="poSet(${i},'tb',this.value)"></td>
-        <td><input type="number" step="0.01" value="${g.pb}" style="width:80px" onchange="poSet(${i},'pb',+this.value)"></td>
+        <td><input type="number" step="0.1" value="${g.pb}" style="width:80px" onchange="poSet(${i},'pb',+this.value)"></td>
         <td><button class="btn danger" style="padding:2px 8px;font-size:12px" onclick="poDelGame(${i})">\u00D7</button></td>
       </tr>`;
     const isCurYear = String(yr)===String(curDraftYear());          /* past seasons are locked history */
@@ -4288,7 +4290,7 @@ function renderHistory(){
           const cons = games.filter(g=>g.bracket==='consolation');
           const chWeeks = [...new Set(ch.map(g=>g.week))].sort((a,b)=>a-b);
           const gcard = (g,showLabel) => { const aWin=g.pa>g.pb, sb=g.label==='Fantasy Super Bowl';
-            const brow=(s,t,p,win)=>`<div class="brow ${win?'win':''}"><span><span class="bseed">${s||''}</span>${win&&sb?'<span class="td-pop" style="display:inline-block">\uD83C\uDFC6</span> ':''}${esc(t||'TBD')}</span><span class="bpts">${(+p).toFixed(2)}</span></div>`;
+            const brow=(s,t,p,win)=>`<div class="brow ${win?'win':''}"><span><span class="bseed">${s||''}</span>${win&&sb?'<span class="td-pop" style="display:inline-block">\uD83C\uDFC6</span> ':''}${esc(t||'TBD')}</span><span class="bpts">${(+p).toFixed(1)}</span></div>`;
             return `<div class="bgame">${showLabel?`<div class="clabel">${esc(g.label)}</div>`:''}${brow(g.sa,g.ta,g.pa,aWin)}${brow(g.sb,g.tb,g.pb,!aWin)}</div>`; };
           const bracketHTML = `<div class="bracket">` + chWeeks.map((w,wi)=>{
             const rg = ch.filter(g=>g.week===w);
@@ -4625,7 +4627,7 @@ async function renderGameCenter(){
               <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}</div>
               ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">did not play</div>`)}
             </div></div></td>
-        <td class="gc-pts">${pts==null?'—':pts.toFixed(2)}</td></tr>`;
+        <td class="gc-pts">${pts==null?'—':pts.toFixed(1)}</td></tr>`;
     }).join('');
     const starters = [];
     slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; let n=0;
@@ -4645,9 +4647,9 @@ async function renderGameCenter(){
     const aWin=A.total>B.total, bWin=B.total>A.total;
     return `<section class="gc-card"><div class="card" style="padding:0;overflow:hidden">
       <div class="gc-head">
-        <span class="gc-side">${teamMarkHTML(tA,30)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(2)}</span></span>
+        <span class="gc-side">${teamMarkHTML(tA,30)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span></span>
         <span class="gc-vs">VS</span>
-        <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(2)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,30)}</span>
+        <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,30)}</span>
       </div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
     </div></section>`;
@@ -4796,8 +4798,8 @@ function standingsRowHTML(r, rank, leader){
   return `<tr${leader?' class="top"':''}><td style="font-family:'IBM Plex Mono',monospace">${rank}</td>`+
     `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
     `<td style="text-align:center;font-family:'IBM Plex Mono',monospace">${r.w}-${r.l}-${r.t}</td>`+
-    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pf.toFixed(2)}</td>`+
-    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pa.toFixed(2)}</td></tr>`;
+    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pf.toFixed(1)}</td>`+
+    `<td style="text-align:right;font-family:'IBM Plex Mono',monospace">${r.pa.toFixed(1)}</td></tr>`;
 }
 /* standings: one table when no divisions, or grouped per division (sorted within each) */
 function standingsHTML(rows, anyScores){
@@ -4869,9 +4871,9 @@ function renderMatchups(){
         };
         return `<div class="row mu-row" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px">
           ${side(g[0],aWin,0,false)}
-          <input type="number" step="0.01" style="width:82px" value="${fmt1(pa)}" placeholder="\u2014" onchange="setScore('${wk}',${m},0,this.value)">
+          <input type="number" step="0.1" style="width:82px" value="${fmt1(pa)}" placeholder="\u2014" onchange="setScore('${wk}',${m},0,this.value)">
           <span style="color:var(--chalk-dim);font-size:12px">vs</span>
-          <input type="number" step="0.01" style="width:82px" value="${fmt1(pb)}" placeholder="\u2014" onchange="setScore('${wk}',${m},1,this.value)">
+          <input type="number" step="0.1" style="width:82px" value="${fmt1(pb)}" placeholder="\u2014" onchange="setScore('${wk}',${m},1,this.value)">
           ${side(g[1],bWin,1,true)}
         </div>`;
       }).join('')}
@@ -5470,7 +5472,7 @@ function renderMyTeam(){
     <div class="card" style="max-width:760px">
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,54)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
-        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(2)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''}</div>`:''}</div></div>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''}</div>`:''}</div></div>
         ${sel}
       </div>
       <div class="eyebrow" style="margin-top:14px">Starting lineup</div>
