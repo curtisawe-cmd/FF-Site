@@ -5559,11 +5559,14 @@ function noticeNewOffers(){
     const o = offersMap[id]; if(!o || o.status!=='pending' || !window.fbUser) return;
     if(Number.isInteger(mine) && o.b===mine) toast(`📨 ${o.aName} sent you a trade offer`);
     const target = uidForTeam(o.b);                 /* alert the manager being offered to */
+    /* An offer is private to its recipient. If their uid can't be resolved (unclaimed team, or
+       the managers feed hasn't landed yet), send NOTHING — an untargeted push falls through to
+       the relay's everyone-segment and buzzes the whole league about a two-person deal. */
+    if(!target) return;
     /* the device that sent the offer is the one that announces it, so this works whether or not
        the commissioner is online */
     const mineToSend = !!(window.fbUser && o.fromUid === window.fbUser.uid);
-    sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`,
-             Object.assign({mine:mineToSend}, target?{uids:[target]}:{}));
+    sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`, {mine:mineToSend, uids:[target]});
   });
   /* a trade just flipped to accepted — shout it on every screen in the league */
   nowAccepted.forEach(id=>{
@@ -6155,7 +6158,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · trade alarm names the teams';
+const BUILD_STAMP = '2026-08-01 · offer push is recipient-only';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
