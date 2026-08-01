@@ -5962,7 +5962,7 @@ function renderSettings(){
       : `<input type="text" style="min-width:240px" value="${esc(cur)}" onchange="setRule(${idx}, this.value)">`;
     return `<div class="setrow"><label>${esc(k)}</label>${control}</div>`;
   }).join('');
-  { const a=document.getElementById('setPushApp'); if(a) a.value = S.pushAppId || '';
+  { const a=document.getElementById('setPushApp'); if(a) a.value = S.pushAppId || ONESIGNAL_APP_ID;
     const k=document.getElementById('setPushKey'); if(k) k.value = pushKey() ? '••••••••••••' : '';
     renderPushState(); }
   renderSnapExtras();
@@ -5987,8 +5987,8 @@ function renderPushState(){
   const el=document.getElementById('pushState'); if(!el) return;
   const id=!!pushAppId(), key=!!pushKey();
   el.innerHTML = !id ? 'Add an App ID to let managers turn on alerts.'
-    : (key ? '✅ This browser can send alerts.'
-           : '⚠️ Managers can receive, but nothing can <b>send</b> until you paste the REST key here.');
+    : (key ? '✅ App ID set and this browser can send alerts.'
+           : '⚠️ App ID is set, so managers can receive — but nothing can <b>send</b> until you paste the REST key here.');
 }
 async function testPush(){
   if(!pushAppId()){ toast('Add the App ID first.'); return; }
@@ -6655,7 +6655,8 @@ syncHeaderH();
 
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
 applyTypography();
-try{ initPush(); syncPushBtn(); }catch(e){}
+/* push starts itself at the end of its own script block — initPush() is defined there,
+   and calling it from here would hit the temporal dead zone and be swallowed */
 function fixPlayoffs2025(){   /* restore the real 2025 bracket (NFL.com export) whenever it's missing or empty */
   S.playoffsCustom = S.playoffsCustom || {};
   const cur = S.playoffsCustom['2025'];
@@ -6811,7 +6812,11 @@ if('serviceWorker' in navigator){
    offline worker registered at the root — two workers claiming '/' would knock each other out. */
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 let osReady = false;
-function pushAppId(){ return (S && S.pushAppId) || ''; }
+/* The App ID is a public identifier — OneSignal's own snippet puts it in client code. Safe
+   to commit; the REST key is the credential and is never in this repo. Settings can still
+   override it if the league ever moves to a different OneSignal app. */
+const ONESIGNAL_APP_ID = '03751159-4b6b-4128-ab9c-3934e82fcbfe';
+function pushAppId(){ return (S && S.pushAppId) || ONESIGNAL_APP_ID; }
 function pushKey(){ try{ return store.get('ffl_push_key') || ''; }catch(e){ return ''; } }
 function initPush(){
   const id = pushAppId();
@@ -6825,7 +6830,9 @@ function initPush(){
       await OneSignal.init({
         appId: id,
         serviceWorkerPath: 'push/onesignal/OneSignalSDKWorker.js',
-        serviceWorkerParam: { scope: '/FF-Site/push/onesignal/' },
+        /* resolved from the page, not hardcoded to /FF-Site/ — keeps working if the site
+           ever moves to a different path or a custom domain */
+        serviceWorkerParam: { scope: new URL('push/onesignal/', location.href).pathname },
         allowLocalhostAsSecureOrigin: true
       });
       osReady = true;
@@ -6872,12 +6879,17 @@ async function sendPush(title, body, opts){
   const uids = (opts&&opts.uids)||null;
   if(uids && uids.length) payload.include_aliases = { external_id: uids }, payload.target_channel='push';
   else payload.included_segments = ['Subscribed Users'];
+  /* OneSignal has two key formats in the wild: newer keys authenticate as "Key <k>", older
+     ones as "Basic <k>". Try the current one, fall back rather than dead-ending on a 401. */
+  const post = auth => fetch('https://api.onesignal.com/notifications', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':auth },
+    body: JSON.stringify(payload)
+  });
   try{
-    const r = await fetch('https://api.onesignal.com/notifications', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization':'Key '+key },
-      body: JSON.stringify(payload)
-    });
+    let r = await post('Key '+key);
+    if(r.status===401 || r.status===403) r = await post('Basic '+key);
+    if(!r.ok){ try{ console.warn('[BBL] push rejected', r.status, await r.text()); }catch(e){} }
     return r.ok;
   }catch(e){ return false; }
 }
@@ -6886,6 +6898,7 @@ function uidForTeam(ti){
   const m=(typeof managersMap!=='undefined' && managersMap)||{};
   return Object.keys(m).find(u=>m[u] && m[u].teamIndex===ti) || null;
 }
+try{ initPush(); syncPushBtn(); }catch(e){}
 </script>
 </body>
 </html>
