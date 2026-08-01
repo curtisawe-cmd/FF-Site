@@ -43,13 +43,16 @@ export default {
     if (!ALLOWED_ORIGINS.includes(origin))
       return new Response(JSON.stringify({ error: 'origin not allowed' }), { status: 403, headers });
 
-    /* tell the difference between "secret missing" and "key wrong" — a missing secret sends
-       the string "undefined" as the key and looks identical to a bad key from outside */
-    if (!env.ONESIGNAL_API_KEY || !env.ONESIGNAL_APP_ID) {
+    /* Trim: pasting a secret often drags in a trailing newline or space, which makes the
+       Authorization header invalid and looks exactly like a wrong key. */
+    const APP_ID = String(env.ONESIGNAL_APP_ID || '').trim();
+    const API_KEY = String(env.ONESIGNAL_API_KEY || '').trim();
+
+    if (!API_KEY || !APP_ID) {
       return new Response(JSON.stringify({
         error: 'worker secrets not set',
-        ONESIGNAL_APP_ID: env.ONESIGNAL_APP_ID ? 'set' : 'MISSING',
-        ONESIGNAL_API_KEY: env.ONESIGNAL_API_KEY ? 'set' : 'MISSING',
+        ONESIGNAL_APP_ID: APP_ID ? 'set' : 'MISSING',
+        ONESIGNAL_API_KEY: API_KEY ? 'set' : 'MISSING',
         hint: 'Settings > Variables and Secrets. Names are case-sensitive, then Deploy.'
       }), { status: 500, headers: { ...headers, 'Content-Type': 'application/json' } });
     }
@@ -58,6 +61,21 @@ export default {
     try { body = await request.json(); }
     catch { return new Response(JSON.stringify({ error: 'bad json' }), { status: 400, headers }); }
 
+    /* {"diag":true} reports what the worker is holding, without sending and without ever
+       revealing the key itself — enough to tell a missing secret from a mangled or
+       wrong-type one, which all fail identically from the outside. */
+    if (body && body.diag === true) {
+      const raw = String(env.ONESIGNAL_API_KEY || '');
+      return new Response(JSON.stringify({
+        appId: APP_ID,
+        appIdLooksValid: /^[0-9a-f-]{36}$/i.test(APP_ID),
+        keyLength: API_KEY.length,
+        keyHadSurroundingWhitespace: raw !== raw.trim(),
+        keyStyle: API_KEY.startsWith('os_v2_') ? 'new (os_v2_)' : 'legacy',
+        note: 'A legacy REST API key is ~48 chars. An Organization/User key will 401 on sends.'
+      }), { status: 200, headers: { ...headers, 'Content-Type': 'application/json' } });
+    }
+
     const title = String(body.title || 'Bitch Boy League').slice(0, 60);
     const message = String(body.body || '').slice(0, 180);
     const uids = Array.isArray(body.uids) ? body.uids.filter(u => typeof u === 'string').slice(0, 50) : null;
@@ -65,7 +83,7 @@ export default {
     if (!message) return new Response(JSON.stringify({ error: 'empty body' }), { status: 400, headers });
 
     const payload = {
-      app_id: env.ONESIGNAL_APP_ID,
+      app_id: APP_ID,
       headings: { en: title },
       contents: { en: message }
     };
@@ -81,15 +99,15 @@ export default {
     });
 
     try {
-      let r = await send('Key ' + env.ONESIGNAL_API_KEY);
-      if (r.status === 401 || r.status === 403) r = await send('Basic ' + env.ONESIGNAL_API_KEY);
+      let r = await send('Key ' + API_KEY);
+      if (r.status === 401 || r.status === 403) r = await send('Basic ' + API_KEY);
       let text = await r.text();
 
       /* segment name differs by account age */
       if (!r.ok && payload.included_segments && /segment/i.test(text)) {
         payload.included_segments = ['Total Subscriptions'];
-        r = await send('Key ' + env.ONESIGNAL_API_KEY);
-        if (r.status === 401 || r.status === 403) r = await send('Basic ' + env.ONESIGNAL_API_KEY);
+        r = await send('Key ' + API_KEY);
+        if (r.status === 401 || r.status === 403) r = await send('Basic ' + API_KEY);
         text = await r.text();
       }
       return new Response(text, { status: r.status, headers: { ...headers, 'Content-Type': 'application/json' } });
