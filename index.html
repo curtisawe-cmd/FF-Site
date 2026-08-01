@@ -1237,19 +1237,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="Scrolling score bar at the bottom of the screen while a week is being scored.">Live score ticker</label><input type="checkbox" id="setTicker" style="width:auto" onchange="S.tickerOff=!this.checked;saveState();window.tickerHidden=false;renderTicker()"></div>
       <div class="setrow"><label title="During a live NFL week, any member's open app refreshes the live scoreboard from the stat feed (about every 5 minutes). Commissioner scores stay official.">Live auto-scoring</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
     </div>
-    <div class="eyebrow" style="margin:18px 0 4px">Push notifications</div>
-    <p class="sub" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
-    <div class="setgrid">
-      <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
-      <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
-    </div>
-    <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="testPush()">Send test alert</button>
-      <button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Clear the offline cache and reload the newest version" onclick="forceUpdate()">Force update</button>
-      <span class="sub" id="pushState" style="margin:0;font-size:12px"></span>
-    </div>
-    <p class="sub" id="buildStamp" style="margin:6px 0 0;font-size:11px;opacity:.7"></p>
-
     <div class="eyebrow" style="margin:18px 0 4px">Extra snapshot rows</div>
     <p class="sub" style="margin:0 0 10px">Three of your own lines on the Home page's League Snapshot — buy-in, trade deadline, punishment for last place, whatever. Leave a row blank to hide it.</p>
     <div id="snapExtras"></div>
@@ -1406,6 +1393,24 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <button class="btn ghost" style="padding:2px 10px;font-size:12px" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test</button>
       </div>
     </div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <h2>Push notifications</h2>
+    <p class="sub" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
+    <div class="setgrid">
+      <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
+      <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
+    </div>
+    <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+      <!-- admin-only: sending is commissioner-gated in sendPush, so for a manager this button
+           can only ever produce a confusing failure. Force update stays visible for everyone
+           on purpose — it is how a phone gets onto a new build. -->
+      <button class="btn ghost admin-only" style="padding:3px 11px;font-size:12px" onclick="testPush()">Send test alert</button>
+      <button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Clear the offline cache and reload the newest version" onclick="forceUpdate()">Force update</button>
+      <span class="sub" id="pushState" style="margin:0;font-size:12px"></span>
+    </div>
+    <p class="sub" id="buildStamp" style="margin:6px 0 0;font-size:11px;opacity:.7"></p>
   </div>
 </section>
 
@@ -6034,7 +6039,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · trade buttons for managers';
+const BUILD_STAMP = '2026-08-01 · push settings moved to bottom';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
