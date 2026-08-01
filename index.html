@@ -1149,9 +1149,15 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
     <div id="chatPending" style="display:none;padding:8px 0 0"></div>
     <div id="emojiPanel" class="emoji-panel" style="display:none"></div>
-    <div class="row" style="border-top:1px solid var(--line);padding-top:12px;gap:6px">
+    <div class="row" style="border-top:1px solid var(--line);padding-top:12px;gap:6px;align-items:flex-end">
+      <!-- hidden by syncChatIdentity when signed in: you post under your manager name, so the box
+           is dead weight — but it stays in the DOM because sendChat and renderChat read it -->
       <input type="text" id="chatName" placeholder="Your name" style="max-width:120px" onchange="store.set('ffl_chat_name', this.value)">
-      <input type="text" id="chatMsg" placeholder="Say something regrettable…" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter')sendChat()" onpaste="chatPaste(event)">
+      <textarea id="chatMsg" rows="1" placeholder="Say something regrettable…"
+        style="flex:1;min-width:0;resize:none;overflow-y:hidden;max-height:120px;line-height:1.35"
+        oninput="autoGrowChat(this)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
+        onpaste="chatPaste(event)"></textarea>
       <button class="btn ghost chat-ico" title="Emoji" onclick="toggleEmoji()">☺</button>
       <label class="btn ghost chat-ico" title="Send a photo or GIF">🖼<input type="file" accept="image/*" style="display:none" onchange="chatPickImage(event)"></label>
       <button class="btn" onclick="sendChat()">Send</button>
@@ -4187,6 +4193,7 @@ function insertEmoji(e){
   const s=i.selectionStart??i.value.length, t=i.selectionEnd??s;
   i.value = i.value.slice(0,s)+e+i.value.slice(t);
   i.focus(); const pos=s+e.length; try{ i.setSelectionRange(pos,pos); }catch(_){}
+  autoGrowChat(i);                     /* emoji bypass the input event the composer grows on */
 }
 
 /* ---------- photo / GIF attachments ----------
@@ -4273,8 +4280,20 @@ function syncChatIdentity(){
   const nameEl = document.getElementById('chatName'); if(!nameEl) return;
   const mine = (window.fbUser && typeof managersMap!=='undefined' && managersMap && managersMap[window.fbUser.uid])
     ? managerNameFor(window.fbUser.uid, '') : '';
-  if(mine){ nameEl.value = mine; nameEl.readOnly = true; nameEl.title = 'Your league manager name — set it in Settings'; }
-  else { nameEl.readOnly = false; nameEl.title = ''; }
+  /* When the name is locked to the manager name there is nothing to type, so the box is pure
+     clutter — worst on a phone, where it eats a third of the composer. Hidden, not removed:
+     sendChat and renderChat still read its value. */
+  if(mine){ nameEl.value = mine; nameEl.readOnly = true; nameEl.title = 'Your league manager name — set it in Settings'; nameEl.style.display='none'; }
+  else { nameEl.readOnly = false; nameEl.title = ''; nameEl.style.display=''; }
+}
+/* The composer grows with the message — one line when empty, up to ~5 lines, then scrolls.
+   Enter still sends; Shift+Enter makes the newline that needs the room. */
+function autoGrowChat(el){
+  if(!el) return;
+  el.style.height = 'auto';
+  const cap = 120;
+  el.style.height = Math.min(el.scrollHeight, cap) + 'px';
+  el.style.overflowY = el.scrollHeight > cap ? 'auto' : 'hidden';
 }
 function initChat(){
   const nameEl = document.getElementById('chatName');
@@ -4304,11 +4323,11 @@ async function sendChat(){
     const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
     const payload = { uid: window.fbUser.uid, n, m, t: Date.now() };
     if(att) payload.img = att.data;
-    try{ await window.FB.dbSet(chatPath()+'/'+key, payload); msgEl.value=''; chatClearAttach();
+    try{ await window.FB.dbSet(chatPath()+'/'+key, payload); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach();
          const p=document.getElementById('emojiPanel'); if(p) p.style.display='none'; }
     catch(e){ toast(att? "Couldn't send that image \u2014 it may be too large." : "Couldn't send \u2014 make sure you're signed in."); }
   } else {
-    chatMsgs.push({n, m, t: Date.now(), img: att?att.data:undefined}); msgEl.value=''; chatClearAttach();
+    chatMsgs.push({n, m, t: Date.now(), img: att?att.data:undefined}); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach();
     try{ store.set('ffl_chat', JSON.stringify(chatMsgs.slice(-50))); }catch(e){}
     renderChat();
   }
@@ -4325,7 +4344,7 @@ function renderChat(){
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
       <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
-      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px">${chatBodyHTML(x)}</div>
+      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:break-word">${chatBodyHTML(x)}</div>
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
   el.scrollTop = el.scrollHeight;
@@ -6176,7 +6195,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · one push per event';
+const BUILD_STAMP = '2026-08-01 · chat composer grows as you type';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
