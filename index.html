@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 41,
+    v: 42,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,55 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        /* week 16 scores mirror the playoff bracket; the box on the consolation game came from
+           its own Game Center export */
+        "16": [
+          {ta:"uncle skips ribs",     pa:136.8, tb:"Nut buster",    pb:112.1},
+          {ta:"Bill Cosbys Sleepers", pa:171.3, tb:"Brown Bag Boy", pb:181.4},
+          {ta:"MaddaMafia",           pa:115.5, tb:"Saquon Bacher", pb:133.7},
+          {ta:"This is my Last year", pa:193.7, tb:"WiFi is Down",  pb:203.0,
+           box:{a:[
+            ["QB","A. Rodgers QB - PIT",31.9],
+            ["RB","D. Henry RB - BAL",31.4],
+            ["RB","A. Jeanty RB - LV",51.6],
+            ["WR","K. Allen WR - LAC",9.4],
+            ["WR","Q. Johnston WR - LAC",20.4],
+            ["TE","B. Strange TE - JAX",14.9],
+            ["FLEX","D. Moore WR - CHI",22.1],
+            ["K","E. McPherson K - CIN",10.0],
+            ["DEF","Buccaneers DEF",2.0],
+            ["BN","P. Rivers QB - IND",34.7],
+            ["BN","D. Adams WR - LAR",0.0],
+            ["BN","J. Smith TE - PIT",3.2],
+            ["BN","C. Okonkwo TE - TEN",16.4],
+            ["BN","J. Addison WR - MIN",4.6],
+            ["BN","L. Burden WR - CHI",0.0],
+            ["BN","S. Sanders QB - CLE",19.4],
+            ["BN","B. Tuten RB - JAX",0.0],
+            ["BN","W. Reichard K - MIN",11.0],
+            ["RES","G. Dortch WR - ARI",0.0]
+          ],
+           b:[
+            ["QB","J. Burrow QB - CIN",53.9],
+            ["RB","J. Taylor RB - IND",20.1],
+            ["RB","B. Robinson RB - ATL",33.0],
+            ["WR","J. Jefferson WR - MIN",14.5],
+            ["WR","J. Williams WR - DET",12.0],
+            ["TE","K. Pitts TE - ATL",18.7],
+            ["FLEX","C. McCaffrey RB - SF",41.8],
+            ["K","B. Aubrey K - DAL",5.0],
+            ["DEF","Broncos DEF",4.0],
+            ["BN","J. Flacco QB - CIN",0.4],
+            ["BN","C. Godwin WR - TB",8.0],
+            ["BN","M. Pittman WR - IND",7.2],
+            ["BN","B. Purdy QB - SF",57.0],
+            ["BN","C. Stroud QB - HOU",25.5],
+            ["BN","R. Rice WR - KC",0.0],
+            ["BN","B. Bowers TE - LV",14.3],
+            ["BN","J. Wright RB - MIA",14.1],
+            ["BN","J. Dart QB - NYG",-3.6]
+          ]}}
+        ],
         /* championship week — the four placement games also live in the playoff bracket;
            the two 9th-12th toilet games exist only here */
         "17": [
@@ -5318,7 +5367,7 @@ function renderMatchupsHistory(yr){
             ${[['a',g.ta],['b',g.tb]].map(([k2,nm])=>`<div style="min-width:0">
               <div class="eyebrow" style="margin:0 0 4px;font-size:11px">${esc(nm)}</div>
               <table style="width:100%;border-collapse:collapse;font-size:12px">
-                ${g.box[k2].map(r=>`<tr style="border-bottom:1px solid var(--line);${r[0]==='BN'?'opacity:.55':''}">
+                ${g.box[k2].map(r=>`<tr style="border-bottom:1px solid var(--line);${(r[0]==='BN'||r[0]==='RES')?'opacity:.55':''}">
                   <td style="padding:3px 4px;font-family:var(--f-mono);color:var(--chalk-dim);width:34px;font-size:10px">${esc(r[0])}</td>
                   <td style="padding:3px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${esc(r[1])}</td>
                   <td style="padding:3px 4px;text-align:right;font-family:var(--f-mono)">${(+r[2]).toFixed(1)}</td>
@@ -6370,7 +6419,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · season archive in matchups';
+const BUILD_STAMP = '2026-08-01 · 2025 wk16 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
