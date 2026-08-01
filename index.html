@@ -2249,7 +2249,13 @@ function loadState(){
     return {...structuredClone(DEFAULTS), ...s, teams, pickTrades, roster:{...DEFAULTS.roster,...(s.roster||{})}, scoring:{...DEFAULTS.scoring,...(s.scoring||{})}, history:h}; } }catch(e){}
   return structuredClone(DEFAULTS);
 }
-function saveState(){ store.set('ffl_state', JSON.stringify(S)); pushSettings(); }
+/* markSettingsDirty runs FIRST, deliberately. pushSettings() skips the league sync while the
+   settings view is dirty, so staging must be flagged before the push is attempted — otherwise
+   the change goes live immediately and the Apply bar appears for something already applied.
+   Hooking it here rather than on each control also covers the button-driven settings (team
+   count, add manager, randomize order), which fire no change event for the delegated listener
+   to catch. Outside the settings view it is a no-op and saving behaves exactly as before. */
+function saveState(){ markSettingsDirty(); store.set('ffl_state', JSON.stringify(S)); pushSettings(); }
 
 /* Draft state kept separate so settings changes don't clobber a draft.
    Two boards: the real draft and a mock sandbox. */
@@ -6101,7 +6107,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · trade review window setting';
+const BUILD_STAMP = '2026-08-01 · every setting stages for Apply';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
