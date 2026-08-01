@@ -1633,7 +1633,25 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 39,
+    v: 40,
+    /* First round in draft order, from the NFL.com league history export. Only rounds the
+       export actually contained are here — 2025 saved with round 1 only. */
+    draftR1: {
+      "2025": [
+        {pick:1,  player:"Christian McCaffrey", pos:"RB", nfl:"SF",  team:"WiFi is Down"},
+        {pick:2,  player:"CeeDee Lamb",         pos:"WR", nfl:"DAL", team:"Jerry had a little Lamb"},
+        {pick:3,  player:"Drake London",        pos:"WR", nfl:"ATL", team:"Allen's Assholes"},
+        {pick:4,  player:"Jayden Daniels",      pos:"QB", nfl:"WAS", team:"Nut buster"},
+        {pick:5,  player:"De'Von Achane",       pos:"RB", nfl:"MIA", team:"Brown Bag Boy"},
+        {pick:6,  player:"Bijan Robinson",      pos:"RB", nfl:"ATL", team:"WiFi is Down"},
+        {pick:7,  player:"Saquon Barkley",      pos:"RB", nfl:"PHI", team:"Saquon Bacher"},
+        {pick:8,  player:"Derrick Henry",       pos:"RB", nfl:"BAL", team:"This is my Last year"},
+        {pick:9,  player:"David Montgomery",    pos:"RB", nfl:"DET", team:"uncle skips ribs"},
+        {pick:10, player:"James Cook",          pos:"RB", nfl:"BUF", team:"Prater's Leg"},
+        {pick:11, player:"Garrett Wilson",      pos:"WR", nfl:"NYJ", team:"WiFi is Down"},
+        {pick:12, player:"Jahmyr Gibbs",        pos:"RB", nfl:"DET", team:"MaddaMafia"}
+      ]
+    },
     pointsLeaders: [
       {year:2025, team:"WiFi is Down", pts:2499.9, fid:6},
       {year:2024, team:"Bill Cosbys Sleepers", pts:2596.1, fid:2},
@@ -4487,6 +4505,15 @@ function renderRecaps(){
       ${R.story.map(p2=>`<p style="margin-bottom:12px;max-width:70ch">${esc(p2)}</p>`).join('')}
       <div class="eyebrow" style="margin-top:16px">Fun facts</div>
       ${R.facts.map(f2=>`<div class="phase"><span class="tag">\uD83C\uDFC8</span><span>${esc(f2)}</span></div>`).join('')}
+      ${(H.draftR1&&H.draftR1[yr]&&H.draftR1[yr].length)?`
+      <div class="eyebrow" style="margin-top:16px">First round, in order</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
+        ${H.draftR1[yr].map(p=>`<tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:5px 8px;font-family:var(--f-mono);color:var(--chalk-dim);width:30px">${p.pick}</td>
+          <td style="padding:5px 8px"><b>${esc(p.player)}</b> <span style="color:var(--chalk-dim)">${esc(p.pos)} \u00B7 ${esc(p.nfl)}</span></td>
+          <td style="padding:5px 8px;text-align:right">${esc(p.team)}${mgrOf(yr,p.team)?` <span style="color:var(--chalk-dim)">(${esc(mgrOf(yr,p.team))})</span>`:''}</td>
+        </tr>`).join('')}
+      </table></div>`:''}
       <div class="row" style="margin-top:14px">
         <button class="btn ghost" onclick="window.histYear='${yr}';showView('history')">Full ${yr} standings \u2192</button>
       </div>
@@ -6197,7 +6224,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · chat push names the manager';
+const BUILD_STAMP = '2026-08-01 · 2025 first round in history';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
