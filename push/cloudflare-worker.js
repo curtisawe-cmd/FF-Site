@@ -43,6 +43,17 @@ export default {
     if (!ALLOWED_ORIGINS.includes(origin))
       return new Response(JSON.stringify({ error: 'origin not allowed' }), { status: 403, headers });
 
+    /* tell the difference between "secret missing" and "key wrong" — a missing secret sends
+       the string "undefined" as the key and looks identical to a bad key from outside */
+    if (!env.ONESIGNAL_API_KEY || !env.ONESIGNAL_APP_ID) {
+      return new Response(JSON.stringify({
+        error: 'worker secrets not set',
+        ONESIGNAL_APP_ID: env.ONESIGNAL_APP_ID ? 'set' : 'MISSING',
+        ONESIGNAL_API_KEY: env.ONESIGNAL_API_KEY ? 'set' : 'MISSING',
+        hint: 'Settings > Variables and Secrets. Names are case-sensitive, then Deploy.'
+      }), { status: 500, headers: { ...headers, 'Content-Type': 'application/json' } });
+    }
+
     let body;
     try { body = await request.json(); }
     catch { return new Response(JSON.stringify({ error: 'bad json' }), { status: 400, headers }); }
