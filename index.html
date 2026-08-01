@@ -2287,6 +2287,9 @@ function pushSettings(force){
 /* ---- staged settings: Apply button + confirm-on-leave ---- */
 window.settingsDirty = false; window._setSnap = null;
 function markSettingsDirty(){ if(window.currentView!=='settings') return; if(!window.settingsDirty){ window.settingsDirty=true; updateApplyBar(); } }
+/* A refused read arrives after the view has already drawn its empty state, so repaint to replace
+   "nothing here" with the real reason. */
+window.onFbReadError = function(){ try{ if(window.currentView==='trades') renderOffers(); }catch(e){} };
 function updateApplyBar(){ const b=document.getElementById('applyBar'); if(b) b.classList.toggle('on', !!window.settingsDirty && window.currentView==='settings'); }
 function applySettings(){ window.settingsDirty=false; window._setSnap=JSON.stringify(S); pushSettings(true); updateApplyBar(); toast('Settings applied ✓'); }
 function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar(); try{ renderSettings(); renderHome(); }catch(e){} }
@@ -4102,8 +4105,15 @@ function notifyNewChat(){
   if(chatNotifySeen === null){ chatNotifySeen = new Set(ids); return; }
   const fresh = chatMsgs.filter(x=>x._id && !chatNotifySeen.has(x._id));
   ids.forEach(id=>chatNotifySeen.add(id));
-  if(!fresh.length || !isAdmin()) return;              /* only the sender-device notifies */
-  chatNotifyPending.push(...fresh);
+  /* Each device announces only the messages IT wrote. The comment here always said "only the
+     sender-device notifies", but the check was isAdmin() — so a manager's message notified
+     nobody unless the commissioner happened to be online. Filtering to your own messages keeps
+     the no-duplicates property (exactly one device owns each message) without that dependency,
+     and it can never buzz you for your own message. */
+  const myUidNow = window.fbUser && window.fbUser.uid;
+  const own = myUidNow ? fresh.filter(x=>x.uid===myUidNow) : [];
+  if(!own.length) return;
+  chatNotifyPending.push(...own);
   clearTimeout(chatNotifyTimer);
   chatNotifyTimer = setTimeout(()=>{
     const batch = chatNotifyPending.slice(); chatNotifyPending = [];
@@ -4118,7 +4128,7 @@ function notifyNewChat(){
     const body = batch.length>1
       ? `${batch.length} new messages`
       : (last.img && !String(last.m||'').trim() ? 'sent a photo' : String(last.m||'').slice(0,120));
-    sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets});
+    sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets, mine:true});
   }, 4000);                                            /* let a flurry settle first */
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
@@ -5405,7 +5415,8 @@ function acceptOffer(id){
   /* reviewMs is stamped onto the offer so this deal keeps the window it was accepted under,
      whatever the commissioner changes the setting to afterwards */
   const rms = tradeReviewMs();
-  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'accepted', acceptedAt:Date.now(), reviewMs:rms})
+  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'accepted', acceptedAt:Date.now(), reviewMs:rms,
+    acceptedBy: (window.fbUser&&window.fbUser.uid)||''})
     .then(()=>{
       voidOffersSupersededBy(id);
       toast(rms===0 ? 'Accepted \u2014 processing now' : `Accepted \u2014 ${tradeReviewLabel(rms)} league review starts now`);
@@ -5538,7 +5549,11 @@ function noticeNewOffers(){
     const o = offersMap[id]; if(!o || o.status!=='pending' || !window.fbUser) return;
     if(Number.isInteger(mine) && o.b===mine) toast(`📨 ${o.aName} sent you a trade offer`);
     const target = uidForTeam(o.b);                 /* alert the manager being offered to */
-    sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`, target?{uids:[target]}:null);
+    /* the device that sent the offer is the one that announces it, so this works whether or not
+       the commissioner is online */
+    const mineToSend = !!(window.fbUser && o.fromUid === window.fbUser.uid);
+    sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`,
+             Object.assign({mine:mineToSend}, target?{uids:[target]}:{}));
   });
   /* a trade just flipped to accepted — shout it on every screen in the league */
   nowAccepted.forEach(id=>{
@@ -5546,8 +5561,11 @@ function noticeNewOffers(){
     acceptedOfferIds.add(id);
     const o = offersMap[id]; if(!o) return;
     try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`); }catch(e){}
+    /* whoever accepted announces it; older offers have no acceptedBy, so fall back to the
+       commissioner rather than going silent */
+    const mineToSend = o.acceptedBy ? !!(window.fbUser && o.acceptedBy===window.fbUser.uid) : isAdmin();
     sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ` + (reviewMsOf(o)===0
-      ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`));
+      ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`), {mine:mineToSend});
   });
   /* your offer got voided because someone else landed one of those players first */
   ids.forEach(id=>{
@@ -5561,13 +5579,23 @@ function noticeNewOffers(){
   acceptedOfferIds = new Set(nowAccepted);       /* forget closed ones so a re-accept can fire again */
   updateTradeBadge();
 }
+/* "No pending offers" was shown for every empty list, including the cases where the offers were
+   never delivered — not signed in, or the read was refused. Those need saying out loud; an
+   offer that exists but cannot be read is the exact failure managers reported. */
+function offersEmptyReason(){
+  if(!window.fbUser) return 'Sign in to see trade offers.';
+  const err = (window.FB_ERR||{})[`league/${LEAGUE_ID}/tradeOffers`];
+  if(err) return 'Cannot load trade offers from the league (' + err + '). Your account may not have permission to read them.';
+  if(!syncStarted) return 'Still connecting to the league…';
+  return 'No pending offers.';
+}
 function renderOffers(){
   const el=document.getElementById('offersView'); if(!el) return;
   const mine=myTeamIndex(), uid=window.fbUser&&window.fbUser.uid;
   const list=Object.keys(offersMap||{}).map(id=>({id,...(offersMap[id]||{})}))
     .filter(o=>['pending','accepted'].includes(o.status))
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  if(!list.length){ el.innerHTML=`<p class="sub" style="margin:0">No pending offers.</p>`; return; }
+  if(!list.length){ el.innerHTML=`<p class="sub" style="margin:0">${esc(offersEmptyReason())}</p>`; return; }
   el.innerHTML=list.map(o=>{
     const t=tradePartsText(o), need=vetoNeeded(), vc=vetoCount(o.id);
     const inTrade=tradeInvolvesUid(o, uid), iVetoed=!inTrade && !!vetoesFor(o.id)[uid];
@@ -6117,7 +6145,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · boot fix, pool loads again';
+const BUILD_STAMP = '2026-08-01 · trade visibility + notify fix';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6879,6 +6907,16 @@ const db   = getDatabase(app);
 const gprov = new GoogleAuthProvider();
 try { await setPersistence(auth, browserLocalPersistence); } catch(e){}
 
+/* Records a failed live read so the UI can distinguish "you are not allowed to see this" from
+   "there is nothing here". Those two look identical otherwise, and the second is a lie. */
+window.FB_ERR = {};
+function fbReadFailed(path, err){
+  const code = (err && (err.code || err.message)) ? String(err.code || err.message) : 'unknown';
+  window.FB_ERR[path] = code;
+  console.error('[BBL] cannot read "' + path + '":', code);
+  try{ if(typeof window.onFbReadError === 'function') window.onFbReadError(path, code); }catch(e){}
+}
+
 window.FB = {
   app, auth, db,
   signup: (e,p) => createUserWithEmailAndPassword(auth, e, p),
@@ -6890,9 +6928,14 @@ window.FB = {
   dbSet:    (p, v) => set(ref(db, p), v),
   dbUpdate: (p, v) => update(ref(db, p), v),
   dbRemove: (p)    => remove(ref(db, p)),
-  dbOn:     (p, cb) => onValue(ref(db, p), s => cb(s.val())),   /* live subscribe; returns unsubscribe */
+  /* live subscribe; returns unsubscribe.
+     The error callback is not optional in practice: without it a permission_denied never fires
+     the value callback and never surfaces anywhere, so the feed just stays empty and the UI
+     reports "nothing here" for data the account simply is not allowed to read. Every failure is
+     recorded on window.FB_ERR so the views can say so instead of lying. */
+  dbOn:     (p, cb) => onValue(ref(db, p), s => cb(s.val()), err => fbReadFailed(p, err)),
   /* bounded subscribe — keeps chat from pulling unlimited history (matters once messages carry images) */
-  dbOnLast: (p, n, cb) => onValue(query(ref(db, p), limitToLast(n)), s => cb(s.val())),
+  dbOnLast: (p, n, cb) => onValue(query(ref(db, p), limitToLast(n)), s => cb(s.val()), err => fbReadFailed(p, err)),
   now: serverTimestamp
 };
 
@@ -7154,9 +7197,15 @@ function syncPushBtn(){
 /* Sends go through the relay (push/cloudflare-worker.js) — OneSignal's API refuses browser
    requests outright, and the key must not live in a browser or this repo. Only the
    commissioner's client triggers, so three open apps don't fire three notifications. */
+/* opts.mine means "this device is the one that caused the event, so it is the one that tells
+   everyone". The isAdmin gate exists to stop 12 open apps firing 12 copies of the same
+   notification — but it also meant a trade offered by a manager notified nobody unless the
+   commissioner happened to have the app open. Exactly one device satisfies opts.mine, so the
+   duplicate problem is still solved. */
 async function sendPush(title, body, opts){
   const relay = pushRelay();
-  if(!relay || !isAdmin()) return { ok:false, status:0, text:'no relay configured', skipped:true };
+  const allowed = isAdmin() || !!(opts && opts.mine);
+  if(!relay || !allowed) return { ok:false, status:0, text: relay ? 'not this device to send' : 'no relay configured', skipped:true };
   const payload = {
     title: String(title||'Bitch Boy League').slice(0,60),
     body: String(body||'').slice(0,180),
