@@ -4140,13 +4140,15 @@ function notifyNewChat(){
     const targets = Object.keys((typeof managersMap!=='undefined' && managersMap)||{})
       .filter(u=>!authors.includes(u));
     if(!targets.length) return;
+    /* every batch is single-author — a device announces only its own messages — so the title
+       can always name the manager who sent it */
     const who = last.uid ? managerNameFor(last.uid, last.n||'Someone') : (last.n||'Someone');
     const body = batch.length>1
       ? `${batch.length} new messages`
-      : (last.img && !String(last.m||'').trim() ? 'sent a photo' : String(last.m||'').slice(0,120));
+      : (last.img && !String(last.m||'').trim() ? 'Sent a photo' : String(last.m||'').slice(0,120));
     /* keyed on the first message of the batch: the author's phone and desktop both batch the
        same fresh messages, and only one of them may announce them */
-    pushOnce('chat-'+(batch[0]._id||Date.now()), ()=>sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets, mine:true}));
+    pushOnce('chat-'+(batch[0]._id||Date.now()), ()=>sendPush(`New chat from ${who}`, body, {uids:targets, mine:true}));
   }, 4000);                                            /* let a flurry settle first */
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
@@ -6195,7 +6197,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · force update keeps push alive';
+const BUILD_STAMP = '2026-08-01 · chat push names the manager';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
