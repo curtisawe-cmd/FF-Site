@@ -49,6 +49,14 @@
      light-coloured ones (Saints gold, Chargers powder blue) by applyTeamTheme(). */
   --on-turf:#fff; --on-charge:#fff;
 
+  /* Notch / home-indicator insets, hoisted into variables so every rule reads the same
+     source and a narrower media query can't silently drop them. Zero on anything without
+     a notch, and overridable for testing. */
+  --sa-t:env(safe-area-inset-top,0px);
+  --sa-r:env(safe-area-inset-right,0px);
+  --sa-b:env(safe-area-inset-bottom,0px);
+  --sa-l:env(safe-area-inset-left,0px);
+
   /* the four type roles — every font-family in the sheet points at one of these, so the
      Typography panel can reskin the whole site by rewriting four values */
   --f-display:'Anton',sans-serif;              /* wordmark, H1, hero, big numbers */
@@ -143,8 +151,7 @@ input[type=number]{width:72px;font-family:var(--f-mono)}
 /* ---------- shell ---------- */
 header.top{
   display:flex;align-items:center;gap:18px;flex-wrap:wrap;
-  /* env() is 0 on anything without a notch, so this is safe everywhere */
-  padding:calc(14px + env(safe-area-inset-top)) calc(22px + env(safe-area-inset-right)) 14px calc(22px + env(safe-area-inset-left));
+  padding:calc(14px + var(--sa-t)) calc(22px + var(--sa-r)) 14px calc(22px + var(--sa-l));
   border-bottom:1px solid var(--line);border-top:4px solid var(--charge);
   background:linear-gradient(180deg,var(--panel-grad-a),var(--panel-grad-b));
   box-shadow:var(--sh-1);position:sticky;top:0;z-index:20;
@@ -158,7 +165,7 @@ nav.tabs button{
 }
 nav.tabs button:hover{color:var(--chalk);background:var(--panel-2)}
 nav.tabs button.active{background:var(--turf-wash);color:var(--turf-deep);box-shadow:inset 0 -3px 0 var(--turf)}
-main{padding:14px calc(16px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));max-width:1800px;margin:0 auto}
+main{padding:14px calc(16px + var(--sa-r)) calc(14px + var(--sa-b)) calc(16px + var(--sa-l));max-width:1800px;margin:0 auto}
 section.view{display:none}
 section.view.active{display:block}
 h1{font-family:var(--f-display);font-weight:400;font-size:clamp(34px,4.4vw,46px);letter-spacing:.005em;text-transform:uppercase;line-height:.98;margin-bottom:6px}
@@ -585,7 +592,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
   border-radius:999px;padding:6px 28px 6px 13px;box-shadow:var(--sh-1);max-width:168px;cursor:pointer}
 .team-picker:hover{color:var(--chalk);border-color:var(--turf)}
 /* one-time "add this to your phone" hint — Android gets a real button, iOS gets instructions */
-.installbar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:110;
+.installbar{position:fixed;left:12px;right:12px;bottom:calc(12px + var(--sa-b));z-index:110;
   display:none;gap:10px;align-items:center;padding:11px 13px;border-radius:14px;
   background:var(--panel-2);border:1px solid var(--turf);box-shadow:0 8px 26px rgba(0,0,0,.42);
   max-width:520px;margin:0 auto}
@@ -681,13 +688,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* ---------- mobile: compact scrollable nav + no sideways page scroll ---------- */
 @media(max-width:640px){
   html,body{overflow-x:hidden}
-  header.top{padding:9px 12px;gap:8px}
+  /* keep the notch inset — a flat padding here is what pushed the sign-in button under
+     the iPhone status bar in the installed app */
+  header.top{padding:calc(9px + var(--sa-t)) calc(12px + var(--sa-r)) 9px calc(12px + var(--sa-l));gap:8px}
   .wordmark{font-size:20px;order:1}
   .theme-toggle{order:2;margin-left:auto}
   nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
-  main{padding:12px 12px}
+  main{padding:12px calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l))}
   .card{padding:16px 14px}
   .hero{padding:30px 20px}
   h1{font-size:clamp(30px,9vw,40px)}
@@ -757,7 +766,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 ===================================================== */
 .ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:50px;
   background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28);
-  padding-bottom:env(safe-area-inset-bottom)}   /* clear the iPhone home indicator */
+  padding-bottom:var(--sa-b)}   /* clear the iPhone home indicator */
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
   font-family:var(--f-display);font-size:13px;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
@@ -781,7 +790,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .ticker-x{flex:0 0 auto;background:none;border:none;border-left:1px solid var(--line);color:var(--chalk-dim);
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
-body.has-ticker{padding-bottom:calc(50px + env(safe-area-inset-bottom))}
+body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
   .ticker-move{animation:none}
