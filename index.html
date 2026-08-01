@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 49,
+    v: 50,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,50 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "8": [
+          {ta:"This is my Last year", pa:120.3, tb:"Allen's Assholes", pb:104.4,
+           box:{a:[
+            ["QB","D. Jones QB - IND",42.7],
+            ["RB","D. Henry RB - BAL",23.3],
+            ["RB","O. Gordon RB - MIA",15.6],
+            ["WR","J. Addison WR - MIN",11.6],
+            ["WR","Q. Johnston WR - LAC",0.0],
+            ["TE","J. Smith TE - PIT",3.7],
+            ["FLEX","K. Allen WR - LAC",8.4],
+            ["K","E. McPherson K - CIN",7.0],
+            ["DEF","Commanders DEF",8.0],
+            ["BN","A. Rodgers QB - PIT",30.9],
+            ["BN","D. Adams WR - LAR",0.0],
+            ["BN","C. Godwin WR - TB",0.0],
+            ["BN","D. Moore WR - CHI",12.0],
+            ["BN","C. Okonkwo TE - TEN",9.3],
+            ["BN","B. Purdy QB - SF",0.0],
+            ["BN","T. Hunter WR - JAX",0.0],
+            ["BN","B. Tuten RB - JAX",0.0],
+            ["BN","A. Jeanty RB - LV",0.0],
+            ["RES","J. Mixon RB - HOU NFI-R",0.0]
+          ],
+           b:[
+            ["QB","S. Rattler QB - NO",7.4],
+            ["RB","T. Pollard RB - TEN",8.5],
+            ["RB","K. Gainwell RB - PIT",4.5],
+            ["WR","D. London WR - ATL",0.0],
+            ["WR","L. McConkey WR - LAC",20.8],
+            ["TE","J. Johnson TE - NO",10.3],
+            ["FLEX","T. Franklin WR - DEN",26.9],
+            ["K","M. Badgley K",9.0],
+            ["DEF","Chargers DEF",17.0],
+            ["BN","M. Mariota QB - WAS",23.7],
+            ["BN","K. Hunt RB - KC",19.0],
+            ["BN","G. Kittle TE - SF",14.3],
+            ["BN","J. Allen QB - BUF",38.6],
+            ["BN","M. Brown WR - KC",0.0],
+            ["BN","J. Palmer WR - BUF",0.0],
+            ["BN","C. Little K - JAX",0.0],
+            ["BN","T. Loop K - BAL",12.0],
+            ["BN","Bills DEF",19.0]
+          ]}}
+        ],
         "9": [
           {ta:"This is my Last year", pa:128.8, tb:"Jerry had a little Lamb", pb:117.8,
            box:{a:[
@@ -6737,7 +6781,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk9 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk8 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
