@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 44,
+    v: 45,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,51 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "13": [
+          {ta:"This is my Last year", pa:150.5, tb:"JK Ramandrew Skatabers IV", pb:103.8,
+           box:{a:[
+            ["QB","D. Jones QB - IND",31.4],
+            ["RB","D. Henry RB - BAL",19.4],
+            ["RB","A. Jeanty RB - LV",15.1],
+            ["WR","D. Adams WR - LAR",21.8],
+            ["WR","Q. Johnston WR - LAC",11.3],
+            ["TE","B. Strange TE - JAX",13.5],
+            ["FLEX","K. Allen WR - LAC",7.0],
+            ["K","E. McPherson K - CIN",23.0],
+            ["DEF","Buccaneers DEF",8.0],
+            ["BN","A. Rodgers QB - PIT",8.9],
+            ["BN","J. Smith TE - PIT",1.6],
+            ["BN","D. Moore WR - CHI",4.9],
+            ["BN","G. Dortch WR - ARI",3.4],
+            ["BN","C. Okonkwo TE - TEN",6.9],
+            ["BN","P. Washington WR - JAX",3.6],
+            ["BN","J. Addison WR - MIN",8.6],
+            ["BN","B. Tuten RB - JAX",10.5],
+            ["BN","W. Reichard K - MIN",0.0],
+            ["RES","T. Hunter WR - JAX",0.0]
+          ],
+           b:[
+            ["QB","J. Love QB - GB",53.8],
+            ["RB","T. Tracy RB - NYG",6.3],
+            ["RB","W. Marks RB - HOU",11.5],
+            ["WR","D. Metcalf WR - PIT",6.2],
+            ["WR","R. Doubs WR - GB",12.0],
+            ["TE","M. Andrews TE - BAL",8.7],
+            ["FLEX","L. Musgrave TE - GB",3.3],
+            ["K","D. Carlson K - LV",2.0],
+            ["DEF","Lions DEF",0.0],
+            ["BN","M. Stafford QB - LAR",26.4],
+            ["BN","T. Lockett WR - LV",2.1],
+            ["BN","D. Knox TE - BUF",5.8],
+            ["BN","P. Freiermuth TE - PIT",0.0],
+            ["BN","E. Demercado RB - ARI",0.0],
+            ["BN","K. Coleman WR - BUF",8.9],
+            ["BN","T. Johnson TE - NYG",5.9],
+            ["BN","K. Vidal RB - LAC",35.7],
+            ["BN","M. Golden WR - GB",0.0],
+            ["RES","M. Nabers WR - NYG",0.0]
+          ]}}
+        ],
         /* regular-season finale — only the games whose Game Center pages have been saved are
            here, so this week is intentionally short */
         "14": [
@@ -6514,7 +6559,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk14 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk13 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
