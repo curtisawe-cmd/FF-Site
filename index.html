@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 51,
+    v: 52,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,51 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "6": [
+          {ta:"This is my Last year", pa:119.4, tb:"Saquon Bacher", pb:150.0,
+           box:{a:[
+            ["QB","D. Jones QB - IND",38.2],
+            ["RB","D. Henry RB - BAL",23.8],
+            ["RB","A. Jeanty RB - LV",21.2],
+            ["WR","D. Adams WR - LAR",7.9],
+            ["WR","D. Moore WR - CHI",8.6],
+            ["TE","J. Smith TE - PIT",6.0],
+            ["FLEX","K. Allen WR - LAC",6.7],
+            ["K","J. Bates K - DET",4.0],
+            ["DEF","Commanders DEF",3.0],
+            ["BN","A. Rodgers QB - PIT",35.8],
+            ["BN","C. Godwin WR - TB",0.0],
+            ["BN","C. Okonkwo TE - TEN",10.6],
+            ["BN","B. Purdy QB - SF",0.0],
+            ["BN","J. Addison WR - MIN",0.0],
+            ["BN","Q. Johnston WR - LAC",0.0],
+            ["BN","T. Hunter WR - JAX",5.5],
+            ["BN","B. Tuten RB - JAX",5.2],
+            ["BN","O. Gordon RB - MIA",1.6],
+            ["RES","J. Mixon RB - HOU NFI-R",0.0]
+          ],
+           b:[
+            ["QB","S. Darnold QB - SEA",46.5],
+            ["RB","S. Barkley RB - PHI",11.1],
+            ["RB","D. Swift RB - CHI",38.3],
+            ["WR","C. Olave WR - NO",15.8],
+            ["WR","X. Worthy WR - KC IA View News",10.8],
+            ["TE","T. Kraft TE - GB",12.3],
+            ["FLEX","M. Harrison WR - ARI",5.2],
+            ["K","M. Gay K",8.0],
+            ["DEF","Cardinals DEF",2.0],
+            ["BN","A. Thielen WR - PIT",0.0],
+            ["BN","S. Shepard WR - TB",7.1],
+            ["BN","H. Henry TE - NE",5.7],
+            ["BN","L. Jackson QB - BAL",0.0],
+            ["BN","T. Higgins WR - CIN",11.2],
+            ["BN","T. Bigsby RB - PHI",0.0],
+            ["BN","K. Miller RB - NO",5.8],
+            ["BN","X. Legette WR - CAR",3.1],
+            ["BN","B. Irving RB - TB",0.0],
+            ["RES","O. Hampton RB - LAC",0.0]
+          ]}}
+        ],
         "7": [
           {ta:"This is my Last year", pa:136.9, tb:"MaddaMafia", pb:156.5,
            box:{a:[
@@ -6826,7 +6871,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk7 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk6 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
