@@ -5996,7 +5996,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · push init errors visible';
+const BUILD_STAMP = '2026-08-01 · sw path + registration report';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6854,6 +6854,24 @@ function pushAppId(){ return (S && S.pushAppId) || ONESIGNAL_APP_ID; }
 /* the relay URL is not a secret — it syncs so any manager's client could send if we ever
    widen triggering beyond the commissioner. The REST key lives on the relay itself. */
 function pushRelay(){ return (S && S.pushRelay) || ''; }
+/* Where OneSignal's own service worker lives, derived from wherever this page is served from
+   so it keeps working if the site moves to a custom domain or a different repo path.
+   It gets its own folder because two service workers cannot share a scope — registering
+   OneSignal's at the app root would evict the offline worker, and vice versa. */
+function osSwScope(){ return new URL('push/onesignal/', location.href).pathname; }
+function osSwPath(){ return osSwScope().replace(/^\//,'') + 'OneSignalSDKWorker.js'; }
+/* Lists what the browser actually registered. When init fails there is no other way to tell
+   "asked for the wrong URL" apart from "the right URL would not install". */
+async function osRegistrationReport(){
+  try{
+    const rs = await navigator.serviceWorker.getRegistrations();
+    if(!rs.length) return 'No service workers are registered.';
+    return 'Registered: ' + rs.map(r=>{
+      const w = r.active || r.installing || r.waiting;
+      return (w ? w.scriptURL.replace(location.origin,'') : '(none)') + ' @ ' + r.scope.replace(location.origin,'');
+    }).join(' | ');
+  }catch(e){ return 'Could not read service worker registrations.'; }
+}
 function initPush(){
   const id = pushAppId();
   if(!id || window._osStarted) return;
@@ -6871,10 +6889,11 @@ function initPush(){
     try{
       await OneSignal.init({
         appId: id,
-        serviceWorkerPath: 'push/onesignal/OneSignalSDKWorker.js',
-        /* resolved from the page, not hardcoded to /FF-Site/ — keeps working if the site
-           ever moves to a different path or a custom domain */
-        serviceWorkerParam: { scope: new URL('push/onesignal/', location.href).pathname },
+        /* serviceWorkerPath is resolved by the SDK against the ORIGIN, not the page, so a
+           bare 'push/onesignal/...' becomes /push/onesignal/... and 404s on a project site
+           served from /FF-Site/. Send the full path from the origin root instead. */
+        serviceWorkerPath: osSwPath(),
+        serviceWorkerParam: { scope: osSwScope() },
         allowLocalhostAsSecureOrigin: true
       });
       osReady = true;
@@ -6885,6 +6904,17 @@ function initPush(){
       osReady=false;
       window.osFail = (e && (e.message || e.name)) ? String(e.message || e.name) : 'OneSignal.init() failed with no message.';
       syncPushBtn();
+      /* "Load failed" on its own is useless — it cannot distinguish a 404 on the worker from
+         a worker that downloads but refuses to install. Say which file we asked for, whether
+         it is actually reachable, and what the browser ended up registering. */
+      try{
+        const want = '/' + osSwPath();
+        let reach;
+        try{ const r = await fetch(want, {cache:'no-store'}); reach = 'HTTP ' + r.status; }
+        catch(err){ reach = 'unreachable'; }
+        window.osFail += ` — asked for ${want} (${reach}), scope ${osSwScope()}. ` + await osRegistrationReport();
+        syncPushBtn();
+      }catch(err){}
     }
   });
 }
