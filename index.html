@@ -1304,6 +1304,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="card" style="margin-bottom:18px">
     <h2>League Rules</h2>
     <p class="sub" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
+    <div class="setgrid" style="margin-bottom:12px">
+      <div class="setrow"><label title="How long the league gets to veto a trade after the other manager accepts it. Instant means accepted trades process straight away with no veto window.">Trade review window</label><select id="setTradeReview" style="max-width:200px" onchange="setTradeReview(this.value)"></select></div>
+    </div>
+    <p class="sub" id="tradeReviewNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div id="rulesInputs"></div>
   </div>
 
@@ -1567,6 +1571,7 @@ const DEFAULTS = {
   ],
   roster: {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DEF:1, BN:8, IR:1},  /* 9 starters + 8 bench = 17 = keeper + 16 rounds; IR extra, no draft round */
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
+  tradeReviewMs: 48*60*60*1000,   /* league veto window after a trade is accepted; 0 = instant */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   pushAppId: '',         /* OneSignal App ID — public by design; the REST key never lives here */
@@ -5219,13 +5224,45 @@ function tradeForPlayer(pid){
   showView('trades');
 }
 /* ---- league trade rules: recipient must accept, then a 2-day league review; enough vetoes kills it ---- */
-const TRADE_REVIEW_MS = 2*24*60*60*1000;               /* 2-day review window */
+const TRADE_REVIEW_MS = 2*24*60*60*1000;               /* default review window: 2 days */
+const TRADE_REVIEW_CHOICES = [
+  [0,             'Instant'],
+  [4*60*60*1000,  '4 hours'],
+  [12*60*60*1000, '12 hours'],
+  [24*60*60*1000, '1 day'],
+  [48*60*60*1000, '2 days']
+];
+/* League setting: how long the veto window runs after an offer is accepted. */
+function tradeReviewMs(){
+  const v = S && S.tradeReviewMs;
+  return Number.isFinite(+v) && +v>=0 ? +v : TRADE_REVIEW_MS;
+}
+function tradeReviewLabel(ms){
+  const want = (ms==null) ? tradeReviewMs() : +ms;
+  const hit = TRADE_REVIEW_CHOICES.find(c=>c[0]===want);
+  if(hit) return hit[1];
+  const h = Math.round(want/3600000);
+  return h>=24 ? `${Math.round(h/24)} day${h>=48?'s':''}` : `${h} hour${h===1?'':'s'}`;
+}
+function setTradeReview(v){
+  if(!requireAdmin()) return;
+  S.tradeReviewMs = Math.max(0, +v||0);
+  saveState();
+  if(window.currentView==='trades') renderTradeCenter();
+  maybeFinalizeTrades();   /* a shorter window can leave a running review already over */
+  toast(tradeReviewMs()===0 ? 'Trades now go through instantly' : `Trade review set to ${tradeReviewLabel()}`);
+}
 function vetoNeeded(){ return Math.max(2, Math.ceil(N()/2)); }   /* half the league — 6 of 12 */
 function offersPath(){ return `league/${LEAGUE_ID}/tradeOffers`; }
 function vetoesPath(){ return `league/${LEAGUE_ID}/tradeVetoes`; }   /* separate node: parent .write can't cascade over per-user votes */
 let offersMap = {}, vetoesMap = {};
 function vetoesFor(id){ return (vetoesMap&&vetoesMap[id])||{}; }
-function reviewEndsAt(o){ return (+o.acceptedAt||0) + TRADE_REVIEW_MS; }
+/* Uses the window stored on the offer when it was accepted, not the current setting. Changing
+   the rule must not move a review that is already running — or, worse, instantly execute every
+   in-flight trade the moment someone picks a shorter window. Offers accepted before this
+   setting existed fall back to the league value. */
+function reviewMsOf(o){ return Number.isFinite(+(o&&o.reviewMs)) ? +o.reviewMs : tradeReviewMs(); }
+function reviewEndsAt(o){ return (+o.acceptedAt||0) + reviewMsOf(o); }
 /* Everything an offer promises, as comparable keys. You can shop the same player to two
    managers, but the moment one deal is accepted the other is promising something already
    gone — picks included, since a round can only be traded once too. */
@@ -5359,10 +5396,14 @@ function acceptOffer(id){
   if(clash){ const c=offersMap[clash];
     toast(`Too late \u2014 ${esc(c.aName)} \u21c4 ${esc(c.bName)} already took one of these.`);
     return; }
-  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'accepted', acceptedAt:Date.now()})
+  /* reviewMs is stamped onto the offer so this deal keeps the window it was accepted under,
+     whatever the commissioner changes the setting to afterwards */
+  const rms = tradeReviewMs();
+  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'accepted', acceptedAt:Date.now(), reviewMs:rms})
     .then(()=>{
       voidOffersSupersededBy(id);
-      toast(`Accepted \u2014 ${Math.round(TRADE_REVIEW_MS/86400000)}-day league review starts now`);
+      toast(rms===0 ? 'Accepted \u2014 processing now' : `Accepted \u2014 ${tradeReviewLabel(rms)} league review starts now`);
+      maybeFinalizeTrades();                    /* instant deals have nothing to wait for */
     }).catch(()=>toast('Could not accept.'));
 }
 /* accepting a deal kills every other pending offer that promised the same player or pick */
@@ -5499,7 +5540,8 @@ function noticeNewOffers(){
     acceptedOfferIds.add(id);
     const o = offersMap[id]; if(!o) return;
     try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`); }catch(e){}
-    sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ${Math.round(TRADE_REVIEW_MS/86400000)}-day league review starts now.`);
+    sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ` + (reviewMsOf(o)===0
+      ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`));
   });
   /* your offer got voided because someone else landed one of those players first */
   ids.forEach(id=>{
@@ -5629,7 +5671,9 @@ function renderTradeCenter(){
       <button class="btn" onclick="sendTradeOffer()">${window.counterOf?'Send Counter':'Send Offer'}</button>
       ${isAdmin()?`<button class="btn ghost" onclick="executeTrade()">Execute now (commish)</button>`:''}
     </div>
-    <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then a <b>${Math.round(TRADE_REVIEW_MS/86400000)}-day league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> to block a trade. The two managers in the deal don't get a vote on it. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
+    <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then ${tradeReviewMs()===0
+      ? `they go through <b>immediately</b> \u2014 no league review, no veto`
+      : `a <b>${tradeReviewLabel()} league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> to block a trade. The two managers in the deal don't get a vote on it`}. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
     <div class="card" style="margin-bottom:18px">
       <h2>Pending Offers &amp; Reviews</h2>
       <div id="offersView" style="margin-top:10px"></div>
@@ -6007,7 +6051,25 @@ function renderSettings(){
     renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
   renderTypography();
+  renderTradeReview();
   lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
+}
+/* Populated from TRADE_REVIEW_CHOICES rather than hardcoded <option>s so the list and the
+   values that drive reviewEndsAt can never drift apart. */
+function renderTradeReview(){
+  const sel=document.getElementById('setTradeReview');
+  if(sel){
+    const cur=tradeReviewMs();
+    sel.innerHTML = TRADE_REVIEW_CHOICES.map(([ms,label])=>
+      `<option value="${ms}"${ms===cur?' selected':''}>${esc(label)}</option>`).join('');
+    /* a legacy value that is not one of the choices would otherwise show as the first option */
+    if(!TRADE_REVIEW_CHOICES.some(c=>c[0]===cur))
+      sel.insertAdjacentHTML('afterbegin', `<option value="${cur}" selected>${esc(tradeReviewLabel(cur))}</option>`);
+  }
+  const note=document.getElementById('tradeReviewNote');
+  if(note) note.textContent = tradeReviewMs()===0
+    ? 'Accepted trades process straight away. Nobody gets to veto.'
+    : `After a manager accepts, the league has ${tradeReviewLabel()} to veto. ${vetoNeeded()} vetoes block it. Trades already accepted keep the window they started under.`;
 }
 /* ---- push setup (commissioner) ---- */
 function setPushApp(v){
@@ -6039,7 +6101,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · push settings moved to bottom';
+const BUILD_STAMP = '2026-08-01 · trade review window setting';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
