@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 47,
+    v: 48,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,51 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "10": [
+          {ta:"This is my Last year", pa:103.2, tb:"Nut buster", pb:157.5,
+           box:{a:[
+            ["QB","D. Jones QB - IND",26.2],
+            ["RB","D. Henry RB - BAL",15.4],
+            ["RB","A. Jeanty RB - LV",19.1],
+            ["WR","K. Allen WR - LAC",3.9],
+            ["WR","D. Adams WR - LAR",19.7],
+            ["TE","J. Smith TE - PIT",1.4],
+            ["FLEX","J. Addison WR - MIN",6.5],
+            ["K","W. Reichard K - MIN",9.0],
+            ["DEF","Buccaneers DEF",2.0],
+            ["BN","A. Rodgers QB - PIT",13.1],
+            ["BN","D. Moore WR - CHI",0.0],
+            ["BN","C. Okonkwo TE - TEN",0.0],
+            ["BN","P. Washington WR - JAX",18.3],
+            ["BN","Q. Johnston WR - LAC",9.2],
+            ["BN","B. Tuten RB - JAX",2.8],
+            ["BN","O. Gordon RB - MIA",-0.1],
+            ["BN","E. McPherson K - CIN",0.0],
+            ["BN","Commanders DEF",-7.0],
+            ["RES","T. Hunter WR - JAX",0.0]
+          ],
+           b:[
+            ["QB","D. Maye QB - NE",42.7],
+            ["RB","J. Jacobs RB - GB",23.9],
+            ["RB","J. Cook RB - BUF",13.3],
+            ["WR","A. St. Brown WR - DET",16.8],
+            ["WR","W. Robinson WR - NYG",12.2],
+            ["TE","T. McBride TE - ARI",27.7],
+            ["FLEX","J. Warren RB - PIT",13.9],
+            ["K","B. McManus K - GB",1.0],
+            ["DEF","Colts DEF",6.0],
+            ["BN","Z. Ertz TE - WAS",9.4],
+            ["BN","A. Jones RB - MIN",17.7],
+            ["BN","C. Lamb WR - DAL",0.0],
+            ["BN","J. Jennings WR - SF",17.1],
+            ["BN","D. Smith WR - PHI",16.9],
+            ["BN","C. Rodriguez RB - WAS",8.8],
+            ["BN","R. Odunze WR - CHI",20.6],
+            ["BN","J. Daniels QB - WAS",0.0],
+            ["BN","J. Myers K - SEA",15.0],
+            ["RES","M. Evans WR - TB",0.0]
+          ]}}
+        ],
         "11": [
           {ta:"This is my Last year", pa:83.1, tb:"uncle skips ribs", pb:102.5,
            box:{a:[
@@ -6649,7 +6694,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk11 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk10 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
