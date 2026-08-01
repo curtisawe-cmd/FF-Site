@@ -5986,6 +5986,9 @@ function setPushRelay(v){
 }
 function renderPushState(){
   const el=document.getElementById('pushState'); if(!el) return;
+  /* A live init failure outranks the config summary — "everything is set" next to a button
+     that won't work is the wrong thing to say. */
+  if(window.osFail){ showPushFail(); return; }
   const id=!!pushAppId(), relay=!!pushRelay();
   el.innerHTML = !id ? 'Add an App ID to let managers turn on alerts.'
     : (relay ? '✅ App ID set and the relay is configured.'
@@ -5993,7 +5996,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · push diagnostics';
+const BUILD_STAMP = '2026-08-01 · push init errors visible';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6835,6 +6838,14 @@ if('serviceWorker' in navigator){
    offline worker registered at the root — two workers claiming '/' would knock each other out. */
 window.OneSignalDeferred = window.OneSignalDeferred || [];
 let osReady = false;
+/* Why this exists: init failures used to be swallowed, so a blocked CDN, an unconfigured
+   Web platform and a bad service-worker path all looked identical — the button just said
+   "still loading" forever. Whatever went wrong is kept here and shown verbatim.
+
+   On window, not a top-level `let`: renderPushState() lives in an earlier script block, and a
+   lexical binding declared here would be in its temporal dead zone if Settings rendered
+   first. That exact shape silently killed push init once already. */
+window.osFail = '';
 /* The App ID is a public identifier — OneSignal's own snippet puts it in client code. Safe
    to commit; the REST key is the credential and is never in this repo. Settings can still
    override it if the league ever moves to a different OneSignal app. */
@@ -6849,7 +6860,13 @@ function initPush(){
   window._osStarted = true;
   const s=document.createElement('script');
   s.src='https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js'; s.defer=true;
+  /* A blocked CDN fails silently otherwise: the deferred queue never runs at all, which is
+     indistinguishable from a slow network. */
+  s.onerror = () => { window.osFail = 'The OneSignal script could not load. An ad blocker, privacy extension or network filter is the usual cause.'; };
   document.head.appendChild(s);
+  /* If neither success nor script error has landed by now, the SDK loaded but its queue
+     never drained — say so rather than leaving the button stuck on "still loading". */
+  setTimeout(()=>{ if(!osReady && !window.osFail) window.osFail = 'The OneSignal SDK loaded but never finished starting up.'; }, 12000);
   window.OneSignalDeferred.push(async function(OneSignal){
     try{
       await OneSignal.init({
@@ -6864,12 +6881,20 @@ function initPush(){
       /* tag the subscription with the Firebase uid so we can target one manager */
       if(window.fbUser) { try{ await OneSignal.login(window.fbUser.uid); }catch(e){} }
       syncPushBtn();
-    }catch(e){ osReady=false; }
+    }catch(e){
+      osReady=false;
+      window.osFail = (e && (e.message || e.name)) ? String(e.message || e.name) : 'OneSignal.init() failed with no message.';
+      syncPushBtn();
+    }
   });
 }
 async function enablePush(){
   if(!pushAppId()){ toast('Push is not set up yet — the commissioner adds an App ID in Settings.'); return; }
-  if(!osReady){ toast('Notifications are still loading — try again in a second.'); return; }
+  if(!osReady){
+    if(window.osFail){ toast('Notifications failed to start.'); showPushFail(); }
+    else toast('Notifications are still loading — try again in a second.');
+    return;
+  }
   window.OneSignalDeferred.push(async function(OneSignal){
     try{
       await OneSignal.Notifications.requestPermission();
@@ -6879,7 +6904,16 @@ async function enablePush(){
     }catch(e){ toast("Couldn't turn notifications on."); }
   });
 }
+/* Writes the init failure into the Settings diagnostics line. Kept separate from toast so the
+   text stays on screen long enough to read and report. */
+function showPushFail(){
+  const el=document.getElementById('pushState'); if(!el) return;
+  el.innerHTML = window.osFail
+    ? `Push did not start.<br><span style="opacity:.75;font-size:11px">${esc(window.osFail)}</span>`
+    : 'Push is still starting up.';
+}
 function syncPushBtn(){
+  if(window.osFail) showPushFail();
   const b=document.getElementById('pushBtn'); if(!b) return;
   const configured=!!pushAppId();
   b.style.display = configured ? 'inline-flex' : 'none';
