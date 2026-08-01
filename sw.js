@@ -8,7 +8,7 @@
    Live data (Firebase, Sleeper, ESPN) is never cached — it must always be current, and a
    stale scoreboard is worse than no scoreboard. */
 
-const VERSION = 'bbl-v1';
+const VERSION = 'bbl-v2';   /* bump to retire the v1 cache, which could serve a stale page */
 const SHELL = [
   './',
   './index.html',
@@ -44,8 +44,16 @@ self.addEventListener('fetch', e => {
   if (LIVE.test(url.hostname)) return;                 /* straight to the network */
   if (url.origin !== self.location.origin) return;     /* leave other origins alone */
 
+  /* Network-first is not enough on its own: GitHub Pages serves index.html with a ~10 minute
+     max-age, so a plain fetch() here can be answered from the browser's own HTTP cache and
+     hand back the old app even though the network was "used". Force a revalidation for the
+     page itself; static assets can still come from cache. */
+  const isPage = req.mode === 'navigate' ||
+                 (req.headers.get('accept') || '').includes('text/html') ||
+                 /\/$|\.html$/.test(url.pathname);
+
   e.respondWith(
-    fetch(req)
+    fetch(isPage ? new Request(req, { cache: 'reload' }) : req)
       .then(res => {
         if (res && res.ok) {
           const copy = res.clone();

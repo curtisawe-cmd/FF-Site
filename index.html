@@ -1245,8 +1245,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="testPush()">Send test alert</button>
+      <button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Clear the offline cache and reload the newest version" onclick="forceUpdate()">Force update</button>
       <span class="sub" id="pushState" style="margin:0;font-size:12px"></span>
     </div>
+    <p class="sub" id="buildStamp" style="margin:6px 0 0;font-size:11px;opacity:.7"></p>
 
     <div class="eyebrow" style="margin:18px 0 4px">Extra snapshot rows</div>
     <p class="sub" style="margin:0 0 10px">Three of your own lines on the Home page's League Snapshot — buy-in, trade deadline, punishment for last place, whatever. Leave a row blank to hide it.</p>
@@ -5964,7 +5966,7 @@ function renderSettings(){
   }).join('');
   { const a=document.getElementById('setPushApp'); if(a) a.value = S.pushAppId || ONESIGNAL_APP_ID;
     const k=document.getElementById('setPushKey'); if(k) k.value = pushKey() ? '••••••••••••' : '';
-    renderPushState(); }
+    renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
   renderTypography();
   lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
@@ -5989,6 +5991,18 @@ function renderPushState(){
   el.innerHTML = !id ? 'Add an App ID to let managers turn on alerts.'
     : (key ? '✅ App ID set and this browser can send alerts.'
            : '⚠️ App ID is set, so managers can receive — but nothing can <b>send</b> until you paste the REST key here.');
+}
+/* "I pushed but don't see it" has bitten twice — this makes the running build visible and
+   gives a one-tap way to blow away the offline cache and reload. */
+const BUILD_STAMP = '2026-08-01 · push diagnostics';
+function renderBuildStamp(){
+  const el=document.getElementById('buildStamp'); if(!el) return;
+  el.textContent = 'Running build: ' + BUILD_STAMP;
+}
+async function forceUpdate(){
+  try{ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); }catch(e){}
+  try{ for(const k of await caches.keys()) await caches.delete(k); }catch(e){}
+  location.reload(true);
 }
 async function testPush(){
   const el=document.getElementById('pushState');
