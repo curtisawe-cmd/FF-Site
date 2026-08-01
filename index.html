@@ -2331,6 +2331,9 @@ function startLeagueSync(){
   window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
     if(window.currentView==='chat'){ renderChatOnline(); syncChatIdentity(); renderChat(); }   /* names resolve off managersMap */
     if(window.currentView==='polls') renderPolls();
+    /* this feed is where a manager's team index comes from when the one-shot claim lookup is
+       slow or missing, and the trade buttons are gated on it */
+    if(window.currentView==='trades') renderTradeCenter();
     try{ updateChatBadge(); updateTradeBadge(); }catch(e){} });   /* another device may have advanced your read marks */
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
@@ -3597,7 +3600,8 @@ async function setMemberTeam(uid, val){
     if(ti!==null) await window.FB.dbSet('claims/'+ti, uid);
     await window.FB.dbUpdate('managers/'+uid, { teamIndex: ti });
     toast(ti===null? `${nm} unassigned` : `${nm} → ${teamName(ti)} ✓`);
-    if(window.fbUser && window.fbUser.uid===uid){ window.myClaim={...(window.myClaim||{}), teamIndex:ti}; updateClaimBadge(); }
+    if(window.fbUser && window.fbUser.uid===uid){ window.myClaim={...(window.myClaim||{}), teamIndex:ti}; updateClaimBadge();
+      try{ if(window.currentView==='trades') renderTradeCenter(); }catch(e){} }
   }catch(e){ toast('Could not reassign — try again.'); renderCommishCard(); }
 }
 async function removeMember(uid){
@@ -3617,7 +3621,19 @@ async function removeMember(uid){
 window.myClaim = null;          /* {email,name,teamIndex,role,claimedAt} */
 let claimsMap = {}, claimsStarted = false;
 function myUid(){ return window.fbUser && window.fbUser.uid; }
-function myTeamIndex(){ return (window.myClaim && Number.isInteger(window.myClaim.teamIndex)) ? window.myClaim.teamIndex : null; }
+/* Falls back to the live managers feed. window.myClaim comes from a one-shot dbGet that can
+   resolve after the trade cards have already drawn, and a null team index silently strips a
+   manager's Accept/Counter buttons off an offer aimed at them. managersMap is streamed, so it
+   is the more reliable source once it has arrived. */
+function myTeamIndex(){
+  if(window.myClaim && Number.isInteger(window.myClaim.teamIndex)) return window.myClaim.teamIndex;
+  try{
+    const uid = window.fbUser && window.fbUser.uid;
+    const rec = uid && typeof managersMap!=='undefined' && managersMap ? managersMap[uid] : null;
+    if(rec && Number.isInteger(rec.teamIndex)) return rec.teamIndex;
+  }catch(e){}
+  return null;
+}
 function canEditTeam(ti){ return isAdmin() || myTeamIndex()===ti; }
 function requireTeam(ti){ if(canEditTeam(ti)) return true; toast("You can only manage your own team."); return false; }
 /* ---- per-team overlay: each team's roster+lineup live at league/main/teamData/{ti}.
@@ -3716,6 +3732,10 @@ function initClaims(){
     }
     updateClaimBadge();
     try{ updateTradeBadge(); }catch(e){}   /* badge depends on which team is yours */
+    /* Which buttons a trade card shows depends on this claim, so anything already on screen
+       was drawn without knowing the team and has to be redrawn. */
+    try{ if(window.currentView==='trades') renderTradeCenter(); }catch(e){}
+    try{ if(window.currentView==='teams') renderTeams(); }catch(e){}
     if(!isAdmin() && (!rec || !Number.isInteger(rec.teamIndex))) openClaim();  /* first-time manager: prompt */
   }).catch(()=>{});
 }
@@ -3759,6 +3779,8 @@ async function submitClaim(){
     window.myClaim = rec; closeClaim(); updateClaimBadge();
     toast('You claimed '+teamName(ti)+' ✅');
     if(window.currentView==='teams') renderTeams();
+    /* the trade cards gate Accept/Counter on this team index */
+    try{ if(window.currentView==='trades') renderTradeCenter(); }catch(e){}
   }catch(e){ setClaimErr('Could not claim right now — try again.'); }
 }
 function updateClaimBadge(){
@@ -5504,6 +5526,16 @@ function renderOffers(){
     const acts=[];
     if(offerCanAccept(o)) acts.push(`<button class="btn" onclick="acceptOffer('${o.id}')">Accept</button><button class="btn ghost" onclick="counterOffer('${o.id}')">Counter</button><button class="btn ghost" onclick="rejectOffer('${o.id}')">Reject</button>`);
     if(offerCanCancel(o)) acts.push(`<button class="btn ghost" onclick="cancelOffer('${o.id}')">Withdraw</button>`);
+    /* A pending offer with no buttons is the failure we kept hitting blind — it looks broken
+       whether the cause is an unclaimed team, someone else's trade, or a competing deal that
+       already took a player. Say which. */
+    if(o.status==='pending' && !offerCanAccept(o) && !offerCanCancel(o)){
+      const clash = conflictingLiveOffer(o, o.id);
+      const why = clash ? 'Another accepted trade already claims one of these players.'
+                : !Number.isInteger(myTeamIndex()) ? 'Claim your team to accept or counter trades.'
+                : `Only ${esc(o.bName)} can accept this one.`;
+      acts.push(`<span class="sub" style="margin:0">${why}</span>`);
+    }
     if(reviewing && !over && uid){
       inTrade
         ? acts.push(`<span class="sub" style="margin:0">You're in this trade &mdash; no vote.</span>`)
@@ -6002,7 +6034,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · toggle repaints on subscribe';
+const BUILD_STAMP = '2026-08-01 · trade buttons for managers';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
