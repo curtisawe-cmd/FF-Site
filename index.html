@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 56,
+    v: 57,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,49 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "2": [
+          {ta:"This is my Last year", pa:90.0, tb:"JK Ramandrew Skatabers IV", pb:138.7,
+           box:{a:[
+            ["QB","A. Rodgers QB - PIT",19.8],
+            ["RB","D. Henry RB - BAL",4.5],
+            ["RB","A. Jeanty RB - LV",9.6],
+            ["WR","D. Adams WR - LAR",22.6],
+            ["WR","D. Moore WR - CHI",9.6],
+            ["TE","J. Smith TE - PIT",6.7],
+            ["FLEX","T. Hunter WR - JAX",5.2],
+            ["K","J. Bates K - DET",10.0],
+            ["DEF","Commanders DEF",2.0],
+            ["BN","K. Allen WR - LAC",17.1],
+            ["BN","A. Hooper TE - NE",6.8],
+            ["BN","J. Mixon RB - HOU NFI-R",0.0],
+            ["BN","C. Godwin WR - TB",0.0],
+            ["BN","B. Purdy QB - SF",0.0],
+            ["BN","J. Addison WR - MIN",0.0],
+            ["BN","Q. Johnston WR - LAC",21.1],
+            ["BN","B. Tuten RB - JAX",17.0],
+            ["BN","O. Gordon RB - MIA",2.5]
+          ],
+           b:[
+            ["QB","J. Love QB - GB",41.0],
+            ["RB","N. Chubb RB - HOU",17.6],
+            ["RB","J. Dobbins RB - DEN",18.3],
+            ["WR","M. Nabers WR - NYG",37.7],
+            ["WR","M. Golden WR - GB",1.9],
+            ["TE","M. Andrews TE - BAL",1.6],
+            ["FLEX","K. Coleman WR - BUF",5.6],
+            ["K","B. McManus K - GB",10.0],
+            ["DEF","Steelers DEF",5.0],
+            ["BN","M. Stafford QB - LAR",37.6],
+            ["BN","J. Hill RB - BAL",6.1],
+            ["BN","D. Metcalf WR - PIT",11.0],
+            ["BN","C. Kmet TE - CHI",4.9],
+            ["BN","R. Stevenson RB - NE",23.4],
+            ["BN","K. Gainwell RB - PIT",7.6],
+            ["BN","N. Harris RB - LAC",8.4],
+            ["BN","T. Allgeier RB - ATL",18.2],
+            ["BN","R. Doubs WR - GB",11.8]
+          ]}}
+        ],
         "1": [
           {ta:"This is my Last year", pa:136.1, tb:"Brown Bag Boy", pb:128.4,
            box:{a:[
@@ -7049,7 +7092,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk1 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 season complete';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
