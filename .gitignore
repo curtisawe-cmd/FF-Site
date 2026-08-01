@@ -4,3 +4,7 @@ node_modules/
 *.log
 .env
 .env.*
+
+# Unrelated project that lives in this folder. It was committed by accident once and
+# is not part of the league site.
+designer-portfolio/
