@@ -4912,11 +4912,11 @@ async function renderGameCenter(){
      render the matchups with every player at 0.00 and say why. */
   let stats, note='';
   try{ stats = await fetchWeekStats(season, wk); }
-  catch(e){ stats = null; note = `Couldn't reach the NFL stat feed, so every player is showing 0.00. <a href="#" class="poolrefresh" onclick="renderGameCenter();return false">retry</a>`; }
+  catch(e){ stats = null; note = `Couldn't reach the NFL stat feed, so every player is showing 0.0. <a href="#" class="poolrefresh" onclick="renderGameCenter();return false">retry</a>`; }
   const noStats = !stats || !Object.keys(stats).length;
   if(noStats){
     stats = stats || {};
-    if(!note) note = `No ${season} week ${wk} stats published yet. Showing the matchups and rosters with 0.00 until they are.`;
+    if(!note) note = `No ${season} week ${wk} stats published yet. Showing the matchups and rosters with 0.0 until they are.`;
   }
   const notice = note ? `<div class="card" style="margin-bottom:12px"><p class="sub" style="margin:0">${note}</p></div>` : '';
   const lu = ti => ensureLineup(ti);
@@ -4924,7 +4924,7 @@ async function renderGameCenter(){
   const col = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
     const rowsFor = list => list.map(p=>{
-      /* with stats in hand a blank means "did not play"; with none at all it just means 0.00 */
+      /* with stats in hand a blank means "did not play"; with none at all it just means 0.0 */
       const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
       const line = statLine(st, p.pos);
       return `<tr>
