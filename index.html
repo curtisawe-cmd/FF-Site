@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 45,
+    v: 46,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,51 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "12": [
+          {ta:"This is my Last year", pa:151.1, tb:"Brown Bag Boy", pb:135.1,
+           box:{a:[
+            ["QB","D. Jones QB - IND",32.3],
+            ["RB","D. Henry RB - BAL",27.0],
+            ["RB","A. Jeanty RB - LV",28.2],
+            ["WR","D. Adams WR - LAR",23.2],
+            ["WR","J. Addison WR - MIN",0.0],
+            ["TE","C. Okonkwo TE - TEN",7.0],
+            ["FLEX","D. Moore WR - CHI",23.4],
+            ["K","W. Reichard K - MIN",10.0],
+            ["DEF","Buccaneers DEF",0.0],
+            ["BN","A. Rodgers QB - PIT",0.0],
+            ["BN","K. Allen WR - LAC",0.0],
+            ["BN","J. Smith TE - PIT",6.2],
+            ["BN","P. Washington WR - JAX",18.1],
+            ["BN","Q. Johnston WR - LAC",0.0],
+            ["BN","B. Tuten RB - JAX",3.1],
+            ["BN","O. Gordon RB - MIA",0.0],
+            ["BN","E. McPherson K - CIN",12.0],
+            ["BN","Commanders DEF",0.0],
+            ["RES","T. Hunter WR - JAX",0.0]
+          ],
+           b:[
+            ["QB","J. Goff QB - DET",33.9],
+            ["RB","J. Williams RB - DAL",16.1],
+            ["RB","B. Hall RB - NYJ",17.1],
+            ["WR","P. Nacua WR - LAR",16.7],
+            ["WR","M. Wilson WR - ARI",21.8],
+            ["TE","T. Kelce TE - KC",8.6],
+            ["FLEX","C. Watson WR - GB",9.9],
+            ["K","C. McLaughlin K - TB",1.0],
+            ["DEF","Patriots DEF",10.0],
+            ["BN","C. Kupp WR - SEA",4.4],
+            ["BN","D. Njoku TE - CLE",0.0],
+            ["BN","M. Jones QB - SF",0.0],
+            ["BN","J. Ferguson TE - DAL",11.3],
+            ["BN","C. Austin WR - PIT",7.6],
+            ["BN","M. Mims WR - DEN",0.0],
+            ["BN","D. Achane RB - MIA",0.0],
+            ["BN","C. Dike WR - TEN",21.4],
+            ["BN","K. Fairbairn K - HOU",10.0],
+            ["RES","T. Hill WR - MIA",0.0]
+          ]}}
+        ],
         "13": [
           {ta:"This is my Last year", pa:150.5, tb:"JK Ramandrew Skatabers IV", pb:103.8,
            box:{a:[
@@ -6559,7 +6604,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk13 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk12 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
