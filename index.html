@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 54,
+    v: 55,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,50 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "3": [
+          {ta:"This is my Last year", pa:129.4, tb:"Prater's Leg", pb:175.0,
+           box:{a:[
+            ["QB","D. Jones QB - IND",32.3],
+            ["RB","D. Henry RB - BAL",13.1],
+            ["RB","A. Jeanty RB - LV",9.7],
+            ["WR","K. Allen WR - LAC",19.5],
+            ["WR","D. Adams WR - LAR",14.6],
+            ["TE","J. Smith TE - PIT",5.3],
+            ["FLEX","Q. Johnston WR - LAC",14.9],
+            ["K","J. Bates K - DET",9.0],
+            ["DEF","Commanders DEF",11.0],
+            ["BN","A. Rodgers QB - PIT",23.8],
+            ["BN","A. Hooper TE - NE",4.8],
+            ["BN","C. Godwin WR - TB",0.0],
+            ["BN","D. Moore WR - CHI",13.4],
+            ["BN","B. Purdy QB - SF",0.0],
+            ["BN","J. Addison WR - MIN",0.0],
+            ["BN","T. Hunter WR - JAX",3.1],
+            ["BN","B. Tuten RB - JAX",9.3],
+            ["BN","O. Gordon RB - MIA",11.6],
+            ["RES","J. Mixon RB - HOU NFI-R",0.0]
+          ],
+           b:[
+            ["QB","P. Mahomes QB - KC",27.6],
+            ["RB","C. Hubbard RB - CAR",13.0],
+            ["RB","J. Cook RB - BUF",29.6],
+            ["WR","N. Collins WR - HOU",27.4],
+            ["WR","D. Brown WR - JAX",2.7],
+            ["TE","H. Fannin TE - CLE",5.5],
+            ["FLEX","K. Walker RB - SEA",21.2],
+            ["K","M. Prater K - BUF",8.0],
+            ["DEF","Vikings DEF",40.0],
+            ["BN","S. Diggs WR - NE",5.3],
+            ["BN","D. Njoku TE - CLE",9.0],
+            ["BN","A. Brown WR - PHI",22.9],
+            ["BN","K. Murray QB - ARI",25.8],
+            ["BN","J. Jeudy WR - CLE",2.7],
+            ["BN","E. Ayomanor WR - TEN",13.8],
+            ["BN","J. Higgins WR - HOU",1.5],
+            ["BN","D. Thornton WR - LV",4.9],
+            ["BN","H. Butker K - KC",11.0]
+          ]}}
+        ],
         "4": [
           {ta:"This is my Last year", pa:149.1, tb:"Bill Cosbys Sleepers", pb:128.2,
            box:{a:[
@@ -6961,7 +7005,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk4 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk3 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
