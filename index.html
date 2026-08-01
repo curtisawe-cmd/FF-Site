@@ -1633,7 +1633,33 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 40,
+    v: 41,
+    /* Regular-season and playoff-week final scores, from NFL.com league history schedule
+       exports. Sparse on purpose — weeks land here one saved page at a time. */
+    resultsByWeek: {
+      "2024": {
+        "1": [
+          {ta:"San Francisco Steam Train", pa:156.7, tb:"Team Feltersnatch",    pb:115.1},
+          {ta:"Wet Otters Pocket",         pa:107.5, tb:"Bill Cosbys Sleepers", pb:136.9},
+          {ta:"Nut buster",                pa:137.7, tb:"Slap My Bear Ass",     pb:150.3},
+          {ta:"uncle skips ribs",          pa:110.9, tb:"Brown Bag Boy",        pb:131.2},
+          {ta:"Team Injured Reserve",      pa:177.7, tb:"MaddaMafia",           pb:134.4},
+          {ta:"Saquon Bacher",             pa:187.4, tb:"Frozen Meatballs",     pb:170.5}
+        ]
+      },
+      "2025": {
+        /* championship week — the four placement games also live in the playoff bracket;
+           the two 9th-12th toilet games exist only here */
+        "17": [
+          {ta:"This is my Last year",    pa:124.5, tb:"MaddaMafia",               pb:134.9},
+          {ta:"Jerry had a little Lamb", pa:81.3,  tb:"Prater's Leg",             pb:135.2},
+          {ta:"Allen's Assholes",        pa:50.5,  tb:"JK Ramandrew Skatabers IV",pb:85.3},
+          {ta:"uncle skips ribs",        pa:111.8, tb:"Brown Bag Boy",            pb:113.7},
+          {ta:"Nut buster",              pa:154.3, tb:"Bill Cosbys Sleepers",     pb:168.5},
+          {ta:"Saquon Bacher",           pa:97.5,  tb:"WiFi is Down",             pb:197.2}
+        ]
+      }
+    },
     /* First round in draft order, from the NFL.com league history export. Only rounds the
        export actually contained are here — 2025 saved with round 1 only. */
     draftR1: {
@@ -4514,6 +4540,17 @@ function renderRecaps(){
           <td style="padding:5px 8px;text-align:right">${esc(p.team)}${mgrOf(yr,p.team)?` <span style="color:var(--chalk-dim)">(${esc(mgrOf(yr,p.team))})</span>`:''}</td>
         </tr>`).join('')}
       </table></div>`:''}
+      ${(H.resultsByWeek&&H.resultsByWeek[yr])?Object.keys(H.resultsByWeek[yr]).sort((a,b)=>a-b).map(wk=>`
+      <div class="eyebrow" style="margin-top:16px">Week ${wk} results</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
+        ${H.resultsByWeek[yr][wk].map(g=>{const aw=g.pa>g.pb, bw=g.pb>g.pa; return `<tr style="border-bottom:1px solid var(--line)">
+          <td style="padding:5px 8px;${aw?'font-weight:700':''}">${esc(g.ta)}</td>
+          <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);${aw?'font-weight:700;color:var(--turf)':'color:var(--chalk-dim)'}">${g.pa.toFixed(1)}</td>
+          <td style="padding:5px 4px;color:var(--chalk-dim);text-align:center">·</td>
+          <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);${bw?'font-weight:700;color:var(--turf)':'color:var(--chalk-dim)'}">${g.pb.toFixed(1)}</td>
+          <td style="padding:5px 8px;${bw?'font-weight:700':''}">${esc(g.tb)}</td>
+        </tr>`;}).join('')}
+      </table></div>`).join(''):''}
       <div class="row" style="margin-top:14px">
         <button class="btn ghost" onclick="window.histYear='${yr}';showView('history')">Full ${yr} standings \u2192</button>
       </div>
@@ -6224,7 +6261,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 first round in history';
+const BUILD_STAMP = '2026-08-01 · weekly results in history';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
