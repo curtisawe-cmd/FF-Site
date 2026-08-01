@@ -4138,7 +4138,9 @@ function notifyNewChat(){
     const body = batch.length>1
       ? `${batch.length} new messages`
       : (last.img && !String(last.m||'').trim() ? 'sent a photo' : String(last.m||'').slice(0,120));
-    sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets, mine:true});
+    /* keyed on the first message of the batch: the author's phone and desktop both batch the
+       same fresh messages, and only one of them may announce them */
+    pushOnce('chat-'+(batch[0]._id||Date.now()), ()=>sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets, mine:true}));
   }, 4000);                                            /* let a flurry settle first */
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
@@ -5544,6 +5546,22 @@ function updateTradeBadge(){
 }
 let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
 const supersededSeen = new Set();            /* only tell you once that your offer was voided */
+/* Exactly-once across devices. The ownership gate picks the right PERSON to send a push, but
+   that person can have the app open on a phone and a desktop at once — both passed the gate and
+   both sent, which is how every alert arrived twice. First device to claim the mark in an atomic
+   transaction sends; the rest stay silent. If the guard is unavailable (offline, rules), send
+   anyway — twice beats never. */
+async function pushOnce(key, fn){
+  try{
+    if(window.FB && window.FB.dbTxn){
+      const safe = String(key).replace(/[.#$\[\]\/]/g,'_');
+      const res = await window.FB.dbTxn(`league/${LEAGUE_ID}/pushMarks/${safe}`,
+        cur => cur===null ? { by:(window.fbUser&&window.fbUser.uid)||'', t:Date.now() } : undefined);
+      if(res && res.committed===false) return;      /* another device already sent this one */
+    }
+  }catch(e){ /* fall through and send */ }
+  try{ fn(); }catch(e){}
+}
 function noticeNewOffers(){
   const ids = Object.keys(offersMap||{});
   const nowAccepted = ids.filter(id=>(offersMap[id]||{}).status==='accepted');
@@ -5566,7 +5584,7 @@ function noticeNewOffers(){
     /* the device that sent the offer is the one that announces it, so this works whether or not
        the commissioner is online */
     const mineToSend = !!(window.fbUser && o.fromUid === window.fbUser.uid);
-    sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`, {mine:mineToSend, uids:[target]});
+    if(mineToSend) pushOnce('offer-'+id, ()=>sendPush('Trade offer', `${o.aName} wants to trade with ${o.bName}.`, {mine:true, uids:[target]}));
   });
   /* a trade just flipped to accepted — shout it on every screen in the league */
   nowAccepted.forEach(id=>{
@@ -5577,8 +5595,8 @@ function noticeNewOffers(){
     /* whoever accepted announces it; older offers have no acceptedBy, so fall back to the
        commissioner rather than going silent */
     const mineToSend = o.acceptedBy ? !!(window.fbUser && o.acceptedBy===window.fbUser.uid) : isAdmin();
-    sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ` + (reviewMsOf(o)===0
-      ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`), {mine:mineToSend});
+    if(mineToSend) pushOnce('accepted-'+id, ()=>sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ` + (reviewMsOf(o)===0
+      ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`), {mine:true}));
   });
   /* your offer got voided because someone else landed one of those players first */
   ids.forEach(id=>{
@@ -6158,7 +6176,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · offer push is recipient-only';
+const BUILD_STAMP = '2026-08-01 · one push per event';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6901,7 +6919,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp, query, limitToLast }
+import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp, query, limitToLast, runTransaction }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
 
 const firebaseConfig = {
@@ -6946,6 +6964,9 @@ window.FB = {
      the value callback and never surfaces anywhere, so the feed just stays empty and the UI
      reports "nothing here" for data the account simply is not allowed to read. Every failure is
      recorded on window.FB_ERR so the views can say so instead of lying. */
+  /* atomic compare-and-set — the only primitive that can pick ONE winner when the same account
+     has the app open on two devices at once */
+  dbTxn:    (p, fn) => runTransaction(ref(db, p), fn),
   dbOn:     (p, cb) => onValue(ref(db, p), s => cb(s.val()), err => fbReadFailed(p, err)),
   /* bounded subscribe — keeps chat from pulling unlimited history (matters once messages carry images) */
   dbOnLast: (p, n, cb) => onValue(query(ref(db, p), limitToLast(n)), s => cb(s.val()), err => fbReadFailed(p, err)),
