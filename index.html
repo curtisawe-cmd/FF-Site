@@ -6002,7 +6002,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · alerts on/off toggle';
+const BUILD_STAMP = '2026-08-01 · toggle repaints on subscribe';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6915,8 +6915,17 @@ function initPush(){
       }catch(e){}
       /* tag the subscription with the Firebase uid so we can target one manager */
       if(window.fbUser) { try{ await OneSignal.login(window.fbUser.uid); }catch(e){} }
-      syncPushBtn();
-      renderPushState();
+      /* The subscription id is not there the moment init() resolves — it arrives once the
+         browser has registered with the push service. Repaint when it lands, or the button
+         paints "Alerts off" for a device that is about to be perfectly subscribed and nothing
+         ever tells it otherwise. */
+      const repaint = () => { syncPushBtn(); renderPushState(); };
+      try{ OneSignal.User.PushSubscription.addEventListener('change', repaint); }catch(e){}
+      try{ OneSignal.Notifications.addEventListener('permissionChange', repaint); }catch(e){}
+      /* Belt and braces: if the SDK ever stops firing that event, these still settle the label
+         rather than leaving it stuck on the wrong state. */
+      [400, 1500, 4000].forEach(ms => setTimeout(repaint, ms));
+      repaint();
     }catch(e){
       window.osReady=false;
       window.osFail = (e && (e.message || e.name)) ? String(e.message || e.name) : 'OneSignal.init() failed with no message.';
@@ -6978,7 +6987,12 @@ function togglePush(){
       setPushOptedOut(false);
       if(window.fbUser) { try{ await OneSignal.login(window.fbUser.uid); }catch(e){} }
       syncPushBtn(); renderPushState();
-      toast(pushIsOn(OneSignal) ? 'Alerts on 🔔' : 'Permission granted, but the device did not register. Tap again in a moment.');
+      /* Judge on optedIn, not on the subscription id: the id lands a moment later, so requiring
+         it here would report failure for a device that is registering perfectly well. */
+      let optedIn = false;
+      try{ optedIn = !!OneSignal.User.PushSubscription.optedIn; }catch(e){}
+      toast(optedIn ? 'Alerts on 🔔' : 'Permission granted, but the device did not register. Tap again in a moment.');
+      [400, 1500, 4000].forEach(ms => setTimeout(()=>{ syncPushBtn(); renderPushState(); }, ms));
     }catch(e){ toast("Couldn't change your alert setting."); }
   });
 }
