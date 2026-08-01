@@ -3277,18 +3277,9 @@ function afterPick(){
     D.finished = true; clearInterval(timerId); timerId=null;
     document.getElementById('clock').textContent = 'END';
     toast("That's a wrap — draft complete! 🏈");
-  } else { armClock(); notifyOnTheClock(); }
+  } else { armClock(); }
   saveDraft();
   refreshDraftUI();
-}
-/* ping whoever just came on the clock — only the real draft, never a mock */
-function notifyOnTheClock(){
-  if(draftMode!=='real' || !D.started || D.paused || D.finished) return;
-  const idx=currentPickIndex(); if(idx>=totalPicks()) return;
-  if(window._clockNotified===idx) return;          /* one ping per pick, not per re-render */
-  window._clockNotified=idx;
-  const ti=ownerForPick(idx), uid=uidForTeam(ti);
-  sendPush("You're on the clock", `${teamName(ti)} — ${pickLabel(idx)}`, uid?{uids:[uid]}:null);
 }
 function undoPick(){
   if(!requireAdmin()) return;
@@ -4053,10 +4044,41 @@ function startChatSync(){
   chatStarted = true;
   window.FB.dbOnLast(chatPath(), 150, (m)=>{          /* bounded: messages can carry images now */
     chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)) : [];
+    notifyNewChat();
     if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); renderChat(); }   /* you're looking at it */
     updateChatBadge();
     if(chatMsgs.length >= CHAT_KEEP) pruneChat();      /* trim once we're at the cap */
   });
+}
+/* Alert the league when someone posts — everyone except the person who typed it.
+   Batched: a burst of messages sends one notification, not five. */
+let chatNotifySeen = null;                 /* null until the first sync, so history stays quiet */
+let chatNotifyTimer = null;
+let chatNotifyPending = [];                /* accumulates across syncs — each sync marks its own
+                                              messages seen, so the timer must not re-derive them */
+function notifyNewChat(){
+  const ids = chatMsgs.map(x=>x._id).filter(Boolean);
+  if(chatNotifySeen === null){ chatNotifySeen = new Set(ids); return; }
+  const fresh = chatMsgs.filter(x=>x._id && !chatNotifySeen.has(x._id));
+  ids.forEach(id=>chatNotifySeen.add(id));
+  if(!fresh.length || !isAdmin()) return;              /* only the sender-device notifies */
+  chatNotifyPending.push(...fresh);
+  clearTimeout(chatNotifyTimer);
+  chatNotifyTimer = setTimeout(()=>{
+    const batch = chatNotifyPending.slice(); chatNotifyPending = [];
+    if(!batch.length) return;
+    const last = batch[batch.length-1];
+    const authors = [...new Set(batch.map(x=>x.uid).filter(Boolean))];
+    /* don't buzz anyone who wrote part of this batch */
+    const targets = Object.keys((typeof managersMap!=='undefined' && managersMap)||{})
+      .filter(u=>!authors.includes(u));
+    if(!targets.length) return;
+    const who = last.uid ? managerNameFor(last.uid, last.n||'Someone') : (last.n||'Someone');
+    const body = batch.length>1
+      ? `${batch.length} new messages`
+      : (last.img && !String(last.m||'').trim() ? 'sent a photo' : String(last.m||'').slice(0,120));
+    sendPush(batch.length>1 ? 'League chat' : `${who} in league chat`, body, {uids:targets});
+  }, 4000);                                            /* let a flurry settle first */
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
 
