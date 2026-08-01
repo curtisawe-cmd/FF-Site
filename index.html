@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 42,
+    v: 43,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,55 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        /* quarterfinal week, from the playoff bracket; the Curtis vs Kahlyb game carries its
+           own Game Center box score */
+        "15": [
+          {ta:"MaddaMafia",           pa:108.3, tb:"uncle skips ribs",     pb:147.3},
+          {ta:"Saquon Bacher",        pa:127.9, tb:"Nut buster",           pb:235.0},
+          {ta:"WiFi is Down",         pa:133.8, tb:"Brown Bag Boy",        pb:169.8},
+          {ta:"This is my Last year", pa:95.5,  tb:"Bill Cosbys Sleepers", pb:186.3,
+           box:{a:[
+            ["QB","A. Rodgers QB - PIT",31.4],
+            ["RB","D. Henry RB - BAL",17.2],
+            ["RB","A. Jeanty RB - LV",10.0],
+            ["WR","D. Adams WR - LAR",11.1],
+            ["WR","J. Addison WR - MIN",8.6],
+            ["TE","B. Strange TE - JAX",3.6],
+            ["FLEX","K. Allen WR - LAC",8.6],
+            ["K","E. McPherson K - CIN",0.0],
+            ["DEF","Buccaneers DEF",5.0],
+            ["BN","P. Rivers QB - IND",14.2],
+            ["BN","J. Smith TE - PIT",10.8],
+            ["BN","D. Moore WR - CHI",22.9],
+            ["BN","C. Okonkwo TE - TEN",7.3],
+            ["BN","Q. Johnston WR - LAC",0.0],
+            ["BN","L. Burden WR - CHI",14.4],
+            ["BN","S. Sanders QB - CLE",6.5],
+            ["BN","B. Tuten RB - JAX",9.5],
+            ["BN","W. Reichard K - MIN",11.0],
+            ["RES","G. Dortch WR - ARI",0.0]
+          ],
+           b:[
+            ["QB","C. Williams QB - CHI",35.1],
+            ["RB","C. Brown RB - CIN",18.6],
+            ["RB","T. Henderson RB - NE",47.9],
+            ["WR","J. Chase WR - CIN",23.2],
+            ["WR","J. Smith-Njigba WR - SEA",18.3],
+            ["TE","T. Warren TE - IND",4.9],
+            ["FLEX","C. Sutton WR - DEN",24.3],
+            ["K","C. Boswell K - PIT",4.0],
+            ["DEF","Commanders DEF",10.0],
+            ["BN","J. Waddle WR - MIA",4.6],
+            ["BN","G. Wilson WR - NYJ",0.0],
+            ["BN","J. Mason RB - MIN",4.9],
+            ["BN","C. Tillman WR - CLE",0.0],
+            ["BN","J. Downs WR - IND",10.3],
+            ["BN","B. Nix QB - DEN",56.6],
+            ["BN","K. Monangai RB - CHI",5.5],
+            ["BN","J. Croskey-Merritt RB - WAS",19.2],
+            ["BN","A. Borregales K - NE",7.0]
+          ]}}
+        ],
         /* week 16 scores mirror the playoff bracket; the box on the consolation game came from
            its own Game Center export */
         "16": [
@@ -6419,7 +6468,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk16 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk15 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
