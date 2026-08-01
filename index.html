@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 43,
+    v: 44,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,52 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        /* regular-season finale — only the games whose Game Center pages have been saved are
+           here, so this week is intentionally short */
+        "14": [
+          {ta:"This is my Last year", pa:52.6, tb:"Prater's Leg", pb:98.2,
+           box:{a:[
+            ["QB","D. Jones QB - IND",3.6],
+            ["RB","D. Henry RB - BAL",16.2],
+            ["RB","A. Jeanty RB - LV",7.8],
+            ["WR","D. Adams WR - LAR",6.9],
+            ["WR","Q. Johnston WR - LAC",2.8],
+            ["TE","B. Strange TE - JAX",5.7],
+            ["FLEX","D. Moore WR - CHI",0.6],
+            ["K","E. McPherson K - CIN",4.0],
+            ["DEF","Buccaneers DEF",5.0],
+            ["BN","A. Rodgers QB - PIT",40.9],
+            ["BN","K. Allen WR - LAC",5.2],
+            ["BN","J. Smith TE - PIT",0.0],
+            ["BN","C. Okonkwo TE - TEN",4.0],
+            ["BN","P. Washington WR - JAX",0.0],
+            ["BN","J. Addison WR - MIN",10.2],
+            ["BN","L. Burden WR - CHI",11.2],
+            ["BN","B. Tuten RB - JAX",-1.1],
+            ["BN","W. Reichard K - MIN",8.0],
+            ["RES","G. Dortch WR - ARI",0.0]
+          ],
+           b:[
+            ["QB","P. Mahomes QB - KC",12.3],
+            ["RB","K. Walker RB - SEA",5.8],
+            ["RB","Z. Charbonnet RB - SEA",10.0],
+            ["WR","A. Brown WR - PHI",16.0],
+            ["WR","N. Collins WR - HOU",16.1],
+            ["TE","D. Goedert TE - PHI",15.8],
+            ["FLEX","D. Schultz TE - HOU",5.2],
+            ["K","M. Prater K - BUF",6.0],
+            ["DEF","Jaguars DEF",11.0],
+            ["BN","B. Cooks WR - BUF",0.0],
+            ["BN","S. Diggs WR - NE",0.0],
+            ["BN","C. Kirk WR - HOU",1.6],
+            ["BN","T. Lawrence QB - JAX",38.8],
+            ["BN","S. Tucker RB - TB",10.3],
+            ["BN","H. Fannin TE - CLE",25.4],
+            ["BN","E. Ayomanor WR - TEN",8.4],
+            ["BN","H. Butker K - KC",4.0],
+            ["BN","Vikings DEF",19.0]
+          ]}}
+        ],
         /* quarterfinal week, from the playoff bracket; the Curtis vs Kahlyb game carries its
            own Game Center box score */
         "15": [
@@ -6468,7 +6514,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk15 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk14 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
