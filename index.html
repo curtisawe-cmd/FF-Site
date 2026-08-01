@@ -1238,10 +1238,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="During a live NFL week, any member's open app refreshes the live scoreboard from the stat feed (about every 5 minutes). Commissioner scores stay official.">Live auto-scoring</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
     </div>
     <div class="eyebrow" style="margin:18px 0 4px">Push notifications</div>
-    <p class="sub" style="margin:0 0 10px">Free OneSignal account, no card needed. Paste the <b>App ID</b> so managers can turn alerts on, and your <b>REST key</b> so this browser can send them. The key is stored only on this device &mdash; it is never shared with the league or saved to the site.</p>
+    <p class="sub" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
     <div class="setgrid">
       <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
-      <div class="setrow"><label title="Stored in this browser only. Never synced, never committed.">REST key (this device)</label><input type="password" id="setPushKey" placeholder="paste to enable sending" style="max-width:260px" onchange="setPushKey(this.value)"></div>
+      <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
     </div>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="testPush()">Send test alert</button>
@@ -1565,6 +1565,7 @@ const DEFAULTS = {
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   pushAppId: '',         /* OneSignal App ID — public by design; the REST key never lives here */
+  pushRelay: '',         /* Cloudflare Worker URL that holds the REST key and forwards sends */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
@@ -5965,7 +5966,7 @@ function renderSettings(){
     return `<div class="setrow"><label>${esc(k)}</label>${control}</div>`;
   }).join('');
   { const a=document.getElementById('setPushApp'); if(a) a.value = S.pushAppId || ONESIGNAL_APP_ID;
-    const k=document.getElementById('setPushKey'); if(k) k.value = pushKey() ? '••••••••••••' : '';
+    const rl=document.getElementById('setPushRelay'); if(rl) rl.value = pushRelay();
     renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
   renderTypography();
@@ -5978,19 +5979,17 @@ function setPushApp(v){
   syncPushBtn();                       /* show the button on the App ID alone — the SDK
                                           callback that also calls this may never fire */
 }
-function setPushKey(v){
-  const val=String(v||'').trim();
-  if(val==='••••••••••••') return;                 /* untouched masked field */
-  try{ store.set('ffl_push_key', val); }catch(e){}
-  renderPushState();
-  toast(val ? 'Key saved on this device only' : 'Key cleared');
+function setPushRelay(v){
+  S.pushRelay = String(v||'').trim().replace(/\/+$/,'');
+  saveState(); renderPushState();
+  toast(S.pushRelay ? 'Relay saved' : 'Relay cleared');
 }
 function renderPushState(){
   const el=document.getElementById('pushState'); if(!el) return;
-  const id=!!pushAppId(), key=!!pushKey();
+  const id=!!pushAppId(), relay=!!pushRelay();
   el.innerHTML = !id ? 'Add an App ID to let managers turn on alerts.'
-    : (key ? '✅ App ID set and this browser can send alerts.'
-           : '⚠️ App ID is set, so managers can receive — but nothing can <b>send</b> until you paste the REST key here.');
+    : (relay ? '✅ App ID set and the relay is configured.'
+             : '⚠️ Managers can receive, but nothing can <b>send</b> until the relay URL is set.');
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
@@ -6007,13 +6006,14 @@ async function forceUpdate(){
 async function testPush(){
   const el=document.getElementById('pushState');
   if(!pushAppId()){ toast('Add the App ID first.'); return; }
-  if(!pushKey()){ toast('Paste the REST key first — without it nothing can send.'); return; }
+  if(!pushRelay()){ toast('Set the relay URL first — without it nothing can send.'); return; }
   const say=(msg,detail)=>{ toast(msg); if(el) el.innerHTML = `${esc(msg)}${detail?`<br><span style="opacity:.75;font-size:11px">${esc(detail)}</span>`:''}`; };
   const r = await sendPush('Bitch Boy League', 'Test alert — if you can read this, push works.');
   if(r.ok){ say('Test sent 🔔 — it only reaches people who tapped "Turn on alerts".'); return; }
   const body=(r.text||'').slice(0,200);
-  if(r.blocked)                       say('Blocked before it reached OneSignal.', 'Usually the browser refusing the request (CORS) or no connection. Tell Claude: "push blocked".');
-  else if(r.status===401||r.status===403) say('Key rejected (' + r.status + ').', 'Wrong REST key, or it belongs to a different app. Re-copy it from Settings > Keys & IDs.');
+  if(r.blocked)                       say("Couldn't reach the relay.", 'Check the Worker URL is right and deployed.');
+  else if(r.status===403)             say('Relay refused this site (403).', 'Add this origin to ALLOWED_ORIGINS in the Worker.');
+  else if(r.status===401)             say('OneSignal rejected the relay key (401).', 'Re-check the ONESIGNAL_API_KEY secret in the Worker.');
   else if(/not subscribed|no.*(recipients|players|subscribers)/i.test(body))
                                       say('Key works — but nobody has alerts on yet.', 'Tap "Turn on alerts" in the header, allow the prompt, then test again.');
   else if(r.status===400)              say('OneSignal rejected the request (400).', body||'No detail returned.');
@@ -6840,7 +6840,9 @@ let osReady = false;
    override it if the league ever moves to a different OneSignal app. */
 const ONESIGNAL_APP_ID = '03751159-4b6b-4128-ab9c-3934e82fcbfe';
 function pushAppId(){ return (S && S.pushAppId) || ONESIGNAL_APP_ID; }
-function pushKey(){ try{ return store.get('ffl_push_key') || ''; }catch(e){ return ''; } }
+/* the relay URL is not a secret — it syncs so any manager's client could send if we ever
+   widen triggering beyond the commissioner. The REST key lives on the relay itself. */
+function pushRelay(){ return (S && S.pushRelay) || ''; }
 function initPush(){
   const id = pushAppId();
   if(!id || window._osStarted) return;
@@ -6889,44 +6891,27 @@ function syncPushBtn(){
     }catch(e){}
   });
 }
-/* Commissioner's browser is the sender. Silently does nothing for everyone else. */
+/* Sends go through the relay (push/cloudflare-worker.js) — OneSignal's API refuses browser
+   requests outright, and the key must not live in a browser or this repo. Only the
+   commissioner's client triggers, so three open apps don't fire three notifications. */
 async function sendPush(title, body, opts){
-  const id=pushAppId(), key=pushKey();
-  if(!id || !key || !isAdmin()) return false;
+  const relay = pushRelay();
+  if(!relay || !isAdmin()) return { ok:false, status:0, text:'no relay configured', skipped:true };
   const payload = {
-    app_id: id,
-    headings: { en: String(title||'Bitch Boy League').slice(0,60) },
-    contents: { en: String(body||'').slice(0,180) },
+    title: String(title||'Bitch Boy League').slice(0,60),
+    body: String(body||'').slice(0,180),
     url: location.origin + location.pathname
   };
   const uids = (opts&&opts.uids)||null;
-  if(uids && uids.length) payload.include_aliases = { external_id: uids }, payload.target_channel='push';
-  else payload.included_segments = ['Subscribed Users'];
-  /* OneSignal has two key formats in the wild: newer keys authenticate as "Key <k>", older
-     ones as "Basic <k>". Try the current one, fall back rather than dead-ending on a 401.
-     Segment names differ by account age too, so a rejected segment retries with the other. */
-  const post = (auth, body) => fetch('https://api.onesignal.com/notifications', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':auth },
-    body: JSON.stringify(body)
-  });
-  const attempt = async body => {
-    let r = await post('Key '+key, body);
-    if(r.status===401 || r.status===403) r = await post('Basic '+key, body);
-    let txt=''; try{ txt = await r.text(); }catch(e){}
-    return { ok:r.ok, status:r.status, text:txt };
-  };
+  if(uids && uids.length) payload.uids = uids;
   try{
-    let res = await attempt(payload);
-    /* newer OneSignal apps call the default segment "Total Subscriptions" */
-    if(!res.ok && payload.included_segments && /segment/i.test(res.text)){
-      res = await attempt({ ...payload, included_segments:['Total Subscriptions'] });
-    }
-    if(!res.ok) console.warn('[BBL] push rejected', res.status, res.text);
-    return res;
+    const r = await fetch(relay, { method:'POST', headers:{'Content-Type':'application/json'},
+                                   body: JSON.stringify(payload) });
+    let txt=''; try{ txt = await r.text(); }catch(e){}
+    if(!r.ok) console.warn('[BBL] push rejected', r.status, txt);
+    return { ok:r.ok, status:r.status, text:txt };
   }catch(e){
-    /* fetch threw rather than returning a status — the request never reached OneSignal */
-    console.warn('[BBL] push blocked before sending', e);
+    console.warn('[BBL] relay unreachable', e);
     return { ok:false, status:0, text:String(e&&e.message||e), blocked:true };
   }
 }
