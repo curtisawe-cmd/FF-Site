@@ -17,6 +17,12 @@
    to send arbitrary payloads, and it never returns the key.
    ============================================================ */
 
+/* The "everyone" segment, most current name first. Newer OneSignal accounts ship
+   "Total Subscriptions" as the default and have no "Subscribed Users" at all — asking for a
+   segment that does not exist looks exactly like having no subscribers, so the send is retried
+   down this list rather than trusting any single name. */
+const SEGMENTS = ['Total Subscriptions', 'Active Subscriptions', 'Subscribed Users', 'All'];
+
 const ALLOWED_ORIGINS = [
   'https://curtisawe-cmd.github.io',
   'http://127.0.0.1:8791',            /* local testing */
@@ -89,7 +95,7 @@ export default {
     };
     if (url) payload.url = url;
     if (uids && uids.length) { payload.include_aliases = { external_id: uids }; payload.target_channel = 'push'; }
-    else payload.included_segments = ['Subscribed Users'];
+    else payload.included_segments = [SEGMENTS[0]];
 
     /* OneSignal issues two key formats; newer ones authenticate as "Key", older as "Basic" */
     const send = auth => fetch('https://api.onesignal.com/notifications', {
@@ -98,17 +104,26 @@ export default {
       body: JSON.stringify(payload)
     });
 
-    try {
+    /* Try "Key" first and fall back to "Basic": OneSignal issues two key formats and only
+       accepts one scheme per format. */
+    const sendBoth = async () => {
       let r = await send('Key ' + API_KEY);
       if (r.status === 401 || r.status === 403) r = await send('Basic ' + API_KEY);
-      let text = await r.text();
+      return { r, text: await r.text() };
+    };
 
-      /* segment name differs by account age */
-      if (!r.ok && payload.included_segments && /segment/i.test(text)) {
-        payload.included_segments = ['Total Subscriptions'];
-        r = await send('Key ' + API_KEY);
-        if (r.status === 401 || r.status === 403) r = await send('Basic ' + API_KEY);
-        text = await r.text();
+    try {
+      let { r, text } = await sendBoth();
+
+      /* Walk the segment aliases. Aiming at a segment that does not exist does NOT fail loudly:
+         OneSignal answers 200 with {"errors":["All included players are not subscribed"]},
+         which is indistinguishable from having no subscribers. So retry on the error body, not
+         on the status, and do not look for the word "segment" — it never appears. */
+      if (payload.included_segments) {
+        for (let i = 1; i < SEGMENTS.length && /not subscribed|segment/i.test(text); i++) {
+          payload.included_segments = [SEGMENTS[i]];
+          ({ r, text } = await sendBoth());
+        }
       }
       return new Response(text, { status: r.status, headers: { ...headers, 'Content-Type': 'application/json' } });
     } catch (e) {
