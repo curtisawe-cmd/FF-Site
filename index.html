@@ -1633,7 +1633,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 46,
+    v: 47,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -1688,6 +1688,51 @@ const DEFAULTS = {
         ]
       },
       "2025": {
+        "11": [
+          {ta:"This is my Last year", pa:83.1, tb:"uncle skips ribs", pb:102.5,
+           box:{a:[
+            ["QB","A. Rodgers QB - PIT",17.6],
+            ["RB","D. Henry RB - BAL",28.8],
+            ["RB","A. Jeanty RB - LV",10.6],
+            ["WR","D. Adams WR - LAR",7.1],
+            ["WR","Q. Johnston WR - LAC",0.0],
+            ["TE","J. Smith TE - PIT",0.0],
+            ["FLEX","J. Addison WR - MIN",10.0],
+            ["K","W. Reichard K - MIN",5.0],
+            ["DEF","Commanders DEF",4.0],
+            ["BN","K. Allen WR - LAC",9.3],
+            ["BN","D. Moore WR - CHI",3.3],
+            ["BN","D. Jones QB - IND",0.0],
+            ["BN","C. Okonkwo TE - TEN",8.6],
+            ["BN","P. Washington WR - JAX",4.0],
+            ["BN","B. Tuten RB - JAX",16.4],
+            ["BN","O. Gordon RB - MIA",12.3],
+            ["BN","E. McPherson K - CIN",8.0],
+            ["BN","Buccaneers DEF",6.0],
+            ["RES","T. Hunter WR - JAX",0.0]
+          ],
+           b:[
+            ["QB","J. Herbert QB - LAC",5.8],
+            ["RB","D. Montgomery RB - DET",5.9],
+            ["RB","T. Etienne RB - JAX",23.1],
+            ["WR","G. Pickens WR - DAL",29.4],
+            ["WR","Z. Flowers WR - BAL",11.5],
+            ["TE","O. Gadsden TE - LAC",6.1],
+            ["FLEX","K. Shakir WR - BUF",0.7],
+            ["K","J. Elliott K - PHI",10.0],
+            ["DEF","Texans DEF",10.0],
+            ["BN","D. Hopkins WR - BAL",2.1],
+            ["BN","R. Mostert RB - LV",3.7],
+            ["BN","T. Hockenson TE - MIN",6.9],
+            ["BN","J. Hurts QB - PHI",23.6],
+            ["BN","T. Allgeier RB - ATL",10.2],
+            ["BN","I. Pacheco RB - KC",0.0],
+            ["BN","D. Kincaid TE - BUF",0.0],
+            ["BN","K. Boutte WR - NE",0.0],
+            ["BN","J. Coker WR - CAR",11.2],
+            ["RES","T. Benson RB - ARI",0.0]
+          ]}}
+        ],
         "12": [
           {ta:"This is my Last year", pa:151.1, tb:"Brown Bag Boy", pb:135.1,
            box:{a:[
@@ -6604,7 +6649,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · 2025 wk12 box score';
+const BUILD_STAMP = '2026-08-01 · 2025 wk11 box score';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
