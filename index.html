@@ -6052,8 +6052,16 @@ function renderSettings(){
       : `<input type="text" style="min-width:240px" value="${esc(cur)}" onchange="setRule(${idx}, this.value)">`;
     return `<div class="setrow"><label>${esc(k)}</label>${control}</div>`;
   }).join('');
-  { const a=document.getElementById('setPushApp'); if(a) a.value = S.pushAppId || ONESIGNAL_APP_ID;
-    const rl=document.getElementById('setPushRelay'); if(rl) rl.value = pushRelay();
+  /* The push helpers live in a later <script> block, so on the very first render — which runs
+     from this block, before that one has executed — they do not exist yet. Reaching for them
+     unguarded threw a ReferenceError that killed the rest of renderSettings AND the rest of the
+     boot sequence below it, which is how loadPool() silently never ran and the draft board came
+     up with no players. initPush() re-renders once the helpers are live. */
+  { const ready = typeof pushAppId === 'function';
+    const a=document.getElementById('setPushApp');
+    if(a) a.value = S.pushAppId || (ready ? pushAppId() : '');
+    const rl=document.getElementById('setPushRelay');
+    if(rl) rl.value = ready ? pushRelay() : (S.pushRelay || '');
     renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
   renderTypography();
@@ -6091,6 +6099,8 @@ function setPushRelay(v){
 }
 function renderPushState(){
   const el=document.getElementById('pushState'); if(!el) return;
+  /* Same cross-block guard as above: this can be called before the push script has run. */
+  if(typeof pushAppId !== 'function'){ el.textContent=''; return; }
   /* A live init failure outranks the config summary — "everything is set" next to a button
      that won't work is the wrong thing to say. */
   if(window.osFail){ showPushFail(); return; }
@@ -6107,7 +6117,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · every setting stages for Apply';
+const BUILD_STAMP = '2026-08-01 · boot fix, pool loads again';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6817,21 +6827,29 @@ function fixPlayoffs2025(){   /* restore the real 2025 bracket (NFL.com export) 
   S.historyFixVer = 1;
   saveState();
 }
-ensureManagers();
-if(!S.season) genSchedule();   /* NFL-week-aligned round-robin, ready out of the box */
-ensureDraftYear();             /* set S.draftYear + stamp legacy pick trades with a year */
-fixPlayoffs2025();
-autoDraftOn = store.get('ffl_autodraft')==='1';
-applyRole();
-renderPosFilters();
-renderSettings();
-{ const _sv=document.getElementById('view-settings'); if(_sv){ _sv.addEventListener('change', markSettingsDirty); _sv.addEventListener('input', markSettingsDirty); } }
-renderTrades();
-renderHome();
-refreshDraftUI();
-renderTicker();
-loadPool();
-loadRecentIds();
+/* Each step is isolated. These used to be bare statements, so the first one that threw took
+   every step after it with it — a ReferenceError inside renderSettings stopped loadPool() from
+   ever running and the draft board came up permanently empty, with nothing in the console to
+   say why. A broken panel should cost you that panel, not the player pool. */
+function bootStep(name, fn){
+  try{ fn(); }
+  catch(e){ console.error('[BBL] boot step "'+name+'" failed:', e); }
+}
+bootStep('ensureManagers', ensureManagers);
+bootStep('genSchedule', ()=>{ if(!S.season) genSchedule(); });   /* NFL-week-aligned round-robin, ready out of the box */
+bootStep('ensureDraftYear', ensureDraftYear);                    /* set S.draftYear + stamp legacy pick trades with a year */
+bootStep('fixPlayoffs2025', fixPlayoffs2025);
+bootStep('autoDraft', ()=>{ autoDraftOn = store.get('ffl_autodraft')==='1'; });
+bootStep('applyRole', applyRole);
+bootStep('renderPosFilters', renderPosFilters);
+bootStep('renderSettings', renderSettings);
+bootStep('settingsDirtyListener', ()=>{ const _sv=document.getElementById('view-settings'); if(_sv){ _sv.addEventListener('change', markSettingsDirty); _sv.addEventListener('input', markSettingsDirty); } });
+bootStep('renderTrades', renderTrades);
+bootStep('renderHome', renderHome);
+bootStep('refreshDraftUI', refreshDraftUI);
+bootStep('renderTicker', renderTicker);
+bootStep('loadPool', loadPool);
+bootStep('loadRecentIds', loadRecentIds);
 if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('afterend',
   `<div class="notice">Heads up: this browser is blocking saved data, so changes only last while the page is open. Use Export League File to keep a copy.</div>`); }
 </script>
@@ -7163,6 +7181,9 @@ function uidForTeam(ti){
   return Object.keys(m).find(u=>m[u] && m[u].teamIndex===ti) || null;
 }
 try{ initPush(); syncPushBtn(); }catch(e){}
+/* Settings rendered before this block existed, so the cross-block guard skipped its push
+   fields. Fill them in now that the helpers are real. */
+try{ if(typeof renderSettings==='function') renderSettings(); }catch(e){}
 </script>
 </body>
 </html>
