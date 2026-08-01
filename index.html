@@ -5991,10 +5991,19 @@ function renderPushState(){
            : '⚠️ App ID is set, so managers can receive — but nothing can <b>send</b> until you paste the REST key here.');
 }
 async function testPush(){
+  const el=document.getElementById('pushState');
   if(!pushAppId()){ toast('Add the App ID first.'); return; }
   if(!pushKey()){ toast('Paste the REST key first — without it nothing can send.'); return; }
-  const ok = await sendPush('Bitch Boy League', 'Test alert — if you can read this, push works.');
-  toast(ok ? 'Test sent 🔔' : 'OneSignal rejected it — check the App ID and key.');
+  const say=(msg,detail)=>{ toast(msg); if(el) el.innerHTML = `${esc(msg)}${detail?`<br><span style="opacity:.75;font-size:11px">${esc(detail)}</span>`:''}`; };
+  const r = await sendPush('Bitch Boy League', 'Test alert — if you can read this, push works.');
+  if(r.ok){ say('Test sent 🔔 — it only reaches people who tapped "Turn on alerts".'); return; }
+  const body=(r.text||'').slice(0,200);
+  if(r.blocked)                       say('Blocked before it reached OneSignal.', 'Usually the browser refusing the request (CORS) or no connection. Tell Claude: "push blocked".');
+  else if(r.status===401||r.status===403) say('Key rejected (' + r.status + ').', 'Wrong REST key, or it belongs to a different app. Re-copy it from Settings > Keys & IDs.');
+  else if(/not subscribed|no.*(recipients|players|subscribers)/i.test(body))
+                                      say('Key works — but nobody has alerts on yet.', 'Tap "Turn on alerts" in the header, allow the prompt, then test again.');
+  else if(r.status===400)              say('OneSignal rejected the request (400).', body||'No detail returned.');
+  else                                 say('OneSignal rejected it (' + (r.status||'?') + ').', body||'No detail returned.');
 }
 /* three commissioner-defined label/value pairs shown under the built-in snapshot rows */
 function renderSnapExtras(){
@@ -6880,18 +6889,32 @@ async function sendPush(title, body, opts){
   if(uids && uids.length) payload.include_aliases = { external_id: uids }, payload.target_channel='push';
   else payload.included_segments = ['Subscribed Users'];
   /* OneSignal has two key formats in the wild: newer keys authenticate as "Key <k>", older
-     ones as "Basic <k>". Try the current one, fall back rather than dead-ending on a 401. */
-  const post = auth => fetch('https://api.onesignal.com/notifications', {
+     ones as "Basic <k>". Try the current one, fall back rather than dead-ending on a 401.
+     Segment names differ by account age too, so a rejected segment retries with the other. */
+  const post = (auth, body) => fetch('https://api.onesignal.com/notifications', {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':auth },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(body)
   });
+  const attempt = async body => {
+    let r = await post('Key '+key, body);
+    if(r.status===401 || r.status===403) r = await post('Basic '+key, body);
+    let txt=''; try{ txt = await r.text(); }catch(e){}
+    return { ok:r.ok, status:r.status, text:txt };
+  };
   try{
-    let r = await post('Key '+key);
-    if(r.status===401 || r.status===403) r = await post('Basic '+key);
-    if(!r.ok){ try{ console.warn('[BBL] push rejected', r.status, await r.text()); }catch(e){} }
-    return r.ok;
-  }catch(e){ return false; }
+    let res = await attempt(payload);
+    /* newer OneSignal apps call the default segment "Total Subscriptions" */
+    if(!res.ok && payload.included_segments && /segment/i.test(res.text)){
+      res = await attempt({ ...payload, included_segments:['Total Subscriptions'] });
+    }
+    if(!res.ok) console.warn('[BBL] push rejected', res.status, res.text);
+    return res;
+  }catch(e){
+    /* fetch threw rather than returning a status — the request never reached OneSignal */
+    console.warn('[BBL] push blocked before sending', e);
+    return { ok:false, status:0, text:String(e&&e.message||e), blocked:true };
+  }
 }
 /* uid of whoever manages a team, for targeted alerts */
 function uidForTeam(ti){
