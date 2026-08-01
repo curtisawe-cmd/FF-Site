@@ -1,0 +1,22 @@
+{
+  "name": "Bitch Boy League",
+  "short_name": "BBL",
+  "description": "The league's own turf — draft room, matchups, trades and trash talk.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#04122b",
+  "theme_color": "#04122b",
+  "categories": ["sports"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Draft Room", "url": "./#draft", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Matchups",   "url": "./#matchups", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Chat",       "url": "./#chat", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

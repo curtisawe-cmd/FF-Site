@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Bitch Boy League — Fantasy Football</title>
+
+<!-- installable app: Add to Home Screen gives an icon and a fullscreen launch -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#04122b">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BBL">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Graduate&family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <script>/* set theme before paint to avoid flash */try{var _t=localStorage.getItem('ffl_theme')||((window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches)?'dark':'light');document.documentElement.setAttribute('data-theme',_t);}catch(e){}</script>
@@ -133,7 +143,9 @@ input[type=number]{width:72px;font-family:var(--f-mono)}
 /* ---------- shell ---------- */
 header.top{
   display:flex;align-items:center;gap:18px;flex-wrap:wrap;
-  padding:14px 22px;border-bottom:1px solid var(--line);border-top:4px solid var(--charge);
+  /* env() is 0 on anything without a notch, so this is safe everywhere */
+  padding:calc(14px + env(safe-area-inset-top)) calc(22px + env(safe-area-inset-right)) 14px calc(22px + env(safe-area-inset-left));
+  border-bottom:1px solid var(--line);border-top:4px solid var(--charge);
   background:linear-gradient(180deg,var(--panel-grad-a),var(--panel-grad-b));
   box-shadow:var(--sh-1);position:sticky;top:0;z-index:20;
 }
@@ -146,7 +158,7 @@ nav.tabs button{
 }
 nav.tabs button:hover{color:var(--chalk);background:var(--panel-2)}
 nav.tabs button.active{background:var(--turf-wash);color:var(--turf-deep);box-shadow:inset 0 -3px 0 var(--turf)}
-main{padding:14px 16px;max-width:1800px;margin:0 auto}
+main{padding:14px calc(16px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));max-width:1800px;margin:0 auto}
 section.view{display:none}
 section.view.active{display:block}
 h1{font-family:var(--f-display);font-weight:400;font-size:clamp(34px,4.4vw,46px);letter-spacing:.005em;text-transform:uppercase;line-height:.98;margin-bottom:6px}
@@ -572,6 +584,15 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
   color:var(--chalk-dim);background-color:var(--panel);border:1px solid var(--line-strong);
   border-radius:999px;padding:6px 28px 6px 13px;box-shadow:var(--sh-1);max-width:168px;cursor:pointer}
 .team-picker:hover{color:var(--chalk);border-color:var(--turf)}
+/* one-time "add this to your phone" hint — Android gets a real button, iOS gets instructions */
+.installbar{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:110;
+  display:none;gap:10px;align-items:center;padding:11px 13px;border-radius:14px;
+  background:var(--panel-2);border:1px solid var(--turf);box-shadow:0 8px 26px rgba(0,0,0,.42);
+  max-width:520px;margin:0 auto}
+.installbar.on{display:flex}
+.installbar .ib-txt{flex:1;min-width:0;font-size:13px;line-height:1.35;color:var(--chalk)}
+.installbar .ib-x{flex:0 0 auto;background:none;border:none;color:var(--chalk-dim);font-size:18px;cursor:pointer;padding:0 4px}
+@media(min-width:900px){ .installbar{display:none !important} }   /* desktop doesn't need it */
 /* loud while previewing, so a commissioner never wonders why their controls vanished */
 .role-preview.previewing{color:var(--on-charge);background:var(--charge);border-color:var(--charge)}
 .role-preview.previewing .dot{background:var(--on-charge);box-shadow:none}
@@ -735,7 +756,8 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
    Live score ticker — broadcast bottom line
 ===================================================== */
 .ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:50px;
-  background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28)}
+  background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28);
+  padding-bottom:env(safe-area-inset-bottom)}   /* clear the iPhone home indicator */
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
   font-family:var(--f-display);font-size:13px;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
@@ -759,7 +781,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .ticker-x{flex:0 0 auto;background:none;border:none;border-left:1px solid var(--line);color:var(--chalk-dim);
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
-body.has-ticker{padding-bottom:50px}
+body.has-ticker{padding-bottom:calc(50px + env(safe-area-inset-bottom))}
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
   .ticker-move{animation:none}
@@ -6636,6 +6658,60 @@ onAuthStateChanged(auth, (user) => {
   if (typeof window.onFbUser === 'function') window.onFbUser(user);
 });
 console.log('[BBL] Firebase connected:', firebaseConfig.projectId);
+</script>
+
+<div class="installbar" id="installBar">
+  <span class="ib-txt" id="installTxt"></span>
+  <button class="btn" id="installGo" style="padding:5px 14px;font-size:13px;display:none" onclick="doInstall()">Install</button>
+  <button class="ib-x" onclick="dismissInstall()" aria-label="Dismiss">&times;</button>
+</div>
+
+<script>
+/* ---------- Add to Home Screen ----------
+   Chrome/Android hands us a real install prompt. iOS Safari has no API for it, so the only
+   thing we can do is tell people where the button is — which is the whole reason this bar
+   exists, since nobody finds Share > Add to Home Screen on their own. */
+let deferredInstall = null;
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function dismissInstall(){
+  try{ store.set('ffl_install_hint','dismissed'); }catch(e){}
+  const b=document.getElementById('installBar'); if(b) b.classList.remove('on');
+}
+function doInstall(){
+  if(!deferredInstall) return;
+  deferredInstall.prompt();
+  deferredInstall.userChoice.finally(()=>{ deferredInstall=null; dismissInstall(); });
+}
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); deferredInstall = e; maybeShowInstall();
+});
+window.addEventListener('appinstalled', ()=>dismissInstall());
+function maybeShowInstall(){
+  const bar=document.getElementById('installBar'); if(!bar) return;
+  if(isStandalone()) return;                                   /* already installed */
+  let seen=null; try{ seen=store.get('ffl_install_hint'); }catch(e){}
+  if(seen==='dismissed') return;
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const txt=document.getElementById('installTxt'), go=document.getElementById('installGo');
+  if(deferredInstall){
+    txt.innerHTML = 'Put the league on your home screen.';
+    go.style.display='';
+  } else if(iOS){
+    txt.innerHTML = 'Add to your home screen: tap <b>Share</b>, then <b>Add to Home Screen</b>.';
+    go.style.display='none';
+  } else return;                                               /* nothing useful to offer */
+  bar.classList.add('on');
+}
+window.addEventListener('load', ()=>{ setTimeout(maybeShowInstall, 2500); });
+
+/* service worker: offline fallback + makes the app installable on Android */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
