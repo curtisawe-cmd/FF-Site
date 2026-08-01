@@ -5990,13 +5990,18 @@ function renderPushState(){
      that won't work is the wrong thing to say. */
   if(window.osFail){ showPushFail(); return; }
   const id=!!pushAppId(), relay=!!pushRelay();
+  /* Whether THIS device is registered is the thing that actually decides if a test arrives, and
+     it is invisible otherwise — a phone with permission but no subscription looks identical to
+     a working one until a send silently reaches nobody. */
+  const dev = !window.osReady ? 'starting up'
+            : (pushSubId() ? 'this device is subscribed' : 'this device is NOT subscribed');
   el.innerHTML = !id ? 'Add an App ID to let managers turn on alerts.'
-    : (relay ? '✅ App ID set and the relay is configured.'
+    : (relay ? `✅ App ID set and the relay is configured.<br><span style="opacity:.75;font-size:11px">Device: ${esc(dev)}</span>`
              : '⚠️ Managers can receive, but nothing can <b>send</b> until the relay URL is set.');
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · sw import fixed';
+const BUILD_STAMP = '2026-08-01 · subscribe not just permission';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -6837,7 +6842,9 @@ if('serviceWorker' in navigator){
    OneSignal gets its own service-worker scope (/push/onesignal/) so it doesn't fight the
    offline worker registered at the root — two workers claiming '/' would knock each other out. */
 window.OneSignalDeferred = window.OneSignalDeferred || [];
-let osReady = false;
+/* On window for the same reason as osFail: renderPushState lives in an earlier script block
+   and a top-level `let` here would be in its temporal dead zone. */
+window.osReady = false;
 /* Why this exists: init failures used to be swallowed, so a blocked CDN, an unconfigured
    Web platform and a bad service-worker path all looked identical — the button just said
    "still loading" forever. Whatever went wrong is kept here and shown verbatim.
@@ -6884,7 +6891,7 @@ function initPush(){
   document.head.appendChild(s);
   /* If neither success nor script error has landed by now, the SDK loaded but its queue
      never drained — say so rather than leaving the button stuck on "still loading". */
-  setTimeout(()=>{ if(!osReady && !window.osFail) window.osFail = 'The OneSignal SDK loaded but never finished starting up.'; }, 12000);
+  setTimeout(()=>{ if(!window.osReady && !window.osFail) window.osFail = 'The OneSignal SDK loaded but never finished starting up.'; }, 12000);
   window.OneSignalDeferred.push(async function(OneSignal){
     try{
       await OneSignal.init({
@@ -6896,12 +6903,20 @@ function initPush(){
         serviceWorkerParam: { scope: osSwScope() },
         allowLocalhostAsSecureOrigin: true
       });
-      osReady = true;
+      window.osReady = true;
+      /* Self-heal a device that already granted permission but never got registered — which is
+         what any phone that tapped "Turn on alerts" while init was broken looks like. Without
+         this they would have to notice the button lying and tap it again. */
+      try{
+        if(OneSignal.Notifications.permission && !OneSignal.User.PushSubscription.optedIn)
+          await OneSignal.User.PushSubscription.optIn();
+      }catch(e){}
       /* tag the subscription with the Firebase uid so we can target one manager */
       if(window.fbUser) { try{ await OneSignal.login(window.fbUser.uid); }catch(e){} }
       syncPushBtn();
+      renderPushState();
     }catch(e){
-      osReady=false;
+      window.osReady=false;
       window.osFail = (e && (e.message || e.name)) ? String(e.message || e.name) : 'OneSignal.init() failed with no message.';
       syncPushBtn();
       /* "Load failed" on its own is useless — it cannot distinguish a 404 on the worker from
@@ -6920,7 +6935,7 @@ function initPush(){
 }
 async function enablePush(){
   if(!pushAppId()){ toast('Push is not set up yet — the commissioner adds an App ID in Settings.'); return; }
-  if(!osReady){
+  if(!window.osReady){
     if(window.osFail){ toast('Notifications failed to start.'); showPushFail(); }
     else toast('Notifications are still loading — try again in a second.');
     return;
@@ -6928,11 +6943,26 @@ async function enablePush(){
   window.OneSignalDeferred.push(async function(OneSignal){
     try{
       await OneSignal.Notifications.requestPermission();
+      if(!OneSignal.Notifications.permission){
+        toast('Notifications blocked — turn them on in your phone settings.'); syncPushBtn(); return;
+      }
+      /* Browser permission is not a OneSignal subscription. Granting permission while init was
+         failing leaves a device that looks subscribed locally but does not exist server-side,
+         so sends come back "All included players are not subscribed". optIn() is what actually
+         registers it, and it is safe to call when already opted in. */
+      try{ await OneSignal.User.PushSubscription.optIn(); }catch(e){}
       if(window.fbUser) { try{ await OneSignal.login(window.fbUser.uid); }catch(e){} }
       syncPushBtn();
-      toast(OneSignal.Notifications.permission ? 'Notifications on 🔔' : 'Notifications blocked — turn them on in your phone settings.');
+      const id = pushSubId();
+      toast(id ? 'Notifications on 🔔' : 'Permission granted, but the device did not register. Tap again in a moment.');
     }catch(e){ toast("Couldn't turn notifications on."); }
   });
+}
+/* The OneSignal subscription id, or '' if this device is not registered server-side. This is
+   the only thing that decides whether a send can reach the phone. */
+function pushSubId(){
+  try{ return (window.OneSignal && OneSignal.User && OneSignal.User.PushSubscription && OneSignal.User.PushSubscription.id) || ''; }
+  catch(e){ return ''; }
 }
 /* Writes the init failure into the Settings diagnostics line. Kept separate from toast so the
    text stays on screen long enough to read and report. */
@@ -6949,7 +6979,10 @@ function syncPushBtn(){
   b.style.display = configured ? 'inline-flex' : 'none';
   window.OneSignalDeferred.push(function(OneSignal){
     try{
-      const on = OneSignal.Notifications.permission;
+      /* Gate on the subscription, not on browser permission. Permission alone made the button
+         claim "Alerts on" for a device OneSignal had never heard of, which hid the real fault
+         and left no way to retry. */
+      const on = OneSignal.Notifications.permission && !!pushSubId();
       b.querySelector('span:last-child').textContent = on ? 'Alerts on' : 'Turn on alerts';
       b.classList.toggle('previewing', !!on);
     }catch(e){}
