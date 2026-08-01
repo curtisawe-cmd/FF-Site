@@ -6195,13 +6195,20 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · chat composer grows as you type';
+const BUILD_STAMP = '2026-08-01 · force update keeps push alive';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
 }
 async function forceUpdate(){
-  try{ const rs=await navigator.serviceWorker.getRegistrations(); for(const r of rs) await r.unregister(); }catch(e){}
+  /* Only the offline worker gets unregistered. OneSignal's worker is the thing that receives
+     and ACKNOWLEDGES pushes — killing it left every push delivered during the gap unacked, and
+     Apple re-delivers an unacked push on every wake. That is how one stale trade notification
+     kept reappearing no matter what the app did. */
+  try{
+    const rs=await navigator.serviceWorker.getRegistrations();
+    for(const r of rs){ if(!/push\/onesignal/.test(r.scope)) await r.unregister(); }
+  }catch(e){}
   try{ for(const k of await caches.keys()) await caches.delete(k); }catch(e){}
   location.reload(true);
 }
