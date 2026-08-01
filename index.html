@@ -1365,10 +1365,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
     <div class="card">
       <h2>Trade Alarm Lines</h2>
-      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set.</p>
-      <textarea id="setTradeLines" rows="6" placeholder="One line per message…" onchange="saveTradeLines(this.value)"></textarea>
+      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set. Write <b>{a}</b> and <b>{b}</b> where the two teams' names should go (or <b>{teams}</b> for both at once) and each alarm fills in the actual teams — a line with no tokens shows as-is.</p>
+      <textarea id="setTradeLines" rows="6" placeholder="{a} just fleeced {b}&#10;{teams} — papers signed&#10;Somebody call the cops, {a} robbed {b}" onchange="saveTradeLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="tradeAlarm('Nut buster and Prater\'s Leg — test alarm')">Test alarm</button>
+        <button class="btn ghost" onclick="tradeAlarm('Nut buster ↔ Prater\'s Leg — test alarm','Nut buster',&quot;Prater's Leg&quot;)">Test alarm</button>
       </div>
     </div>
 
@@ -3239,7 +3239,17 @@ function bigAlarm(pool, fallback, icon, sub){
   setTimeout(()=>el.remove(), 5100);
 }
 function pickAlarm(why){ bigAlarm(S.alarmInsults, PICK_INSULTS, '⚠', why); }
-function tradeAlarm(sub){ bigAlarm(S.tradeAlarmLines, TRADE_LINES, '🤝', sub); }
+/* Custom lines support {a}, {b} and {teams} tokens so the big line can name the actual teams
+   in the deal. Without this, a custom line with team names typed into it repeated those same
+   teams on every trade — the real matchup only appeared in the small sub-text. */
+function tradeAlarm(sub, a, b){
+  const fill = t => String(t)
+    .split('{teams}').join(a && b ? `${a} ↔ ${b}` : (sub||''))
+    .split('{a}').join(a || 'Someone')
+    .split('{b}').join(b || 'someone');
+  const pool = (S.tradeAlarmLines && S.tradeAlarmLines.length) ? S.tradeAlarmLines.map(fill) : null;
+  bigAlarm(pool, TRADE_LINES, '🤝', sub);
+}
 function makePick(playerId){
   if(!requireAdmin()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
@@ -5560,7 +5570,7 @@ function noticeNewOffers(){
     if(acceptedOfferIds.has(id)) return;
     acceptedOfferIds.add(id);
     const o = offersMap[id]; if(!o) return;
-    try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`); }catch(e){}
+    try{ tradeAlarm(`${o.aName} ↔ ${o.bName}`, o.aName, o.bName); }catch(e){}
     /* whoever accepted announces it; older offers have no acceptedBy, so fall back to the
        commissioner rather than going silent */
     const mineToSend = o.acceptedBy ? !!(window.fbUser && o.acceptedBy===window.fbUser.uid) : isAdmin();
@@ -6145,7 +6155,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · trade visibility + notify fix';
+const BUILD_STAMP = '2026-08-01 · trade alarm names the teams';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
