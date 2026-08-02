@@ -164,6 +164,7 @@ header.top{
 }
 .subbar .theme-toggle{font-size:12px;padding:3px 10px;gap:5px;letter-spacing:.05em}
 .subbar .theme-toggle .dot{width:7px;height:7px}
+.subbar .team-picker{font-size:12px;padding:3px 26px 3px 11px;max-width:150px}
 .wordmark{font-family:var(--f-display);font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--chalk);line-height:1}
 .wordmark .yr{color:var(--charge);-webkit-text-stroke:0}
 nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
@@ -700,10 +701,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      the iPhone status bar in the installed app */
   header.top{padding:calc(9px + var(--sa-t)) calc(12px + var(--sa-r)) 9px calc(12px + var(--sa-l));gap:8px}
   .wordmark{font-size:20px;order:1}
-  .role-btn,.team-picker{order:2;margin-left:auto}
+  .role-btn{order:2;margin-left:auto}
   /* the switches ribbon sits last, under the scrollable nav, and gets tighter still on a phone */
   .subbar{order:4;justify-content:center;gap:6px;padding-top:5px;margin:0}
   .subbar .theme-toggle{font-size:11px;padding:3px 9px;margin-left:0}
+  .subbar .team-picker{font-size:11px;padding:3px 24px 3px 10px;max-width:132px}
   nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
@@ -1000,10 +1002,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button data-view="settings">Settings</button>
   </nav>
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
-  <select class="team-picker" id="myTeamTheme" title="Skin the site in a team's colours — your choice only, nobody else sees it" onchange="setMyTeamTheme(this.value)" aria-label="Team colours"></select>
   <!-- second ribbon: the per-device switches. Deliberately slimmer than the main bar — these
        are set once and then ignored, so they should not compete with the nav. -->
   <div class="subbar">
+    <select class="team-picker" id="myTeamTheme" title="Skin the site in a team's colours — your choice only, nobody else sees it" onchange="setMyTeamTheme(this.value)" aria-label="Team colours"></select>
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
     <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
     <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
@@ -7252,7 +7254,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · transactions inside trades';
+const BUILD_STAMP = '2026-08-01 · team colours in the ribbon';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
