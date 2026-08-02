@@ -156,6 +156,14 @@ header.top{
   background:linear-gradient(180deg,var(--panel-grad-a),var(--panel-grad-b));
   box-shadow:var(--sh-1);position:sticky;top:0;z-index:20;
 }
+/* The switches ribbon. width:100% forces it below the wordmark/nav row in the header's flex
+   wrap, and the scale-down keeps it visually secondary without a second set of button styles. */
+.subbar{
+  width:100%;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;
+  margin:-4px 0 -2px;padding-top:6px;border-top:1px solid var(--line);
+}
+.subbar .theme-toggle{font-size:12px;padding:3px 10px;gap:5px;letter-spacing:.05em}
+.subbar .theme-toggle .dot{width:7px;height:7px}
 .wordmark{font-family:var(--f-display);font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--chalk);line-height:1}
 .wordmark .yr{color:var(--charge);-webkit-text-stroke:0}
 nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
@@ -692,7 +700,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      the iPhone status bar in the installed app */
   header.top{padding:calc(9px + var(--sa-t)) calc(12px + var(--sa-r)) 9px calc(12px + var(--sa-l));gap:8px}
   .wordmark{font-size:20px;order:1}
-  .theme-toggle{order:2;margin-left:auto}
+  .role-btn,.team-picker{order:2;margin-left:auto}
+  /* the switches ribbon sits last, under the scrollable nav, and gets tighter still on a phone */
+  .subbar{order:4;justify-content:center;gap:6px;padding-top:5px;margin:0}
+  .subbar .theme-toggle{font-size:11px;padding:3px 9px;margin-left:0}
   nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
@@ -990,10 +1001,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button data-view="settings">Settings</button>
   </nav>
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
-  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
   <select class="team-picker" id="myTeamTheme" title="Skin the site in a team's colours — your choice only, nobody else sees it" onchange="setMyTeamTheme(this.value)" aria-label="Team colours"></select>
-  <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
-  <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
+  <!-- second ribbon: the per-device switches. Deliberately slimmer than the main bar — these
+       are set once and then ignored, so they should not compete with the nav. -->
+  <div class="subbar">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
+    <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
+    <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
+  </div>
 </header>
 
 <main>
@@ -7222,7 +7237,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · mock draft open to all, isolated';
+const BUILD_STAMP = '2026-08-01 · second header ribbon';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -7909,6 +7924,12 @@ function setTeamManager(i, val){
 function syncHeaderH(){ const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px'); }
 window.addEventListener('resize', syncHeaderH);
 window.addEventListener('load', syncHeaderH);
+/* The ribbon's Alerts and View-as-manager buttons appear only after push starts and the role
+   resolves, and either can wrap the ribbon to a new line. Resize and load both fire before
+   that, so watch the header itself — the sticky draft pool, the Apply bar and Game Center's
+   scroll anchoring all read --hdr-h and would be off by a row otherwise. */
+try{ if(window.ResizeObserver){ const hdr=document.querySelector('header.top');
+  if(hdr) new ResizeObserver(syncHeaderH).observe(hdr); } }catch(e){}
 if(document.fonts && document.fonts.ready) document.fonts.ready.then(syncHeaderH);
 syncHeaderH();
 
