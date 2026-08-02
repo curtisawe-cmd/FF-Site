@@ -164,7 +164,7 @@ header.top{
 }
 .subbar .theme-toggle{font-size:12px;padding:3px 10px;gap:5px;letter-spacing:.05em}
 .subbar .theme-toggle .dot{width:7px;height:7px}
-.subbar .team-picker{font-size:12px;padding:3px 26px 3px 11px;max-width:150px}
+.subbar .team-picker{font-size:12px;padding:3px 24px 3px 10px;max-width:132px}
 .wordmark{font-family:var(--f-display);font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--chalk);line-height:1}
 .wordmark .yr{color:var(--charge);-webkit-text-stroke:0}
 nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
@@ -703,9 +703,17 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   .wordmark{font-size:20px;order:1}
   .role-btn{order:2;margin-left:auto}
   /* the switches ribbon sits last, under the scrollable nav, and gets tighter still on a phone */
-  .subbar{order:4;justify-content:center;gap:6px;padding-top:5px;margin:0}
-  .subbar .theme-toggle{font-size:11px;padding:3px 9px;margin-left:0}
-  .subbar .team-picker{font-size:11px;padding:3px 24px 3px 10px;max-width:132px}
+  /* One line, always. Four controls need ~455px at the desktop scale and a phone offers ~350,
+     so everything tightens here — and nowrap + overflow-x means a narrower phone or a longer
+     team name scrolls the ribbon rather than dropping a control onto a second row. */
+  .subbar{order:4;justify-content:flex-start;gap:5px;padding-top:5px;margin:0;
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .subbar::-webkit-scrollbar{display:none}
+  .subbar > *{flex:0 0 auto}
+  .subbar .theme-toggle{font-size:10px;padding:3px 8px;gap:4px;letter-spacing:.02em;margin-left:0}
+  .subbar .theme-toggle .dot{width:6px;height:6px}
+  .subbar .team-picker{font-size:10px;padding:3px 19px 3px 8px;max-width:96px;
+    background-position:right 6px center;letter-spacing:.02em}
   nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
@@ -4474,7 +4482,12 @@ function syncRolePreviewBtn(){
   const b=document.getElementById('rolePreview'); if(!b) return;
   b.style.display = computeAdmin() ? 'inline-flex' : 'none';
   const lbl=document.getElementById('rolePreviewLabel');
-  if(lbl) lbl.textContent = viewingAsManager() ? 'Back to commish' : 'View as manager';
+  /* Short labels on a phone. This is the widest control in the ribbon and the only one a
+     commissioner sees, so the full wording is what pushed the row past a phone's width. */
+  const narrow = window.matchMedia && window.matchMedia('(max-width:640px)').matches;
+  if(lbl) lbl.textContent = viewingAsManager()
+    ? (narrow ? 'Commish' : 'Back to commish')
+    : (narrow ? 'Manager' : 'View as manager');
   b.classList.toggle('previewing', viewingAsManager());
 }
 function refreshRoleFromAuth(){
@@ -7272,7 +7285,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · players and trades under teams';
+const BUILD_STAMP = '2026-08-01 · ribbon fits one line on mobile';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -7957,7 +7970,7 @@ function setTeamManager(i, val){
 
 /* measure the sticky header so the draft pool can pin right beneath it */
 function syncHeaderH(){ const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px'); }
-window.addEventListener('resize', syncHeaderH);
+window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncRolePreviewBtn(); }catch(e){} });
 window.addEventListener('load', syncHeaderH);
 /* The ribbon's Alerts and View-as-manager buttons appear only after push starts and the role
    resolves, and either can wrap the ribbon to a new line. Resize and load both fire before
