@@ -555,9 +555,18 @@ nav.tabs button{position:relative}
 .plplayers tr[onclick]{cursor:pointer}
 .plplayers tbody tr[onclick]:hover td,.plplayers tr[onclick]:hover td{background:var(--turf-wash)}
 /* player detail modal + career bar chart */
-.pmodal-overlay{position:fixed;inset:0;z-index:1500;background:rgba(6,14,30,.62);display:none;align-items:center;justify-content:center;padding:18px}
-.pmodal{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--sh-2);max-width:600px;width:100%;max-height:90vh;overflow:auto;padding:24px 22px}
-.pmodal-x{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line);color:var(--chalk-dim);font-size:12px;display:grid;place-items:center;cursor:pointer}
+/* Safe-area padding: without it the card slides under the notch or dynamic island and takes
+   the close button with it. dvh, not vh, so the height accounts for the iOS toolbars. */
+.pmodal-overlay{position:fixed;inset:0;z-index:1500;background:rgba(6,14,30,.62);display:none;align-items:center;justify-content:center;
+  padding:calc(18px + var(--sa-t)) calc(18px + var(--sa-r)) calc(18px + var(--sa-b)) calc(18px + var(--sa-l))}
+.pmodal{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);box-shadow:var(--sh-2);max-width:600px;width:100%;
+  max-height:min(90vh, calc(100dvh - 36px - var(--sa-t) - var(--sa-b)));overflow:auto;padding:24px 22px}
+/* sticky, not absolute. The card scrolls, and an absolutely positioned button scrolls out of
+   the top of it — which left no way to close the card on a phone once you had read any of it.
+   Floated so it keeps the top-right corner while staying in the scroll flow. */
+.pmodal-x{position:sticky;top:0;float:right;margin:-8px -6px 0 10px;z-index:2;
+  width:34px;height:34px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line-strong);
+  color:var(--chalk);font-size:13px;display:grid;place-items:center;cursor:pointer;box-shadow:var(--sh-1)}
 .pmodal-x:hover{color:var(--chalk);border-color:var(--chalk-dim)}
 .pmodal-head{display:flex;align-items:center;gap:14px}
 .pmodal-name{font-family:var(--f-display);font-size:clamp(24px,4.5vw,36px);line-height:.95;text-transform:uppercase;padding-right:34px}
@@ -7712,7 +7721,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · transaction dues';
+const BUILD_STAMP = '2026-08-02 · player card close button reachable';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
