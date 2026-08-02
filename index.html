@@ -197,6 +197,12 @@ header.top{
   :root[data-layout="side"] .ticker{left:212px}
 }
 
+/* ---- sticky view head: title, blurb and sub-tabs stay put while the page scrolls ---- */
+.viewhead{position:sticky;top:var(--hdr-h,72px);z-index:15;background:var(--bg);
+  padding-top:14px;margin-top:-14px;padding-bottom:6px;
+  box-shadow:0 10px 14px -12px rgba(0,0,0,.45)}
+@media(max-width:640px){ .viewhead{padding-top:12px;margin-top:-12px} }
+
 /* ---- burger + drawer: the sidebar layout's phone form ---- */
 .burger{display:none;align-items:center;justify-content:center;width:38px;height:38px;flex:0 0 auto;
   font-size:19px;color:var(--chalk);background:var(--panel);border:1px solid var(--line-strong);
@@ -1129,12 +1135,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ DRAFT ============ -->
 <section class="view" id="view-draft">
+<div class="viewhead">
   <h1 id="draftTitle">Draft Room</h1>
   <p class="sub" id="draftSub">Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.</p>
   <div class="row" style="gap:8px;margin-bottom:14px">
     <button class="btn" id="modeReal" onclick="setDraftMode('real')">Real Draft</button>
     <button class="btn ghost" id="modeMock" onclick="setDraftMode('mock')">Mock Draft</button>
   </div>
+  </div><!--/viewhead-->
 
   <div class="clockbar">
     <div class="clock" id="clock">--</div>
@@ -1180,6 +1188,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ PLAYERS ============ -->
 <section class="view" id="view-players">
+<div class="viewhead">
   <h1>Players</h1>
   <div class="row subnav">
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
@@ -1191,6 +1200,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
   <p class="sub">Live NFL player index — injury reports, team, status, age &amp; experience, straight from the feed. Updates within ~24 hours; hit refresh for the latest.</p>
+  </div><!--/viewhead-->
   <div id="injView" style="display:none"></div>
   <div id="newsView" style="display:none"></div>
   <div class="card" id="plCard">
@@ -1213,18 +1223,21 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ MATCHUPS ============ -->
 <section class="view" id="view-matchups">
+<div class="viewhead">
   <h1>Matchups</h1>
   <p class="sub">The 2026 regular season — Weeks 1–14, then your 8-team playoff takes over in Weeks 15–17. Scores update live from NFL stats during game windows.</p>
   <div class="row musub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="board" onclick="setMuTab('board')">Matchups</button>
     <button class="btn ghost" data-sub="gc" onclick="setMuTab('gc')">Game Center</button>
   </div>
+  </div><!--/viewhead-->
   <div id="matchupsView"></div>
   <div id="gcView" style="display:none"></div>
 </section>
 
 <!-- ============ TEAMS ============ -->
 <section class="view" id="view-teams">
+<div class="viewhead">
   <h1>Teams</h1>
   <div class="row subnav">
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
@@ -1235,6 +1248,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
+  </div><!--/viewhead-->
 
   <div id="myTeamView"></div>
   <div id="teamsView" class="grid2"></div>
@@ -1242,6 +1256,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ TRADES ============ -->
 <section class="view" id="view-trades">
+<div class="viewhead">
   <h1>Trade Center</h1>
   <div class="row subnav">
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
@@ -1253,6 +1268,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
   <p class="sub" id="tradesBlurb">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
+  </div><!--/viewhead-->
   <div id="tradesView"></div>
   <div id="movesPane" style="display:none">
     <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
@@ -1271,12 +1287,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ CHAT ============ -->
 <section class="view" id="view-chat">
+<div class="viewhead">
   <h1>League Chat</h1>
   <p class="sub" id="chatBanner">Trash talk lives here.</p>
   <div class="row chatsub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="chat" onclick="showView('chat')">Chat</button>
     <button class="btn ghost" data-sub="polls" onclick="showView('polls')">Polls</button>
   </div>
+  </div><!--/viewhead-->
   <div class="card" style="max-width:760px">
     <div id="chatOnline" class="row" style="display:none;gap:7px;align-items:center;padding:0 0 9px;border-bottom:1px solid var(--line);margin-bottom:6px;flex-wrap:wrap"></div>
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
@@ -1311,17 +1329,20 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 .poll-opt-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);flex:0 0 auto}
 </style>
 <section class="view" id="view-polls">
+<div class="viewhead">
   <h1>Polls</h1>
   <p class="sub">League voting — the commissioner posts a question, everyone signed in gets one vote.</p>
   <div class="row chatsub" style="gap:8px;margin-bottom:16px">
     <button class="btn ghost" data-sub="chat" onclick="showView('chat')">Chat</button>
     <button class="btn" data-sub="polls" onclick="showView('polls')">Polls</button>
   </div>
+  </div><!--/viewhead-->
   <div id="pollsView"></div>
 </section>
 
 <!-- ============ STATS ============ -->
 <section class="view" id="view-stats">
+<div class="viewhead">
   <h1>All-Time Stats</h1>
   <p class="sub">Fourteen years, every manager, every record — computed straight from the verified NFL.com archive.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
@@ -1329,11 +1350,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
     <button class="btn ghost" data-sub="history" onclick="showView('history')">History</button>
   </div>
+  </div><!--/viewhead-->
   <div id="statsView"></div>
 </section>
 
 <!-- ============ RECAPS ============ -->
 <section class="view" id="view-recaps">
+<div class="viewhead">
   <h1>Season Recaps</h1>
   <p class="sub">Fourteen years of glory, robbery, and 2-12 seasons — one year at a time.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
@@ -1341,11 +1364,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
     <button class="btn ghost" data-sub="history" onclick="showView('history')">History</button>
   </div>
+  </div><!--/viewhead-->
   <div id="recapsView"></div>
 </section>
 
 <!-- ============ HISTORY ============ -->
 <section class="view" id="view-history">
+<div class="viewhead">
   <h1>League History</h1>
   <p class="sub">The record book — 2012 to today. More gets added as we pull each season off NFL.com.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
@@ -1353,13 +1378,16 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
     <button class="btn" data-sub="history" onclick="showView('history')">History</button>
   </div>
+  </div><!--/viewhead-->
   <div id="historyView"></div>
 </section>
 
 <!-- ============ SETTINGS ============ -->
 <section class="view" id="view-settings">
+<div class="viewhead">
   <h1>League Settings</h1>
   <p class="sub admin-only">Everything here is yours to change — this is the whole point of leaving NFL.com.</p>
+  </div><!--/viewhead-->
   <div class="notice viewer-note" id="settingsViewerNote" style="display:none;margin-bottom:18px">
     Read-only — this is how the league is set up. Only the commissioner can change it.
   </div>
@@ -7418,7 +7446,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · hamburger drawer on mobile';
+const BUILD_STAMP = '2026-08-02 · sticky page heads';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
