@@ -175,8 +175,11 @@ header.top{
    so the toggle is one attribute flip. */
 @media(min-width:641px){
   :root[data-layout="side"] body{display:grid;grid-template-columns:212px minmax(0,1fr)}
+  /* fixed, not sticky. Sticky only holds while its containing block is still on screen, and
+     the grid row here is exactly as tall as the rail — so it scrolled away with the page.
+     Fixed takes it out of flow entirely, and the grid keeps a 212px column reserved for it. */
   :root[data-layout="side"] header.top{
-    grid-column:1;position:sticky;top:0;height:100dvh;overflow-y:auto;
+    grid-column:1;position:fixed;top:0;left:0;width:212px;height:100dvh;overflow-y:auto;
     flex-direction:column;align-items:stretch;gap:14px;
     padding:calc(16px + var(--sa-t)) 12px 14px calc(12px + var(--sa-l));
     border-right:1px solid var(--line);border-bottom:none;border-top:4px solid var(--charge);
@@ -7533,7 +7536,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · random tab flash';
+const BUILD_STAMP = '2026-08-02 · sidebar stays put';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
