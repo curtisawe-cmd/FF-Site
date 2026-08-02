@@ -5704,12 +5704,45 @@ async function sendChat(){
     renderChat();
   }
 }
+/* Who has read a message, derived from the read marks that already exist: opening the chat
+   writes managers/{uid}/seen/chat, and managersMap streams everyone's. So a receipt is just
+   "whose mark is at or past this message's timestamp" — no new writes, and it works backwards
+   over messages sent before this feature existed. */
+function seenByFor(ts, authorUid){
+  const m = (typeof managersMap!=='undefined' && managersMap) || {};
+  const names=[];
+  Object.keys(m).forEach(uid=>{
+    if(uid===authorUid) return;                                  /* your own read mark is not a receipt */
+    const rec=m[uid]||{};
+    if(!Number.isInteger(rec.teamIndex)) return;                 /* registered accounts, not league members */
+    const seen=+((rec.seen||{}).chat)||0;
+    if(seen >= (+ts||0)) names.push(managerNameFor(uid, rec.name||''));
+  });
+  return names.filter(Boolean).sort((a,b)=>a.localeCompare(b));
+}
+function seenLine(ts, authorUid){
+  const m=(typeof managersMap!=='undefined' && managersMap)||{};
+  const members=Object.keys(m).filter(u=>u!==authorUid && Number.isInteger((m[u]||{}).teamIndex)).length;
+  const names=seenByFor(ts, authorUid);
+  if(!members) return '';
+  const txt = !names.length ? 'Sent'
+    : (names.length===members ? 'Seen by everyone'
+    : 'Seen by ' + names.slice(0,4).join(', ') + (names.length>4 ? ` +${names.length-4}` : ''));
+  return `<div style="font-size:10.5px;color:var(--chalk-dim);margin:3px 6px 0;text-align:right;opacity:.85">${esc(txt)}</div>`;
+}
 function renderChat(){
   const el = document.getElementById('chatList');
   if(!el) return;
   const me = (document.getElementById('chatName')?.value||'').trim();
   const myU = window.fbUser && window.fbUser.uid;
-  el.innerHTML = chatMsgs.length ? chatMsgs.map(x=>{
+  /* only under your own most recent message — a receipt on every line is noise */
+  let lastMineId = null;
+  for(let i=chatMsgs.length-1;i>=0;i--){
+    const c=chatMsgs[i];
+    const isMine = (myU && c.uid) ? c.uid===myU : (me && c.n===me);
+    if(isMine){ lastMineId = c._id || ('i'+i); break; }
+  }
+  el.innerHTML = chatMsgs.length ? chatMsgs.map((x,i)=>{
     const mine = (myU && x.uid) ? x.uid===myU : (me && x.n===me);
     /* resolve by uid so a manager rename retitles their old messages too */
     const who = x.uid ? managerNameFor(x.uid, x.n) : (x.n || 'Manager');
@@ -5717,6 +5750,7 @@ function renderChat(){
     return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
       <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
       <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:break-word">${chatBodyHTML(x)}</div>
+      ${((x._id||('i'+i))===lastMineId) ? seenLine(x.t, x.uid) : ''}
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
   el.scrollTop = el.scrollHeight;
@@ -7721,7 +7755,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · player card close button reachable';
+const BUILD_STAMP = '2026-08-02 · chat read receipts';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
