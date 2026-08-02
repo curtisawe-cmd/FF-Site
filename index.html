@@ -248,7 +248,14 @@ nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
 nav.tabs button{
   font-family:var(--f-ui);font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
   padding:8px 15px;border-radius:var(--r-chip);color:var(--chalk-dim);transition:color .15s ease,background .15s ease;
+  display:inline-flex;align-items:center;gap:8px;
 }
+/* stroke:currentColor is the point — the glyph tracks the tab's own colour through hover,
+   active and every one of the 32 team themes without a single extra rule */
+nav.tabs button > svg{width:17px;height:17px;flex:0 0 auto;fill:none;stroke:currentColor;
+  stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+nav.tabs button.active > svg{opacity:1}
+@media(max-width:640px){ nav.tabs button{gap:6px} nav.tabs button > svg{width:15px;height:15px} }
 nav.tabs button:hover{color:var(--chalk);background:var(--panel-2)}
 nav.tabs button.active{background:var(--turf-wash);color:var(--turf-deep);box-shadow:inset 0 -3px 0 var(--turf)}
 main{padding:14px calc(16px + var(--sa-r)) calc(14px + var(--sa-b)) calc(16px + var(--sa-l));max-width:1800px;margin:0 auto}
@@ -5003,6 +5010,27 @@ function updateGhost(){
   const sec = document.getElementById('view-' + (v==='mock' ? 'draft' : v));
   if(sec) sec.setAttribute('data-ghost', label);
 }
+/* One glyph per destination, drawn inline so there is no icon font, no extra request and
+   nothing for the CSP to block. Injected rather than hand-written into the markup because the
+   header nav and the drawer nav are two copies of the same list — this keeps them identical. */
+const TAB_ICONS = {
+  home:     '<path d="M3 10.6 12 3.4l9 7.2"/><path d="M5.6 9.4V20.6h12.8V9.4"/><path d="M10 20.6v-5.2h4v5.2"/>',
+  draft:    '<rect x="4.2" y="3.4" width="15.6" height="17.2" rx="2.2"/><path d="M8.4 8.2h7.2M8.4 12h7.2M8.4 15.8h4.4"/>',
+  matchups: '<path d="M7.4 3.6 4 12l3.4 8.4"/><path d="M16.6 3.6 20 12l-3.4 8.4"/><path d="M12 8.6v6.8"/>',
+  teams:    '<circle cx="9" cy="8.4" r="3.1"/><path d="M3.4 20.2c0-3.3 2.5-5.6 5.6-5.6s5.6 2.3 5.6 5.6"/><path d="M16.2 6.2a3 3 0 0 1 0 5.9"/><path d="M17.4 14.9c2 .7 3.3 2.6 3.3 5.3"/>',
+  chat:     '<path d="M20.4 14.2c0 1.5-1.2 2.7-2.7 2.7H9.1L4.6 20.4v-3.5H4.5c-.6-.5-.9-1.3-.9-2.2V6.5c0-1.5 1.2-2.7 2.7-2.7h11.4c1.5 0 2.7 1.2 2.7 2.7z"/>',
+  stats:    '<path d="M4 20.4h16"/><rect x="5.8" y="12.2" width="3.4" height="8.2" rx="1"/><rect x="10.4" y="7.4" width="3.4" height="13" rx="1"/><rect x="15" y="3.6" width="3.4" height="16.8" rx="1"/>',
+  settings: '<circle cx="12" cy="12" r="3.1"/><path d="M12 2.8v2.4M12 18.8v2.4M21.2 12h-2.4M5.2 12H2.8M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7M18.5 18.5l-1.7-1.7M7.2 7.2 5.5 5.5"/>'
+};
+function paintTabIcons(){
+  document.querySelectorAll('nav.tabs button').forEach(b=>{
+    const g=TAB_ICONS[b.dataset.view];
+    if(!g || b.querySelector('svg')) return;                 /* never double-inject */
+    b.insertAdjacentHTML('afterbegin',
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'+g+'</svg>');
+  });
+}
+paintTabIcons();
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{ noteTabClick(); showView(b.dataset.view); }));
 document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
 
@@ -7459,7 +7487,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · BBL app icon';
+const BUILD_STAMP = '2026-08-02 · tab icons';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
