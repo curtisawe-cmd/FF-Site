@@ -197,6 +197,26 @@ header.top{
   :root[data-layout="side"] .ticker{left:212px}
 }
 
+/* ---- burger + drawer: the sidebar layout's phone form ---- */
+.burger{display:none;align-items:center;justify-content:center;width:38px;height:38px;flex:0 0 auto;
+  font-size:19px;color:var(--chalk);background:var(--panel);border:1px solid var(--line-strong);
+  border-radius:10px;box-shadow:var(--sh-1);cursor:pointer}
+.drawer-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:125}
+.drawer-scrim.open{display:block}
+.drawer{position:fixed;top:0;left:0;bottom:0;width:236px;z-index:130;overflow-y:auto;
+  background:linear-gradient(180deg,var(--panel-grad-a),var(--panel-grad-b));
+  border-right:1px solid var(--line-strong);box-shadow:0 0 34px rgba(0,0,0,.5);
+  padding:calc(16px + var(--sa-t)) 14px calc(16px + var(--sa-b)) calc(14px + var(--sa-l));
+  transform:translateX(-105%);transition:transform .22s ease;visibility:hidden}
+.drawer.open{transform:none;visibility:visible}
+.drawer-tabs{display:flex;flex-direction:column;align-items:stretch;gap:5px;margin:0}
+.drawer-tabs button{text-align:left;width:100%;font-size:16px;padding:9px 13px}
+@media(max-width:640px){
+  /* layout=side on a phone: the scrolling tab row gives way to the burger */
+  :root[data-layout="side"] header.top nav.tabs{display:none}
+  :root[data-layout="side"] .burger{display:inline-flex;order:0}
+}
+
 /* The shared Teams/Players/Trades sub-nav. nowrap is the point: it must occupy exactly one
    line on every page so the content below never shifts vertically between them. Too narrow to
    fit becomes a sideways scroll, the same as the main tabs. */
@@ -1037,6 +1057,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <body>
 
 <header class="top">
+  <button class="burger" id="navBurger" onclick="toggleDrawer()" aria-label="Open menu">☰</button>
   <div class="wordmark"><span id="wmName">Bitch Boy League</span> <span class="yr">'26</span></div>
   <nav class="tabs">
     <button data-view="home" class="active">Home</button>
@@ -1057,6 +1078,23 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
   </div>
 </header>
+
+<!-- Phone version of the sidebar layout: the rail becomes a slide-in drawer behind a burger.
+     Its nav deliberately reuses class="tabs" — showView's active-state sync and the shared
+     click binding select nav.tabs button, so these stay in step with the top bar for free. -->
+<div class="drawer-scrim" id="drawerScrim" onclick="toggleDrawer(false)"></div>
+<aside class="drawer" id="navDrawer" aria-label="Navigation">
+  <div class="wordmark" style="font-size:19px;margin-bottom:10px"><span id="wmNameDrawer">Bitch Boy League</span> <span class="yr">'26</span></div>
+  <nav class="tabs drawer-tabs">
+    <button data-view="home" class="active">Home</button>
+    <button data-view="draft">Draft Room</button>
+    <button data-view="matchups">Matchups</button>
+    <button data-view="teams">Teams</button>
+    <button data-view="chat">Chat</button>
+    <button data-view="stats">Stats</button>
+    <button data-view="settings">Settings</button>
+  </nav>
+</aside>
 
 <main>
 
@@ -4877,6 +4915,7 @@ function showView(v){
   }
   /* managers may read the league's setup; lockSettingsForViewers() makes it look-don't-touch */
   window.currentView = v;
+  try{ toggleDrawer(false); }catch(e){}       /* picking a page closes the drawer */
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
@@ -4929,6 +4968,7 @@ document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addE
 function renderHome(){
   document.getElementById('homeLeagueName').textContent = S.leagueName;
   document.getElementById('wmName').textContent = S.leagueName;
+  { const wd=document.getElementById('wmNameDrawer'); if(wd) wd.textContent = S.leagueName; }
   const done = D.picks.length;
   document.getElementById('homeSnapshot').innerHTML = `
     <table class="plain">
@@ -7378,7 +7418,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · sidebar layout option';
+const BUILD_STAMP = '2026-08-02 · hamburger drawer on mobile';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -8070,6 +8110,12 @@ function syncHeaderH(){
             && window.matchMedia('(min-width:641px)').matches;
   if(side){ document.documentElement.style.setProperty('--hdr-h','0px'); return; }
   const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px');
+}
+function toggleDrawer(open){
+  const d=document.getElementById('navDrawer'), sc=document.getElementById('drawerScrim');
+  if(!d||!sc) return;
+  const to = (open===undefined) ? !d.classList.contains('open') : !!open;
+  d.classList.toggle('open', to); sc.classList.toggle('open', to);
 }
 /* per-device, like the theme — one manager's sidebar preference is nobody else's business */
 function setLayout(v){
