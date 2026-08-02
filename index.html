@@ -996,7 +996,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button data-view="trades">Trades</button>
     <button data-view="teams">Teams</button>
     <button data-view="chat">Chat</button>
-    <button data-view="moves">Moves</button>
     <button data-view="stats">Stats</button>
     <button data-view="settings">Settings</button>
   </nav>
@@ -1148,8 +1147,25 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <!-- ============ TRADES ============ -->
 <section class="view" id="view-trades">
   <h1>Trade Center</h1>
-  <p class="sub">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
+  <p class="sub" id="tradesBlurb">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
+  <div class="row trsub" style="gap:8px;margin-bottom:16px">
+    <button class="btn" data-sub="trades" onclick="setTrTab('trades')">Trades</button>
+    <button class="btn ghost" data-sub="moves" onclick="setTrTab('moves')">Transactions</button>
+  </div>
   <div id="tradesView"></div>
+  <div id="movesPane" style="display:none">
+    <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <select id="txFilter" onchange="window.txFilter=this.value;renderTransactions()" style="max-width:170px">
+        <option value="all">All moves</option>
+        <option value="trade">Trades only</option>
+        <option value="add">Adds only</option>
+        <option value="drop">Drops only</option>
+      </select>
+      <select id="txTeam" onchange="window.txTeam=this.value;renderTransactions()" style="max-width:220px"></select>
+      <span class="sub" id="txCount" style="margin:0"></span>
+    </div>
+    <div id="txList"></div>
+  </div>
 </section>
 
 <!-- ============ CHAT ============ -->
@@ -1204,23 +1220,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 </section>
 
 <!-- ============ STATS ============ -->
-<!-- ============ MOVES (transaction log) ============ -->
-<section class="view" id="view-moves">
-  <h1>Transactions</h1>
-  <p class="sub">Every trade, add and drop in the league, newest first. Nothing here can be edited — it is the record.</p>
-  <div class="row" style="gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
-    <select id="txFilter" onchange="window.txFilter=this.value;renderTransactions()" style="max-width:170px">
-      <option value="all">All moves</option>
-      <option value="trade">Trades only</option>
-      <option value="add">Adds only</option>
-      <option value="drop">Drops only</option>
-    </select>
-    <select id="txTeam" onchange="window.txTeam=this.value;renderTransactions()" style="max-width:220px"></select>
-    <span class="sub" id="txCount" style="margin:0"></span>
-  </div>
-  <div id="txList"></div>
-</section>
-
 <section class="view" id="view-stats">
   <h1>All-Time Stats</h1>
   <p class="sub">Fourteen years, every manager, every record — computed straight from the verified NFL.com archive.</p>
@@ -3186,7 +3185,7 @@ function startLeagueSync(){
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/transactions`, (m)=>{
     txMap = m||{};
-    if(window.currentView==='moves') renderTransactions();
+    if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
     movesMap = m||{};
@@ -4570,7 +4569,7 @@ function logTx(entry, stableId){
   try{ window.FB.dbSet(`${txPath()}/${id}`, rec).catch(()=>{}); }catch(e){}
   /* show it immediately rather than waiting for the round trip */
   txMap[id] = rec;
-  if(window.currentView==='moves') renderTransactions();
+  if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
 }
 function logMove(ti, type, p){
   logTx({ type, team: (S.teams[ti]||{}).name || ('Team '+(ti+1)), teamIndex: ti,
@@ -4805,8 +4804,8 @@ function showView(v){
   if(v==='recaps') renderRecaps();
   if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); renderChatOnline(); }   /* opening = reading */
   if(v==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
+  if(v==='trades') setTrTab(window.trTab||'trades');
   if(v==='polls') renderPolls();
-  if(v==='moves') renderTransactions();
   if(v==='draft'){ refreshDraftUI(); syncDraftModeToggle(); }
   if(v==='settings'){ renderSettings(); renderCommishCard(); }   /* values + member list refresh on every visit */
   if(v==='settings' && prevView!=='settings'){ window._setSnap=JSON.stringify(S); window.settingsDirty=false; }
@@ -4817,18 +4816,19 @@ function showView(v){
    once you switch over and Players reads INJURIES or NEWS. */
 const GHOST_LABEL = { home:'LEAGUE', draft:'DRAFT ROOM', mock:'MOCK DRAFT', players:'PLAYERS',
   matchups:'MATCHUPS', teams:'TEAMS', trades:'TRADES', chat:'CHAT', polls:'POLLS',
-  stats:'STATS', recaps:'RECAPS', history:'HISTORY', settings:'SETTINGS', moves:'TRANSACTIONS' };
+  stats:'STATS', recaps:'RECAPS', history:'HISTORY', settings:'SETTINGS' };
 function updateGhost(){
   const v = window.currentView; if(!v) return;
   let label = GHOST_LABEL[v] || '';
   if(v==='matchups' && window.muTab==='gc') label = 'GAME CENTER';
   if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='news') label='PLAYER NEWS'; }
   if(v==='teams' && window.teamsSub==='my') label = 'MY TEAM';
+  if(v==='trades' && window.trTab==='moves') label = 'TRANSACTIONS';
   const sec = document.getElementById('view-' + (v==='mock' ? 'draft' : v));
   if(sec) sec.setAttribute('data-ghost', label);
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{ noteTabClick(); showView(b.dataset.view); }));
-document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
+document.querySelectorAll('.statssub button, .chatsub button, .trsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
 
 function renderHome(){
   document.getElementById('homeLeagueName').textContent = S.leagueName;
@@ -5797,6 +5797,21 @@ function statLine(st, pos){
   if(g('fum_lost')) o.push(g('fum_lost')+' Fum Lost');
   if(g('pass_2pt')+g('rush_2pt')+g('rec_2pt')) o.push('2PT');
   return o.join(', ');
+}
+/* Transactions live inside Trades rather than as their own tab — the log is mostly trades, and
+   the nav was getting crowded. Same pattern as the Matchups sub-tabs. */
+function setTrTab(t){
+  window.trTab = t;
+  document.querySelectorAll('.trsub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
+  const trades=document.getElementById('tradesView'), moves=document.getElementById('movesPane');
+  if(trades) trades.style.display = t==='moves' ? 'none':'block';
+  if(moves)  moves.style.display  = t==='moves' ? 'block':'none';
+  const blurb=document.getElementById('tradesBlurb');
+  if(blurb) blurb.textContent = t==='moves'
+    ? 'Every trade, add and drop in the league, newest first. Nothing here can be edited — it is the record.'
+    : 'Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.';
+  if(t==='moves') renderTransactions();
+  updateGhost();
 }
 function setMuTab(t){
   window.muTab = t;
@@ -7237,7 +7252,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · second header ribbon';
+const BUILD_STAMP = '2026-08-01 · transactions inside trades';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
