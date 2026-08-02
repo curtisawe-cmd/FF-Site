@@ -1621,7 +1621,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 .auth-g-ic{width:17px;height:17px;flex:0 0 17px}
 .auth-keep{display:flex;align-items:center;gap:8px;margin:2px 0 10px;
   font-family:var(--f-ui);font-size:14px;color:var(--chalk-dim);cursor:pointer}
-.auth-keep input{width:auto;margin:0;cursor:pointer}
+/* .auth-card input sets width:100% and padding for the email/password fields and matches this
+   one too — same specificity, and it is declared later, so it wins unless the type is named. */
+.auth-card input[type=checkbox].auth-keep-box{width:16px;height:16px;min-width:16px;padding:0;margin:0;
+  accent-color:var(--turf);cursor:pointer;flex:0 0 auto}
 .auth-or{text-align:center;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted,#9aa3b4);margin:14px 0;position:relative}
 .auth-or:before,.auth-or:after{content:"";position:absolute;top:50%;width:38%;height:1px;background:var(--line,#e2e6ef)}
 .auth-or:before{left:0}.auth-or:after{right:0}
@@ -1659,7 +1662,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <form id="authForm" onsubmit="window.authSubmit();return false">
         <input id="authEmail" name="email" type="email" placeholder="Email" autocomplete="username">
         <input id="authPass" name="password" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go">
-        <label class="auth-keep"><input type="checkbox" id="authKeep" checked> Keep me signed in</label>
+        <label class="auth-keep"><input type="checkbox" class="auth-keep-box" id="authKeep" checked onchange="applyKeepSignedIn()"> Keep me signed in</label>
         <div class="auth-err" id="authErr"></div>
         <button class="auth-primary" id="authSubmit" type="submit">Sign in</button>
       </form>
@@ -4451,6 +4454,9 @@ function openAuth(){
     updateClaimBadge();
   } else { setAuthErr(''); }
   ov.classList.add('on');
+  /* openAuth runs from a tap, so focusing here is inside the user gesture and iOS will raise
+     the keyboard. Deferred one frame because the field is display:none until the class lands. */
+  if(!u) requestAnimationFrame(()=>{ try{ document.getElementById('authEmail').focus({preventScroll:false}); }catch(e){} });
 }
 function closeAuth(){ const ov=document.getElementById('authOverlay'); if(ov) ov.classList.remove('on'); }
 function setAuthErr(m){ const e=document.getElementById('authErr'); if(e) e.textContent=m||''; }
@@ -4492,7 +4498,6 @@ async function applyKeepSignedIn(){
 }
 async function authSubmit(){
   if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
-  await applyKeepSignedIn();
   const email=(document.getElementById('authEmail').value||'').trim();
   const pass=document.getElementById('authPass').value||'';
   if(!email){ setAuthErr('Enter your email.'); return; }
@@ -4507,7 +4512,10 @@ async function authSubmit(){
 }
 async function doGoogle(){
   if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
-  await applyKeepSignedIn();
+  /* No await before this call. signInWithPopup has to run inside the user gesture that opened
+     it; awaiting anything first spends the activation and the browser blocks the popup as
+     unrequested. Persistence is already set — at load, and again whenever the checkbox is
+     toggled — so there is nothing to wait for here. */
   try{ await window.FB.google(); closeAuth(); }
   catch(err){ authErr(err); }
 }
@@ -7507,7 +7515,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · keep me signed in';
+const BUILD_STAMP = '2026-08-02 · fix google popup + keyboard';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
