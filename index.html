@@ -1582,6 +1582,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <label class="sub" style="margin:0;font-size:12px">Every</label>
         <input type="number" id="setTabFlashEvery" min="0" max="200" style="max-width:62px;font-size:13px" onchange="S.tabFlashEvery=Math.max(0,+this.value||0);saveState()">
         <span class="sub" style="margin:0;font-size:12px">clicks</span>
+        <label class="sub" title="Fire at unpredictable intervals instead of exactly every Nth click — still averages the number above, but nobody can count to it." style="margin:0;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="setTabFlashRandom" style="width:auto;margin:0" onchange="S.tabFlashRandom=this.checked;tabFlashNext=0;saveState()"> random</label>
         <button class="btn ghost" style="padding:2px 10px;font-size:12px" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test</button>
       </div>
     </div>
@@ -1777,6 +1778,7 @@ const DEFAULTS = {
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
+  tabFlashRandom: false, /* true = scatter around that number instead of landing on it exactly */
   mock: { team:0, auto:true },
   playoffsCustom: {},   /* commissioner-edited brackets, by year — survives data updates */
   season: null,         /* {year, schedule:{wk:[[a,b],...]}, scores:{wk:{m:[pa,pb]}}} */
@@ -4370,6 +4372,7 @@ function toggleTabFlashLock(){
   tabFlashUnlocked=true; panel.style.display='block'; btn.textContent='Lock';
   const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
   const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
+  { const tr=document.getElementById('setTabFlashRandom'); if(tr) tr.checked=!!S.tabFlashRandom; }
 }
 function saveTabFlash(val){ S.tabFlash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 function flashTab(text){
@@ -4381,10 +4384,24 @@ function flashTab(text){
   clearTimeout(tabFlashTimer);
   tabFlashTimer = setTimeout(()=>ov.classList.remove('on'), TAB_FLASH_MS);
 }
+/* Random mode picks the next target 40%-160% of the interval ahead, so it still averages the
+   number in the box but never lands on a rhythm anyone can anticipate. */
+let tabFlashNext = 0;
+function pickTabFlashNext(every){
+  const lo = Math.max(1, Math.round(every*0.4));
+  const hi = Math.max(lo+1, Math.round(every*1.6));
+  return tabClicks + lo + Math.floor(Math.random()*(hi-lo+1));
+}
 function noteTabClick(){
   const every = +S.tabFlashEvery||0;
   if(!every || !(S.tabFlash||[]).length) return;
-  if(++tabClicks % every === 0) flashTab();
+  tabClicks++;
+  if(S.tabFlashRandom){
+    if(!tabFlashNext) tabFlashNext = pickTabFlashNext(every);
+    if(tabClicks >= tabFlashNext){ flashTab(); tabFlashNext = pickTabFlashNext(every); }
+    return;
+  }
+  if(tabClicks % every === 0) flashTab();
 }
 function mockTrashLines(){
   if(S.mockTrash && S.mockTrash.length) return S.mockTrash.map(s=>{ const i=s.indexOf('|'); return i>=0 ? [s.slice(0,i).trim(), s.slice(i+1).trim()] : [s.trim(), '']; });
@@ -7404,7 +7421,8 @@ function renderSettings(){
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
   if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
-    const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18); }
+    const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
+    const tr=document.getElementById('setTabFlashRandom'); if(tr) tr.checked=!!S.tabFlashRandom; }
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
@@ -7515,7 +7533,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · fix google popup + keyboard';
+const BUILD_STAMP = '2026-08-02 · random tab flash';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
