@@ -1310,6 +1310,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <option value="add">Adds only</option>
         <option value="drop">Drops only</option>
       <option value="undo">Undos only</option>
+      <option value="commish">Commissioner changes</option>
       </select>
       <select id="txTeam" onchange="window.txTeam=this.value;renderTransactions()" style="max-width:220px"></select>
       <span class="sub" id="txCount" style="margin:0"></span>
@@ -3316,7 +3317,12 @@ window.onFbReadError = function(){ try{ if(window.currentView==='trades') render
 /* a rejected write should repaint the log so the reason appears without a manual refresh */
 window.onFbWriteError = function(path){ try{ if(String(path).indexOf('/transactions')>=0 && window.currentView==='trades' && window.trTab==='moves') renderTransactions(); }catch(e){} };
 function updateApplyBar(){ const b=document.getElementById('applyBar'); if(b) b.classList.toggle('on', !!window.settingsDirty && window.currentView==='settings'); }
-function applySettings(){ window.settingsDirty=false; window._setSnap=JSON.stringify(S); pushSettings(true); updateApplyBar(); toast('Settings applied ✓'); }
+function applySettings(){
+  const changed = settingsChangeLabels(window._setSnap);
+  window.settingsDirty=false; window._setSnap=JSON.stringify(S); pushSettings(true); updateApplyBar();
+  if(changed.length) try{ logCommish('changed league settings', changed.join(', ')); }catch(e){}
+  toast('Settings applied ✓');
+}
 function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar(); try{ renderSettings(); renderHome(); }catch(e){} }
 function pushDraftRemote(){
   if(applyingRemote || !fbOk() || !isAdmin() || draftMode!=='real') return;
@@ -3365,7 +3371,9 @@ function startLeagueSync(){
     }catch(e){}
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/transactions`, (m)=>{
+    const first = txSeenIds === null;
     txMap = m||{};
+    noticeCommishChanges(first);
     if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
@@ -4440,7 +4448,9 @@ function resetDraft(){
   if(!requireDraftControl()) return;
   if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
   clearInterval(timerId); timerId=null;
+  const wasReal = draftMode==='real', hadPicks = D.picks.length;
   D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
+  if(wasReal && hadPicks) try{ logCommish('reset the draft board', hadPicks+' picks cleared'); }catch(e){}
   document.getElementById('clock').textContent='--';
   document.getElementById('btnPause').textContent='Pause';
   refreshDraftUI();
@@ -4781,17 +4791,57 @@ function movesPath(){ return `league/${LEAGUE_ID}/teamMoves`; }
    that is supposed to be permanent and complete. This one is append-only and written by
    whoever performed the move, admin or not. */
 function txPath(){ return `league/${LEAGUE_ID}/transactions`; }
+/* Managers are told when the commissioner changes something, the moment it lands. The first
+   sync only records what already exists — otherwise every launch would replay the backlog. */
+let txSeenIds = null;
+function noticeCommishChanges(firstSync){
+  const ids=Object.keys(txMap||{});
+  if(firstSync || txSeenIds===null){ txSeenIds=new Set(ids); return; }
+  const fresh=ids.filter(id=>!txSeenIds.has(id));
+  fresh.forEach(id=>txSeenIds.add(id));
+  if(isAdmin()) return;                       /* you made it; you do not need telling */
+  fresh.map(id=>txMap[id]).filter(x=>x && x.type==='commish').forEach(x=>{
+    toast(`Commissioner ${x.what}${x.detail?' — '+x.detail:''}`);
+  });
+}
 let txMap = {};
 function logTx(entry, stableId){
   if(!fbOk() || !window.fbUser) return;
   /* A stable id makes the write idempotent. Trades are applied by the commissioner, and a
      commissioner with two devices open would otherwise log the same trade twice. */
   const id = stableId || ('x'+Date.now()+Math.random().toString(36).slice(2,6));
-  const rec = { at: Date.now(), by: window.fbUser.uid, ...entry };
+  /* every entry records whether a commissioner made it, so the log can say so on any row
+     rather than only on commissioner-specific events */
+  const rec = { at: Date.now(), by: window.fbUser.uid, admin: !!isAdmin(), ...entry };
   try{ window.FB.dbSet(`${txPath()}/${id}`, rec).catch(()=>{}); }catch(e){}
   /* show it immediately rather than waiting for the round trip */
   txMap[id] = rec;
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
+}
+/* Which parts of the league setup changed, in words a manager will recognise. Compared against
+   the snapshot taken when Settings was opened, so it reports the actual edit rather than
+   "settings changed". */
+const SETTING_LABELS={
+  leagueName:'league name', teams:'teams', roster:'roster slots', scoring:'scoring',
+  rules:'league rules', draftCfg:'draft setup', divisions:'divisions', prizes:'prize money',
+  timerSec:'pick clock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
+  tradeReviewMs:'trade review window', txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
+  snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
+  tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
+  tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
+};
+function settingsChangeLabels(beforeJson){
+  try{
+    const b=JSON.parse(beforeJson||'{}'), out=new Set();
+    new Set([...Object.keys(b||{}), ...Object.keys(S||{})]).forEach(k=>{
+      if(JSON.stringify(b[k])!==JSON.stringify(S[k])) out.add(SETTING_LABELS[k]||k);
+    });
+    return [...out];
+  }catch(e){ return []; }
+}
+function logCommish(what, detail){
+  logTx({ type:'commish', what:String(what||''), detail:String(detail||''),
+          team:(S.teams[myTeamIndex()]||{}).name||'' });
 }
 function logMove(ti, type, p){
   /* playerId is what makes an entry reversible — names are for reading, ids are for undoing. */
@@ -4960,7 +5010,7 @@ function renderTransactions(){
      while the filter is still holding the old value. The control then lies about what it is
      filtering and the list looks empty for no visible reason. */
   if(window.txTeam && window.txTeam!=='all' && !names.includes(window.txTeam)) window.txTeam='all';
-  if(!['all','trade','add','drop','undo'].includes(window.txFilter||'all')) window.txFilter='all';
+  if(!['all','trade','add','drop','undo','commish'].includes(window.txFilter||'all')) window.txFilter='all';
   if(sel){
     const cur=window.txTeam||'all';
     sel.innerHTML=`<option value="all" ${cur==='all'?'selected':''}>All teams</option>`+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
@@ -4993,11 +5043,21 @@ function renderTransactions(){
   const when = t => new Date(+t||0).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
   el.innerHTML = list.map(x=>{
     const mgr = x.by ? managerNameFor(x.by, '') : '';
-    const stamp = `${when(x.at)}${mgr?` · ${esc(mgr)}`:''}`;
+    /* the badge is what tells a manager the change was not one of their own */
+    const badge = x.admin ? ' · <b style="color:var(--charge)">commissioner</b>' : '';
+    const stamp = `${when(x.at)}${mgr?` · ${esc(mgr)}`:''}${badge}`;
     const undoBtn = (isAdmin() && txCanUndo(x))
       ? `<button class="btn ghost" style="padding:2px 9px;font-size:11px" title="Put everything back the way it was" onclick="undoTx('${x.id}')">Undo</button>` : '';
     const undoneTag = x.undone ? `<span class="divtag" style="opacity:.8">undone</span>` : '';
     const dim = x.undone ? 'opacity:.55;' : '';
+    if(x.type==='commish'){
+      return `<div class="card" style="margin-bottom:8px;padding:10px 14px;border-left:3px solid var(--charge)">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="min-width:0"><b style="color:var(--charge)">Commissioner</b> ${esc(x.what||'made a change')}${x.detail?` <span style="color:var(--chalk-dim)">— ${esc(x.detail)}</span>`:''}</span>
+          <span class="sub" style="margin:0;font-size:12px">${stamp}</span>
+        </div>
+      </div>`;
+    }
     if(x.type==='undo'){
       return `<div class="card" style="margin-bottom:8px;padding:9px 14px;border-left:3px solid var(--chalk-dim);opacity:.75">
         <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -7755,7 +7815,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · chat read receipts';
+const BUILD_STAMP = '2026-08-02 · commissioner changes announced';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
