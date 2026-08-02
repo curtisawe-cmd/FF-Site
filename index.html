@@ -4613,11 +4613,19 @@ function renderTransactions(){
   /* the team filter is built from the log itself, so a team that was later renamed still shows
      up under the name it made the move with */
   const sel=document.getElementById('txTeam');
+  const names=[...new Set(all.flatMap(x=>[x.team,x.teamB].filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
+  /* Drop a team filter that no longer matches anything in the log. Without this the rebuilt
+     <select> has no option to mark selected, so the browser shows the first one — "All teams" —
+     while the filter is still holding the old value. The control then lies about what it is
+     filtering and the list looks empty for no visible reason. */
+  if(window.txTeam && window.txTeam!=='all' && !names.includes(window.txTeam)) window.txTeam='all';
+  if(!['all','trade','add','drop'].includes(window.txFilter||'all')) window.txFilter='all';
   if(sel){
-    const names=[...new Set(all.flatMap(x=>[x.team,x.teamB].filter(Boolean)))].sort((a,b)=>a.localeCompare(b));
     const cur=window.txTeam||'all';
-    sel.innerHTML=`<option value="all">All teams</option>`+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
+    sel.innerHTML=`<option value="all" ${cur==='all'?'selected':''}>All teams</option>`+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
   }
+  const ftSel=document.getElementById('txFilter');
+  if(ftSel && ftSel.value!==(window.txFilter||'all')) ftSel.value = window.txFilter||'all';
   const fType=window.txFilter||'all', fTeam=window.txTeam||'all';
   const list=all.filter(x=>(fType==='all'||x.type===fType) && (fTeam==='all'||x.team===fTeam||x.teamB===fTeam));
   const cnt=document.getElementById('txCount');
@@ -4634,7 +4642,13 @@ function renderTransactions(){
     el.innerHTML=`<div class="card"><p class="sub" style="margin:0">${why}</p></div>`;
     return;
   }
-  if(!list.length){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">Nothing matches that filter.</p></div>`; return; }
+  if(!list.length){
+    /* name the active filter — "nothing matches" with the controls apparently on "all" is the
+       most confusing thing this page can say */
+    const bits=[fType!=='all'?fType+'s only':'', fTeam!=='all'?'team: '+esc(fTeam):''].filter(Boolean).join(' · ');
+    el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No moves match ${bits?'<b>'+bits+'</b>':'the current filter'} — ${all.length} in the log. <a href="#" onclick="window.txFilter='all';window.txTeam='all';renderTransactions();return false" style="color:var(--charge)">show all</a></p></div>`;
+    return;
+  }
   const when = t => new Date(+t||0).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
   el.innerHTML = list.map(x=>{
     const mgr = x.by ? managerNameFor(x.by, '') : '';
