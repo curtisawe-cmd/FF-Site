@@ -993,9 +993,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <nav class="tabs">
     <button data-view="home" class="active">Home</button>
     <button data-view="draft">Draft Room</button>
-    <button data-view="players">Players</button>
     <button data-view="matchups">Matchups</button>
-    <button data-view="trades">Trades</button>
     <button data-view="teams">Teams</button>
     <button data-view="chat">Chat</button>
     <button data-view="stats">Stats</button>
@@ -1098,6 +1096,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-players">
   <h1>Players</h1>
   <p class="sub">Live NFL player index — injury reports, team, status, age &amp; experience, straight from the feed. Updates within ~24 hours; hit refresh for the latest.</p>
+  <div class="row teamsub" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn ghost" data-sub="teams" onclick="showView('teams')">Teams</button>
+    <button class="btn" data-sub="players" onclick="showView('players')">Players</button>
+    <button class="btn ghost" data-sub="trades" onclick="showView('trades')">Trades</button>
+  </div>
   <div class="row plsub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="all" onclick="setPlTab('all')">All Players</button>
     <button class="btn ghost" data-sub="inj" onclick="setPlTab('inj')">Injury Report</button>
@@ -1138,6 +1141,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <!-- ============ TEAMS ============ -->
 <section class="view" id="view-teams">
   <h1>Teams</h1>
+  <div class="row teamsub" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn" data-sub="teams" onclick="showView('teams')">Teams</button>
+    <button class="btn ghost" data-sub="players" onclick="showView('players')">Players</button>
+    <button class="btn ghost" data-sub="trades" onclick="showView('trades')">Trades</button>
+  </div>
   <div class="row" style="margin-bottom:14px">
     <button class="btn ghost" id="subMy" onclick="window.teamsSub='my';renderTeams()">My Team</button>
     <button class="btn ghost" id="subAll" onclick="window.teamsSub='all';renderTeams()">All Teams</button>
@@ -1150,6 +1158,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-trades">
   <h1>Trade Center</h1>
   <p class="sub" id="tradesBlurb">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
+  <div class="row teamsub" style="gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="btn ghost" data-sub="teams" onclick="showView('teams')">Teams</button>
+    <button class="btn ghost" data-sub="players" onclick="showView('players')">Players</button>
+    <button class="btn" data-sub="trades" onclick="showView('trades')">Trades</button>
+  </div>
   <div class="row trsub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="trades" onclick="setTrTab('trades')">Trades</button>
     <button class="btn ghost" data-sub="moves" onclick="setTrTab('moves')">Transactions</button>
@@ -4792,10 +4805,15 @@ function showView(v){
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
   document.getElementById('view-'+domView).classList.add('active');
-  const navV = (v==='recaps'||v==='history') ? 'stats' : (v==='polls' ? 'chat' : v);
+  /* Players and Trades live under the Teams tab now, the same way Recaps/History sit under
+     Stats — separate sections sharing one nav tab and a sub-tab bar. */
+  const navV = (v==='recaps'||v==='history') ? 'stats'
+             : (v==='polls' ? 'chat'
+             : ((v==='players'||v==='trades') ? 'teams' : v));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===navV));
   if(v==='stats'||v==='recaps'||v==='history') document.querySelectorAll('.statssub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
   if(v==='chat'||v==='polls') document.querySelectorAll('.chatsub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
+  if(v==='teams'||v==='players'||v==='trades') document.querySelectorAll('.teamsub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
   if(v==='home') renderHome();
   if(v==='teams') renderTeams();
   if(v==='matchups'){ renderMatchups(); setMuTab(window.muTab||'board'); }
@@ -4830,7 +4848,7 @@ function updateGhost(){
   if(sec) sec.setAttribute('data-ghost', label);
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>{ noteTabClick(); showView(b.dataset.view); }));
-document.querySelectorAll('.statssub button, .chatsub button, .trsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
+document.querySelectorAll('.statssub button, .chatsub button, .trsub button, .teamsub button').forEach(b=>b.addEventListener('click',()=>noteTabClick()));
 
 function renderHome(){
   document.getElementById('homeLeagueName').textContent = S.leagueName;
@@ -7254,7 +7272,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · team colours in the ribbon';
+const BUILD_STAMP = '2026-08-01 · players and trades under teams';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
