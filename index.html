@@ -1040,7 +1040,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="clock" id="clock">--</div>
     <div class="onclock"><small id="pickLabel">Pre-draft</small><span id="onClockTeam">Ready when you are</span></div>
     <div class="spacer"></div>
-    <span class="admin-only" style="display:contents">
+    <span class="admin-only" id="draftCtrls" style="display:contents">
     <span id="mockCtrls" style="display:none;align-items:center;gap:8px">
       <label style="color:var(--chalk-dim);font-size:13px">You control</label>
       <select id="mockTeam" onchange="S.mock.team=+this.value;saveState()"></select>
@@ -1058,7 +1058,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" id="btnUndo" onclick="undoPick()" disabled>Undo Pick</button>
     <button class="btn danger" onclick="resetDraft()">Reset</button>
     </span>
-    <span class="viewer-only" style="display:none;color:var(--chalk-dim);font-size:13px">Viewer mode — the commissioner runs the draft.</span>
+    <span class="viewer-only" id="draftViewerNote" style="display:none;color:var(--chalk-dim);font-size:13px">Viewer mode — the commissioner runs the draft.</span>
   </div>
 
   <div class="draftwrap">
@@ -3196,10 +3196,21 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
 }
+/* The controls are wrapped in .admin-only, which CSS hides outright for managers — an inline
+   style cannot beat `display:none !important`, so the class itself is toggled. In mock mode
+   everyone gets the controls; in real mode the commissioner gate returns untouched. */
+function syncDraftControlAccess(){
+  const wrap=document.getElementById('draftCtrls'); if(!wrap) return;
+  const open = draftMode==='mock';
+  wrap.classList.toggle('admin-only', !open);
+  const note=document.getElementById('draftViewerNote');
+  if(note) note.style.display = (open || isAdmin()) ? 'none' : '';
+}
 function syncDraftModeToggle(){
   const r=document.getElementById('modeReal'), m=document.getElementById('modeMock');
   if(r) r.className = 'btn' + (draftMode==='real'?'':' ghost');
   if(m) m.className = 'btn' + (draftMode==='mock'?'':' ghost');
+  syncDraftControlAccess();
 }
 function setDraftMode(m){
   if(draftMode!==m){
@@ -3341,6 +3352,10 @@ function injInfo(id){
   return { cls: serious?' hurt':'', flag:`<span class="inj-flag ${kind}" title="${esc(s+(p.injBody?' — '+p.injBody:''))}">${abbr}</span>` };
 }
 function draftedIds(){ return new Set(D.picks.filter(p=>!p.cut).map(p=>p.playerId)); }   /* cut players are free agents again */
+/* Who is owned on the REAL board. draftedIds() follows whichever board is loaded, which is
+   correct for the draft room but wrong for free agency — during a mock it would refuse to
+   add a player because his mock counterpart was taken. */
+function rosteredIds(){ return new Set(realDraft().picks.filter(p=>!p.cut).map(p=>p.playerId)); }
 
 /* =====================================================
    Players tab — live NFL player index (Sleeper feed)
@@ -3958,14 +3973,14 @@ function applyInactiveFilter(){
 let timerId=null, timeLeft=0;
 
 function startDraft(){
-  if(!requireAdmin()) return;
+  if(!requireDraftControl()) return;
   if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
   D.started = true; D.paused = false; saveDraft();
   armClock();
   refreshDraftUI();
 }
 function togglePause(){
-  if(!requireAdmin()) return;
+  if(!requireDraftControl()) return;
   if(!D.started||D.finished) return;
   D.paused = !D.paused; saveDraft();
   document.getElementById('btnPause').textContent = D.paused ? 'Resume' : 'Pause';
@@ -3988,7 +4003,7 @@ function armClock(carry){
 /* Auto-draft: when on, auto-pick for EVERY team (best available) on a short timer */
 let autoDraftOn = false;
 function setAutoDraft(on){
-  if(!requireAdmin()){ const t=document.getElementById('autoDraftToggle'); if(t) t.checked=false; return; }
+  if(!requireDraftControl()){ const t=document.getElementById('autoDraftToggle'); if(t) t.checked=false; return; }
   autoDraftOn = !!on;
   store.set('ffl_autodraft', autoDraftOn ? '1' : '');
   if(autoDraftOn && D.started && !D.paused && !D.finished){ clearInterval(timerId); maybeAutoDraft(); }
@@ -4085,7 +4100,7 @@ function tradeAlarm(sub, a, b){
   bigAlarm(pool, TRADE_LINES, '🤝', sub);
 }
 function makePick(playerId){
-  if(!requireAdmin()) return;
+  if(!requireDraftControl()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
   const idx = currentPickIndex();
   const player = POOL.find(p=>p.id===playerId);
@@ -4151,7 +4166,7 @@ function afterPick(){
   refreshDraftUI();
 }
 function undoPick(){
-  if(!requireAdmin()) return;
+  if(!requireDraftControl()) return;
   if(!D.picks.length) return;
   const last = D.picks.pop();
   D.finished = false; saveDraft();
@@ -4212,7 +4227,7 @@ function trashTalk(pair){
   setTimeout(()=>el.remove(), 5100);
 }
 function resetDraft(){
-  if(!requireAdmin()) return;
+  if(!requireDraftControl()) return;
   if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
   clearInterval(timerId); timerId=null;
   D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
@@ -4230,8 +4245,14 @@ function hashStr(s){ let h=5381; s=String(s); for(let i=0;i<s.length;i++) h=((h<
 const ADMIN_HASH = 11071474;   /* hash of the admin passcode; change the passcode by updating this number */
 function isAdmin(){ return store.get('ffl_role')==='admin'; }
 function requireAdmin(){ if(!isAdmin()){ toast("Commissioner only — you're in viewer mode."); return false; } return true; }
+/* The mock board is a private sandbox — it is stored per device, never synced, and cannot
+   touch a roster — so every manager gets full control of it. The commissioner gate exists to
+   protect the REAL draft, and only that. */
+function requireDraftControl(){ return draftMode==='mock' ? true : requireAdmin(); }
 function applyRole(){
   document.documentElement.setAttribute('data-role', isAdmin()?'admin':'user');
+  /* the role class is re-applied here, so mock access has to be re-asserted after it */
+  try{ syncDraftControlAccess(); }catch(e){}
   const b=document.getElementById('roleBtn');
   if(b){ b.innerHTML = isAdmin()?'<span class="dot"></span>Admin':'<span class="dot"></span>Viewer'; b.title = isAdmin()?'Admin mode — click to switch to viewer':'Viewer mode — click to unlock admin'; }
 }
@@ -6774,10 +6795,14 @@ function myTeamIdx(){
   if(Number.isInteger(claimed)) return claimed;   /* logged-in manager: locked to their claimed team */
   const v = store.get('ffl_my_team'); return v===null? null : +v;
 }
-function teamRoster(ti){ return D.picks.filter(p=>p.teamIndex===ti && !p.cut); }
+/* Rosters ALWAYS read the real board. D is whichever board is loaded, so while a mock draft
+   is running these would otherwise report mock picks as real rosters — mock players showing
+   up in Teams, My Team, lineups and matchup scoring. The mock is a sandbox; nothing it does
+   may touch a roster. */
+function teamRoster(ti){ return realDraft().picks.filter(p=>p.teamIndex===ti && !p.cut); }
 /* roster size limit = all starter slots + bench (IR is a separate reserve, not counted) */
 function rosterLimit(){ return ['QB','RB','WR','TE','FLEX','K','DEF','BN'].reduce((n,k)=>n+(+S.roster[k]||0),0); }
-function rosterCount(ti){ const lu=S.lineups[ti]||{}; return D.picks.filter(p=>p.teamIndex===ti && !p.cut && lu[p.playerId]!=='IR').length; }
+function rosterCount(ti){ const lu=S.lineups[ti]||{}; return realDraft().picks.filter(p=>p.teamIndex===ti && !p.cut && lu[p.playerId]!=='IR').length; }
 function ensureLineup(ti){
   const lu = S.lineups[ti] = S.lineups[ti] || {};
   const roster = teamRoster(ti);
@@ -6837,33 +6862,38 @@ window.faQuery=''; window.faPos='ALL';
 /* Dropping NEVER erases the draft board — the board is the record of the draft and only a
    reset clears it. An original draft pick gets flagged cut (sticker stays put, player goes
    back to the pool); only FA pickups (pickIndex -1, never on the board) actually leave. */
-function cutPick(ti, pid){
-  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
+/* `d` defaults to the loaded board for the draft room's own use; roster edits pass the real
+   board explicitly so a running mock can never absorb or lose a real player. */
+function cutPick(ti, pid, d){
+  d = d || D;
+  const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return null;
-  if(+p.pickIndex>=0) p.cut = true;
-  else D.picks = D.picks.filter(x=>x!==p);
+  if(+p.pickIndex>=0) p.cut = true;                    /* board picks stay on the board, marked cut */
+  else d.picks = d.picks.filter(x=>x!==p);             /* free-agent adds just disappear */
   if(S.lineups && S.lineups[ti]) delete S.lineups[ti][pid];
   return p;
 }
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
-  const p = D.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
+  const d = realDraft();
+  const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return;
   if(!confirm(`Drop ${p.name}? They go back to the free-agent pool.`)) return;
-  cutPick(ti, pid);
-  saveDraft(); saveState(); pushTeamData(ti); pushMove(ti,'drop',p); logMove(ti,'drop',p);
+  cutPick(ti, pid, d);
+  saveRealDraft(d); saveState(); pushTeamData(ti); pushMove(ti,'drop',p); logMove(ti,'drop',p);
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
   toast(`Dropped ${p.name}`);
 }
 function addPlayer(ti, pid){
   if(!requireTeam(ti)) return;
-  if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
+  if(rosteredIds().has(pid)){ toast("That player is already on a roster."); return; }
   if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
-  D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
-  saveDraft(); pushTeamData(ti); pushMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
+  const d = realDraft();
+  d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
+  saveRealDraft(d); pushTeamData(ti); pushMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
   logMove(ti,'add',{name:p.name, pos:p.pos, nfl:p.team});
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
@@ -6872,7 +6902,7 @@ function addPlayer(ti, pid){
 /* add-with-drop: if there's room just add; if full, force a drop to make room (roster stays at the limit) */
 function addWithDrop(ti, pid){
   if(!requireTeam(ti)) return;
-  if(draftedIds().has(pid)){ toast("That player is already on a roster."); return; }
+  if(rosteredIds().has(pid)){ toast("That player is already on a roster."); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   if(rosterCount(ti) < rosterLimit()){ addPlayer(ti, pid); return; }
@@ -6895,10 +6925,11 @@ function addWithDrop(ti, pid){
 }
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
-  const dropped = cutPick(ti, dropPid);
+  const d = realDraft();
+  const dropped = cutPick(ti, dropPid, d);
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
-  if(p) D.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
-  saveDraft(); saveState(); pushTeamData(ti);
+  if(p) d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
+  saveRealDraft(d); saveState(); pushTeamData(ti);
   if(dropped) { pushMove(ti,'drop',dropped); logMove(ti,'drop',dropped); }
   if(p) { pushMove(ti,'add',{playerId:addPid, name:p.name, pos:p.pos, nfl:p.team}); logMove(ti,'add',{name:p.name, pos:p.pos, nfl:p.team}); }
   const ov=document.getElementById('swapModal'); if(ov) ov.style.display='none';
@@ -6907,7 +6938,7 @@ function swapPlayer(ti, dropPid, addPid){
   toast(`Added ${p?p.name:'player'} — a spot was dropped`);
 }
 function freeAgents(q){
-  const taken = draftedIds();
+  const taken = rosteredIds();          /* free agency is about real rosters, not the mock board */
   q = String(q||'').toLowerCase().trim();
   return POOL.filter(p=>!taken.has(p.id))
     .filter(p=>posMatches(p.pos, window.faPos||'ALL'))
@@ -7191,7 +7222,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-01 · transactions log';
+const BUILD_STAMP = '2026-08-01 · mock draft open to all, isolated';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
