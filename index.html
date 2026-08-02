@@ -1300,6 +1300,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <option value="trade">Trades only</option>
         <option value="add">Adds only</option>
         <option value="drop">Drops only</option>
+      <option value="undo">Undos only</option>
       </select>
       <select id="txTeam" onchange="window.txTeam=this.value;renderTransactions()" style="max-width:220px"></select>
       <span class="sub" id="txCount" style="margin:0"></span>
@@ -4777,8 +4778,71 @@ function logTx(entry, stableId){
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
 }
 function logMove(ti, type, p){
+  /* playerId is what makes an entry reversible — names are for reading, ids are for undoing. */
   logTx({ type, team: (S.teams[ti]||{}).name || ('Team '+(ti+1)), teamIndex: ti,
+          playerId: String(p.playerId||p.id||''),
           player: p.name||'', pos: p.pos||'', nfl: p.nfl||p.team||'' });
+}
+/* Commissioner-only reversal. The log stays append-only: the original entry is marked undone
+   rather than deleted, and the reversal is recorded as its own entry, so the record shows what
+   happened AND that it was taken back. */
+function txPlayerId(x){
+  if(x.playerId) return x.playerId;
+  const nm=String(x.player||'').toLowerCase();          /* entries logged before ids were stored */
+  const onBoard=(realDraft().picks||[]).find(p=>String(p.name||'').toLowerCase()===nm);
+  if(onBoard) return onBoard.playerId;
+  const inPool=(typeof POOL!=='undefined'?POOL:[]).find(q=>String(q.name||'').toLowerCase()===nm);
+  return inPool ? inPool.id : '';
+}
+function txCanUndo(x){
+  if(!x || x.undone) return false;
+  if(x.type==='add'||x.type==='drop') return true;
+  return x.type==='trade' && Number.isInteger(x.a) && Number.isInteger(x.b);
+}
+async function undoTx(id){
+  if(!isAdmin()){ toast('Commissioner only.'); return; }
+  const x = txMap[id]; if(!txCanUndo(x)) return;
+  const what = x.type==='trade'
+    ? `Undo the trade between ${x.team} and ${x.teamB}? Players and picks go back where they were.`
+    : `Undo: ${x.type==='add'?'add':'drop'} of ${x.player} by ${x.team}?`;
+  if(!confirm(what)) return;
+
+  const d = realDraft();
+  if(x.type==='add'){
+    const pid = x.playerId || ((d.picks.find(p=>p.teamIndex===x.teamIndex && !p.cut && p.name===x.player)||{}).playerId);
+    if(!pid){ toast("Can't find that player on the roster — nothing to undo."); return; }
+    cutPick(x.teamIndex, pid, d);
+    saveRealDraft(d); saveState(); pushTeamData(x.teamIndex);
+  } else if(x.type==='drop'){
+    const pid = txPlayerId(x);
+    if(!pid){ toast("Can't identify that player — undo it by hand."); return; }
+    if(d.picks.some(p=>p.playerId===pid && !p.cut)){ toast('Someone already has that player.'); return; }
+    /* a dropped draft pick is still on the board flagged cut — un-flag it rather than adding a
+       duplicate, so the draft board keeps its history */
+    const cut = d.picks.find(p=>p.playerId===pid && p.cut && p.teamIndex===x.teamIndex);
+    if(cut) delete cut.cut;
+    else d.picks.push({pickIndex:-1, teamIndex:x.teamIndex, playerId:pid, name:x.player, pos:x.pos, nfl:x.nfl, auto:false, add:true});
+    saveRealDraft(d); saveState(); pushTeamData(x.teamIndex);
+  } else {
+    /* swap the sides back. Rounds are passed empty and the original pick transfers removed
+       instead — re-running them in reverse would leave both directions recorded. */
+    applyTradeParts(x.b, x.a, x.pa||[], x.pb||[], [], [], x.py, null, true);
+    const nmA=x.team, nmB=x.teamB, py=x.py;
+    S.pickTrades = (S.pickTrades||[]).filter(t=>{
+      const yr = pickYearOf(t);
+      const fwdA = (x.ra||[]).some(r=>+t.round===+r) && t.from===nmA && t.to===nmB && yr===py;
+      const fwdB = (x.rb||[]).some(r=>+t.round===+r) && t.from===nmB && t.to===nmA && yr===py;
+      return !(fwdA||fwdB);
+    });
+    saveState(); pushTeamData(x.a); pushTeamData(x.b);
+  }
+
+  try{ await window.FB.dbUpdate(`${txPath()}/${id}`, {undone:true, undoneAt:Date.now(), undoneBy:(window.fbUser&&window.fbUser.uid)||''}); }catch(e){}
+  txMap[id] = {...x, undone:true, undoneAt:Date.now()};
+  logTx({ type:'undo', team:x.team, teamB:x.teamB||'', player:x.player||'', pos:x.pos||'', nfl:x.nfl||'',
+          of:id, ofType:x.type });
+  renderTeams(); refreshDraftUI(); renderTransactions();
+  toast('Move undone');
 }
 function renderTransactions(){
   const el=document.getElementById('txList'); if(!el) return;
@@ -4794,7 +4858,7 @@ function renderTransactions(){
      while the filter is still holding the old value. The control then lies about what it is
      filtering and the list looks empty for no visible reason. */
   if(window.txTeam && window.txTeam!=='all' && !names.includes(window.txTeam)) window.txTeam='all';
-  if(!['all','trade','add','drop'].includes(window.txFilter||'all')) window.txFilter='all';
+  if(!['all','trade','add','drop','undo'].includes(window.txFilter||'all')) window.txFilter='all';
   if(sel){
     const cur=window.txTeam||'all';
     sel.innerHTML=`<option value="all" ${cur==='all'?'selected':''}>All teams</option>`+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
@@ -4828,26 +4892,38 @@ function renderTransactions(){
   el.innerHTML = list.map(x=>{
     const mgr = x.by ? managerNameFor(x.by, '') : '';
     const stamp = `${when(x.at)}${mgr?` · ${esc(mgr)}`:''}`;
-    if(x.type==='trade'){
-      return `<div class="card" style="margin-bottom:10px;border-left:3px solid var(--turf)">
-        <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
-          <h2 style="margin:0;font-size:17px">🤝 ${esc(x.team)} <span style="color:var(--chalk-dim)">⇄</span> ${esc(x.teamB||'')}</h2>
+    const undoBtn = (isAdmin() && txCanUndo(x))
+      ? `<button class="btn ghost" style="padding:2px 9px;font-size:11px" title="Put everything back the way it was" onclick="undoTx('${x.id}')">Undo</button>` : '';
+    const undoneTag = x.undone ? `<span class="divtag" style="opacity:.8">undone</span>` : '';
+    const dim = x.undone ? 'opacity:.55;' : '';
+    if(x.type==='undo'){
+      return `<div class="card" style="margin-bottom:8px;padding:9px 14px;border-left:3px solid var(--chalk-dim);opacity:.75">
+        <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>↩︎ <b>Reversed</b> a ${esc(x.ofType||'move')}${x.player?` — ${esc(x.player)}`:''}${x.team?` <span style="color:var(--chalk-dim)">· ${esc(x.team)}</span>`:''}</span>
           <span class="sub" style="margin:0;font-size:12px">${stamp}</span>
+        </div>
+      </div>`;
+    }
+    if(x.type==='trade'){
+      return `<div class="card" style="margin-bottom:10px;border-left:3px solid var(--turf);${dim}">
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <h2 style="margin:0;font-size:17px">🤝 ${esc(x.team)} <span style="color:var(--chalk-dim)">⇄</span> ${esc(x.teamB||'')} ${undoneTag}</h2>
+          <span class="row" style="gap:8px;align-items:center"><span class="sub" style="margin:0;font-size:12px">${stamp}</span>${undoBtn}</span>
         </div>
         <p class="sub" style="margin:6px 0 2px"><b>${esc(x.team)}</b> sent: ${(x.aGave||[]).map(esc).join(', ')||'nothing'}</p>
         <p class="sub" style="margin:0"><b>${esc(x.teamB||'')}</b> sent: ${(x.bGave||[]).map(esc).join(', ')||'nothing'}</p>
       </div>`;
     }
     const isAdd = x.type==='add';
-    return `<div class="card" style="margin-bottom:8px;padding:10px 14px;border-left:3px solid ${isAdd?'var(--rb)':'var(--danger)'}">
+    return `<div class="card" style="margin-bottom:8px;padding:10px 14px;border-left:3px solid ${isAdd?'var(--rb)':'var(--danger)'};${dim}">
       <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="min-width:0">
           <b style="color:${isAdd?'var(--rb)':'var(--danger)'}">${isAdd?'+ Added':'− Dropped'}</b>
           ${x.pos?`<span class="postag pos-${esc(x.pos)}" style="--pc:var(--${esc(String(x.pos).toLowerCase())});margin:0 6px">${esc(x.pos)}</span>`:''}
           <b>${esc(x.player||'')}</b>${x.nfl?` <span style="color:var(--chalk-dim);font-size:12px">${esc(x.nfl)}</span>`:''}
-          <span style="color:var(--chalk-dim)"> · ${esc(x.team||'')}</span>
+          <span style="color:var(--chalk-dim)"> · ${esc(x.team||'')}</span> ${undoneTag}
         </span>
-        <span class="sub" style="margin:0;font-size:12px">${stamp}</span>
+        <span class="row" style="gap:8px;align-items:center"><span class="sub" style="margin:0;font-size:12px">${stamp}</span>${undoBtn}</span>
       </div>
     </div>`;
   }).join('');
@@ -6689,7 +6765,7 @@ function tradePartsText(o){
   return { aGave:[...pn(o.pa), ...pk(o.ra,o.py)], bGave:[...pn(o.pb), ...pk(o.rb,o.py)] };
 }
 /* shared apply step \u2014 moves players + picks and logs the trade (commissioner-authoritative) */
-function applyTradeParts(ai, bi, paIds, pbIds, raS, rbS, py, txKey){
+function applyTradeParts(ai, bi, paIds, pbIds, raS, rbS, py, txKey, silent){
   const d = realDraft();
   const nmA = S.teams[ai].name, nmB = S.teams[bi].name;
   const giveA = d.picks.filter(p=>p.teamIndex===ai && !p.cut && (paIds||[]).includes(p.playerId));
@@ -6702,8 +6778,13 @@ function applyTradeParts(ai, bi, paIds, pbIds, raS, rbS, py, txKey){
   (rbS||[]).forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===+r && t.from===nmB && pickYearOf(t)===py)) S.pickTrades.push({round:+r, from:nmB, to:nmA, year:py}); });
   const aGave=[...giveA.map(p=>p.name), ...(raS||[]).slice().sort((x,y)=>x-y).map(r=>`${py} Round ${r} pick`)];
   const bGave=[...giveB.map(p=>p.name), ...(rbS||[]).slice().sort((x,y)=>x-y).map(r=>`${py} Round ${r} pick`)];
+  if(silent){ saveState(); return {aGave,bGave}; }     /* an undo records itself, not a new trade */
   S.trades.push({ t: Date.now(), a: nmA, b: nmB, aGave, bGave });
-  logTx({ type:'trade', team:nmA, teamB:nmB, aGave, bGave }, txKey ? 'tr_'+String(txKey).replace(/[.#$\[\]\/]/g,'_') : null);
+  /* the raw sides too: aGave/bGave are display text, and "2026 Round 3 pick" cannot be undone */
+  logTx({ type:'trade', team:nmA, teamB:nmB, aGave, bGave,
+          a:ai, b:bi, pa:(paIds||[]).slice(), pb:(pbIds||[]).slice(),
+          ra:(raS||[]).slice(), rb:(rbS||[]).slice(), py },
+        txKey ? 'tr_'+String(txKey).replace(/[.#$\[\]\/]/g,'_') : null);
   saveState();
   return {aGave,bGave};
 }
@@ -7536,7 +7617,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · sidebar stays put';
+const BUILD_STAMP = '2026-08-02 · undo transactions';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
