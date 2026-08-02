@@ -8,11 +8,12 @@
    Live data (Firebase, Sleeper, ESPN) is never cached — it must always be current, and a
    stale scoreboard is worse than no scoreboard. */
 
-const VERSION = 'bbl-v2';   /* bump to retire the v1 cache, which could serve a stale page */
+const VERSION = 'bbl-v3';   /* bump to retire the v1 cache, which could serve a stale page */
 const SHELL = [
   './',
   './index.html',
   './icon-192.png',
+  './favicon-32.png',
   './icon-512.png',
   './apple-touch-icon.png',
   './manifest.json'
