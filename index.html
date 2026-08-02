@@ -1619,6 +1619,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 .auth-google{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:11px;border:1px solid var(--line,#dfe4ee);border-radius:10px;background:#fff;color:#1a1a1a;font-weight:700;font-size:14px;cursor:pointer}
 .auth-google:hover{background:#f4f6fb}
 .auth-g-ic{width:17px;height:17px;flex:0 0 17px}
+.auth-keep{display:flex;align-items:center;gap:8px;margin:2px 0 10px;
+  font-family:var(--f-ui);font-size:14px;color:var(--chalk-dim);cursor:pointer}
+.auth-keep input{width:auto;margin:0;cursor:pointer}
 .auth-or{text-align:center;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted,#9aa3b4);margin:14px 0;position:relative}
 .auth-or:before,.auth-or:after{content:"";position:absolute;top:50%;width:38%;height:1px;background:var(--line,#e2e6ef)}
 .auth-or:before{left:0}.auth-or:after{right:0}
@@ -1656,6 +1659,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <form id="authForm" onsubmit="window.authSubmit();return false">
         <input id="authEmail" name="email" type="email" placeholder="Email" autocomplete="username">
         <input id="authPass" name="password" type="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go">
+        <label class="auth-keep"><input type="checkbox" id="authKeep" checked> Keep me signed in</label>
         <div class="auth-err" id="authErr"></div>
         <button class="auth-primary" id="authSubmit" type="submit">Sign in</button>
       </form>
@@ -4437,6 +4441,8 @@ let authMode = 'login';
 function fbReady(){ return !!(window.FB && window.FB.auth); }
 function openAuth(){
   const ov=document.getElementById('authOverlay'); if(!ov) return;
+  { const k=document.getElementById('authKeep');
+    if(k){ try{ k.checked = localStorage.getItem('ffl_keep')!=='0'; }catch(e){ k.checked=true; } } }
   const u=window.fbUser;
   document.getElementById('authFormWrap').style.display = u ? 'none':'block';
   document.getElementById('authAccount').style.display = u ? 'block':'none';
@@ -4472,8 +4478,21 @@ const AUTH_ERRS = {
   'auth/network-request-failed':'Network error — check your connection.'
 };
 function authErr(err){ setAuthErr(AUTH_ERRS[err && err.code] || (err && err.message) || 'Something went wrong.'); }
+/* Persistence was already 'local', so a session is meant to outlive closing the app. What
+   actually signs people out is storage eviction: Firebase keeps the session in IndexedDB, and
+   Safari clears script-writable storage after about a week of not opening a site. Asking for
+   persistent storage is the part that genuinely extends it — granted readily for an installed
+   Home Screen app, which is why installing matters more than any checkbox here. */
+async function applyKeepSignedIn(){
+  const keep = !(document.getElementById('authKeep') && !document.getElementById('authKeep').checked);
+  try{ localStorage.setItem('ffl_keep', keep?'1':'0'); }catch(e){}
+  try{ if(window.FB && window.FB.setPersist) await window.FB.setPersist(keep); }catch(e){}
+  if(keep){ try{ if(navigator.storage && navigator.storage.persist) await navigator.storage.persist(); }catch(e){} }
+  return keep;
+}
 async function authSubmit(){
   if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
+  await applyKeepSignedIn();
   const email=(document.getElementById('authEmail').value||'').trim();
   const pass=document.getElementById('authPass').value||'';
   if(!email){ setAuthErr('Enter your email.'); return; }
@@ -4488,6 +4507,7 @@ async function authSubmit(){
 }
 async function doGoogle(){
   if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
+  await applyKeepSignedIn();
   try{ await window.FB.google(); closeAuth(); }
   catch(err){ authErr(err); }
 }
@@ -7487,7 +7507,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · tab icons';
+const BUILD_STAMP = '2026-08-02 · keep me signed in';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -8264,7 +8284,8 @@ if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('af
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence }
+         signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence,
+         browserSessionPersistence }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp, query, limitToLast, runTransaction }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
@@ -8283,7 +8304,12 @@ const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getDatabase(app);
 const gprov = new GoogleAuthProvider();
-try { await setPersistence(auth, browserLocalPersistence); } catch(e){}
+/* 'local' survives closing the app; 'session' ends with it. Default local — unchecking
+   "Keep me signed in" is the only way to get the session-only behaviour. */
+try { await setPersistence(auth, (localStorage.getItem('ffl_keep')==='0') ? browserSessionPersistence : browserLocalPersistence); } catch(e){}
+/* Re-ask each load: the browser can refuse early on and grant it later once the app is
+   installed or has been used a few times. */
+try { if(localStorage.getItem('ffl_keep')!=='0' && navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
 
 /* Records a failed live read so the UI can distinguish "you are not allowed to see this" from
    "there is nothing here". Those two look identical otherwise, and the second is a lie. */
@@ -8308,6 +8334,7 @@ window.FB = {
   login:  (e,p) => signInWithEmailAndPassword(auth, e, p),
   google: ()    => signInWithPopup(auth, gprov),
   logout: ()    => signOut(auth),
+  setPersist: (keep) => setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence),
   /* Realtime Database helpers (path-based) */
   dbGet:    (p)    => get(ref(db, p)).then(s => s.val()),
   /* Writes report before rethrowing. Almost every call site ends in .catch(()=>{}) so a write
