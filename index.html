@@ -3157,6 +3157,8 @@ function markSettingsDirty(){ if(window.currentView!=='settings') return; if(!wi
 /* A refused read arrives after the view has already drawn its empty state, so repaint to replace
    "nothing here" with the real reason. */
 window.onFbReadError = function(){ try{ if(window.currentView==='trades') renderOffers(); }catch(e){} };
+/* a rejected write should repaint the log so the reason appears without a manual refresh */
+window.onFbWriteError = function(path){ try{ if(String(path).indexOf('/transactions')>=0 && window.currentView==='trades' && window.trTab==='moves') renderTransactions(); }catch(e){} };
 function updateApplyBar(){ const b=document.getElementById('applyBar'); if(b) b.classList.toggle('on', !!window.settingsDirty && window.currentView==='settings'); }
 function applySettings(){ window.settingsDirty=false; window._setSnap=JSON.stringify(S); pushSettings(true); updateApplyBar(); toast('Settings applied ✓'); }
 function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar(); try{ renderSettings(); renderHome(); }catch(e){} }
@@ -4621,9 +4623,15 @@ function renderTransactions(){
   const cnt=document.getElementById('txCount');
   if(cnt) cnt.textContent = list.length===all.length ? `${all.length} total` : `${list.length} of ${all.length}`;
   if(!all.length){
-    el.innerHTML=`<div class="card"><p class="sub" style="margin:0">${err
-      ? 'Cannot load the transaction log ('+esc(err)+').'
-      : (window.fbUser ? 'No moves logged yet. Trades, adds and drops appear here as they happen.' : "Sign in to see the league's transactions.")}</p></div>`;
+    /* A rejected write is the difference between "nothing happened" and "everything happened but
+       could not be saved" — the log looks identical either way, which is what made this hard to
+       spot. */
+    const wkey = Object.keys(window.FB_WERR||{}).find(k=>k.indexOf('/transactions')>=0);
+    const why = err ? 'Cannot load the transaction log (' + esc(err) + ').'
+      : wkey ? 'Moves are being made but cannot be saved to the log (' + esc(window.FB_WERR[wkey]) + '). The database rules need to allow league/main/transactions.'
+      : (window.fbUser ? 'No moves logged yet. Trades, adds and drops appear here as they happen.'
+                       : "Sign in to see the league's transactions.");
+    el.innerHTML=`<div class="card"><p class="sub" style="margin:0">${why}</p></div>`;
     return;
   }
   if(!list.length){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">Nothing matches that filter.</p></div>`; return; }
@@ -8063,6 +8071,13 @@ try { await setPersistence(auth, browserLocalPersistence); } catch(e){}
 /* Records a failed live read so the UI can distinguish "you are not allowed to see this" from
    "there is nothing here". Those two look identical otherwise, and the second is a lie. */
 window.FB_ERR = {};
+window.FB_WERR = {};
+function fbWriteFailed(path, err){
+  const code = (err && (err.code || err.message)) ? String(err.code || err.message) : 'unknown';
+  window.FB_WERR[path] = code;
+  console.error('[BBL] cannot write "' + path + '":', code);
+  try{ if(typeof window.onFbWriteError === 'function') window.onFbWriteError(path, code); }catch(e){}
+}
 function fbReadFailed(path, err){
   const code = (err && (err.code || err.message)) ? String(err.code || err.message) : 'unknown';
   window.FB_ERR[path] = code;
@@ -8078,9 +8093,12 @@ window.FB = {
   logout: ()    => signOut(auth),
   /* Realtime Database helpers (path-based) */
   dbGet:    (p)    => get(ref(db, p)).then(s => s.val()),
-  dbSet:    (p, v) => set(ref(db, p), v),
-  dbUpdate: (p, v) => update(ref(db, p), v),
-  dbRemove: (p)    => remove(ref(db, p)),
+  /* Writes report before rethrowing. Almost every call site ends in .catch(()=>{}) so a write
+     the rules reject vanishes without trace — which is exactly how the transaction log came up
+     empty while every add and drop appeared to work. */
+  dbSet:    (p, v) => set(ref(db, p), v).catch(e => { fbWriteFailed(p, e); throw e; }),
+  dbUpdate: (p, v) => update(ref(db, p), v).catch(e => { fbWriteFailed(p, e); throw e; }),
+  dbRemove: (p)    => remove(ref(db, p)).catch(e => { fbWriteFailed(p, e); throw e; }),
   /* live subscribe; returns unsubscribe.
      The error callback is not optional in practice: without it a permission_denied never fires
      the value callback and never surfaces anywhere, so the feed just stays empty and the UI
