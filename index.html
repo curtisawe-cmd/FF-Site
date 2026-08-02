@@ -254,6 +254,11 @@ section.view > .viewhead{
   font-family:var(--f-ui);font-size:11.5px;color:var(--chalk-dim);opacity:.9}
 .mu-proj b{color:var(--turf)}
 @media(max-width:640px){ .mu-proj{grid-column:1/-1;text-align:center} }
+/* Weekly recap: plain text straight from the generator, so pre-wrap does the formatting and the
+   same string copies and posts to chat unchanged. Capped at 70ch on desktop for readability;
+   phones get the full width and a slightly smaller face. */
+.recap-body{white-space:pre-wrap;line-height:1.6;max-width:70ch;font-size:15px}
+@media(max-width:640px){ .recap-body{max-width:none;font-size:14px;line-height:1.55} }
 nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
 nav.tabs button{
   font-family:var(--f-ui);font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
@@ -6724,14 +6729,15 @@ function renderMatchupsHistory(yr){
     const mgr = mgrOf(yr,name);
     return `<span class="mu-team${right?' r':''}${win?' win':''}"><span class="mu-name"${win?' style="font-weight:700"':''}>${win?'🏈 ':''}${esc(name)}${mgr?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(mgr)}</span>`:''}</span></span>`;
   };
-  el.innerHTML = `
+  el.innerHTML = recapCardHTML(yr) + `
     <div class="card" style="margin-bottom:18px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <div class="row">
+        <div class="row" style="flex-wrap:wrap;gap:8px">
           <button class="btn ghost" ${wi<=0?'disabled':''} onclick="window.muHistWeek='${weeks[Math.max(wi-1,0)]}';renderMatchups()">◀</button>
           <select onchange="window.muHistWeek=this.value;renderMatchups()">${weeks.map(w=>`<option value="${w}" ${w===wk?'selected':''}>Week ${w}</option>`).join('')}</select>
           <button class="btn ghost" ${wi>=weeks.length-1?'disabled':''} onclick="window.muHistWeek='${weeks[Math.min(wi+1,weeks.length-1)]}';renderMatchups()">▶</button>
           ${muSeasonSelect(yr)}
+          <button class="btn ghost" onclick='rcGenerate(${JSON.stringify(String(yr))},${JSON.stringify(String(wk))})' title="Write up this week from the archived scores">Recap</button>
         </div>
         <span class="eyebrow" style="margin:0">${yr} season · league archive</span>
       </div>
@@ -6764,6 +6770,174 @@ function renderMatchupsHistory(yr){
       }).join('') || '<p class="sub">No games saved for this week.</p>'}
     </div>`;
 }
+/* =====================================================
+   Weekly recap generator
+
+   No API, no key, no cost. Every number below is read straight out of S.season, so the recap
+   cannot invent a result — only the wording varies. "Rewrite" reshuffles the phrasing, not the
+   facts, which is why it is safe to hand the output straight to chat.
+===================================================== */
+/* verbs banded by margin — a 2-point escape and a 50-point beating should not read the same */
+const RC_VERBS = {
+  tie:     ['tied','split it with','went the distance and settled for a draw with'],
+  razor:   ['survived','escaped','stole one from','won a coin flip against','hung on against'],
+  close:   ['edged','held off','squeaked past','outlasted'],
+  solid:   ['beat','got past','took care of','came out ahead of','handled'],
+  big:     ['rolled past','put away','had no trouble with','pulled away from'],
+  blowout: ['buried','dismantled','ran straight over','left nothing standing against','took the roof off']
+};
+function rcPick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function rcVerb(margin){
+  if(margin===0)   return rcPick(RC_VERBS.tie);
+  if(margin < 3)   return rcPick(RC_VERBS.razor);
+  if(margin < 10)  return rcPick(RC_VERBS.close);
+  if(margin < 25)  return rcPick(RC_VERBS.solid);
+  if(margin < 40)  return rcPick(RC_VERBS.big);
+  return rcPick(RC_VERBS.blowout);
+}
+/* One pair of finals, normalised so the live board and the NFL.com archive produce the same
+   shape. Teams are keyed by name rather than index because the archive has no team indices. */
+function rcGame(nameA, pa, nameB, pb){
+  if(pa===null||pb===null||nameA==null||nameB==null) return null;
+  pa=+pa; pb=+pb;
+  if(!isFinite(pa)||!isFinite(pb)) return null;
+  const win = pa===pb ? null : (pa>pb ? 0 : 1);
+  return { name:[nameA,nameB], pts:[pa,pb], win, margin: Math.abs(pa-pb),
+           wName: win===null?null:[nameA,nameB][win],
+           lName: win===null?null:[nameA,nameB][1-win],
+           wPts: Math.max(pa,pb), lPts: Math.min(pa,pb) };
+}
+/* current W/L run per team name, by replaying every scored week up to and including `upto` */
+function rcStreaks(weekGames, upto){
+  const st = {};
+  const bump = (nm,kind)=>{ const s = st[nm] = st[nm]||{run:0,kind:''};
+                            if(s.kind===kind) s.run++; else { s.kind=kind; s.run=1; } };
+  for(let w=1; w<=upto; w++){
+    (weekGames(w)||[]).forEach(g=>{
+      if(!g) return;
+      if(g.win===null){ bump(g.name[0],'T'); bump(g.name[1],'T'); }
+      else { bump(g.wName,'W'); bump(g.lName,'L'); }
+    });
+  }
+  return st;
+}
+/* facts only, no wording yet. null when that week has no finals. */
+function rcFacts(games, label, weekGames, upto, leader){
+  if(!games.length) return null;
+  const scores = [];
+  games.forEach(g=>{ scores.push({name:g.name[0],pts:g.pts[0]});
+                     scores.push({name:g.name[1],pts:g.pts[1]}); });
+  scores.sort((a,b)=>b.pts-a.pts);
+  const byMargin = [...games].sort((a,b)=>b.margin-a.margin);
+  return { label, games, scores,
+           top: scores[0], low: scores[scores.length-1],
+           avg: scores.reduce((s,t)=>s+t.pts,0)/scores.length,
+           blowout: byMargin[0], closest: byMargin[byMargin.length-1],
+           streaks: rcStreaks(weekGames, upto), leader };
+}
+/* live season, straight off S.season */
+function rcWeekLive(wk){
+  if(!S.season || !S.season.schedule) return null;
+  const wkGames = w => (S.season.schedule[String(w)]||[]).map((g,m)=>{
+    const [pa,pb] = mScore(String(w),m);
+    const A = S.teams[g[0]], B = S.teams[g[1]];
+    return (A&&B) ? rcGame(A.name,pa,B.name,pb) : null;
+  }).filter(Boolean);
+  const lead = seasonStandings()[0] || null;
+  return rcFacts(wkGames(wk), `Week ${+wk}`, wkGames, +wk, lead);
+}
+/* archive year, straight off the imported NFL.com results */
+function rcWeekHist(yr, wk){
+  const byWk = (S.history && S.history.resultsByWeek && S.history.resultsByWeek[yr]) || null;
+  if(!byWk) return null;
+  const wkGames = w => (byWk[String(w)]||[]).map(g=>rcGame(g.ta,g.pa,g.tb,g.pb)).filter(Boolean);
+  return rcFacts(wkGames(wk), `Week ${wk}, ${yr}`, wkGames, +wk, null);
+}
+/* plain text on purpose: it renders in the card, copies clean, and posts to chat unchanged */
+function rcBuild(yr, wk){
+  const D = (String(yr)==='live') ? rcWeekLive(wk) : rcWeekHist(String(yr), wk);
+  if(!D) return null;
+  const n1 = n => n.toFixed(1);
+  const L = [`${D.label.toUpperCase()} RECAP`, ''];
+
+  L.push(rcPick([
+    `${D.top.name} led the week with ${n1(D.top.pts)}, against a league average of ${n1(D.avg)}.`,
+    `Nobody outscored ${D.top.name} this week — ${n1(D.top.pts)} on the board. The league averaged ${n1(D.avg)}.`,
+    `High score of the week goes to ${D.top.name} at ${n1(D.top.pts)}, about ${n1(D.top.pts-D.avg)} clear of the league average.`
+  ]));
+  /* Only call the blowout out up top when it wasn't the high scorer doing it — otherwise the
+     opener and that team's own game line say the same thing two different ways. */
+  if(D.blowout.margin >= 25 && D.blowout.wName !== D.top.name) L.push(rcPick([
+    `The beating of the week was ${D.blowout.wName} over ${D.blowout.lName} by ${n1(D.blowout.margin)}.`,
+    `${D.blowout.lName} would like this one struck from the record. ${D.blowout.wName} took it by ${n1(D.blowout.margin)}.`,
+    `${D.blowout.wName} won by ${n1(D.blowout.margin)} over ${D.blowout.lName}, which is less a game than a public service announcement.`
+  ]));
+  L.push('');
+
+  D.games.forEach(g=>{
+    if(g.win===null){ L.push(`${g.name[0]} and ${g.name[1]} ${rcVerb(0)} at ${n1(g.pts[0])}.`); return; }
+    let line = `${g.wName} ${rcVerb(g.margin)} ${g.lName}, ${n1(g.wPts)} to ${n1(g.lPts)}.`;
+    const sw = D.streaks[g.wName], sl = D.streaks[g.lName];
+    if(sw && sw.kind==='W' && sw.run>=3) line += ` That is ${sw.run} straight.`;
+    else if(sl && sl.kind==='L' && sl.run>=3) line += ` ${g.lName} has now dropped ${sl.run} in a row.`;
+    L.push(line);
+  });
+  L.push('');
+
+  if(D.closest.margin>0 && D.closest.margin<8)
+    L.push(`- Closest game: ${D.closest.wName} by ${n1(D.closest.margin)} over ${D.closest.lName}.`);
+  L.push(`- Low score of the week: ${D.low.name}, ${n1(D.low.pts)}.`);
+  const hot = Object.entries(D.streaks).filter(([,s])=>s.kind==='W'&&s.run>=3).sort((a,b)=>b[1].run-a[1].run)[0];
+  if(hot) L.push(`- Hottest team: ${hot[0]}, ${hot[1].run} wins in a row.`);
+  if(D.leader) L.push(`- Top of the table: ${D.leader.name} at ${D.leader.w}-${D.leader.l}${D.leader.t?'-'+D.leader.t:''}, ${n1(D.leader.pf)} points for.`);
+
+  return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+function rcGenerate(yr, wk){
+  const t = rcBuild(yr, wk);
+  if(!t){ toast(`No final scores for week ${wk} yet.`); return; }
+  window.muRecap = t; window.muRecapWk = wk; window.muRecapYr = String(yr);
+  renderMatchups();
+  const c = document.getElementById('recapCard');
+  if(c) c.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function rcClose(){ window.muRecap = null; renderMatchups(); }
+function rcCopy(){
+  const t = window.muRecap || ''; if(!t) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(()=>toast('Recap copied.'),
+      ()=>toast("Couldn't copy — select the text and copy it by hand."));
+  } else toast("This browser won't let the page copy — select the text and copy it by hand.");
+}
+async function rcPost(){
+  if(!requireAdmin()) return;
+  const t = window.muRecap; if(!t) return;
+  if(!fbOk() || !window.fbUser){ toast('Sign in to post to chat.'); return; }
+  const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
+  try{
+    await window.FB.dbSet(chatPath()+'/'+key, { uid: window.fbUser.uid, n:'League Desk', m:t, t:Date.now() });
+    toast('Recap posted to chat.');
+  }catch(e){ toast("Couldn't post — try again."); }
+}
+/* `ctx` is the season currently on screen ('live' or a year). A recap written for a different
+   season stays hidden rather than following you around the season dropdown. */
+function recapCardHTML(ctx){
+  if(!window.muRecap || String(window.muRecapYr) !== String(ctx)) return '';
+  const yrArg = JSON.stringify(String(window.muRecapYr)), wkArg = JSON.stringify(String(window.muRecapWk));
+  return `<div class="card" id="recapCard" style="margin-bottom:18px">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <span class="eyebrow" style="margin:0">Week ${esc(String(window.muRecapWk))}${String(window.muRecapYr)==='live'?'':' · '+esc(String(window.muRecapYr))} recap</span>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" onclick='rcGenerate(${yrArg},${wkArg})'>Rewrite</button>
+        <button class="btn ghost" onclick="rcCopy()">Copy</button>
+        <button class="btn admin-only" onclick="rcPost()">Post to chat</button>
+        <button class="btn ghost" onclick="rcClose()">Close</button>
+      </div>
+    </div>
+    <div class="recap-body">${esc(window.muRecap)}</div>
+    <p class="sub" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>
+  </div>`;
+}
 function renderMatchups(){
   const el = document.getElementById('matchupsView');
   /* a chosen archive year overrides the live board until switched back */
@@ -6786,14 +6960,15 @@ function renderMatchups(){
   const teamOpts = sel => S.teams.map((t,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(t.name)}</option>`).join('');
   const rows = seasonStandings();
   const anyScores = rows.some(r=>r.w+r.l+r.t>0);
-  el.innerHTML = `
+  el.innerHTML = recapCardHTML('live') + `
     <div class="card" style="margin-bottom:18px">
-      <div class="row" style="justify-content:space-between;margin-bottom:10px">
-        <div class="row">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div class="row" style="flex-wrap:wrap;gap:8px">
           <button class="btn ghost" ${+wk<=1?'disabled':''} onclick="window.muWeek=${+wk-1};renderMatchups()">\u25C0</button>
           <select onchange="window.muWeek=+this.value;renderMatchups()">${Array.from({length:REG_WEEKS},(_,i)=>`<option value="${i+1}" ${i+1===+wk?'selected':''}>Week ${i+1} \u00B7 ${nflWeekRange(i+1).label}</option>`).join('')}</select>
           <button class="btn ghost" ${+wk>=REG_WEEKS?'disabled':''} onclick="window.muWeek=${+wk+1};renderMatchups()">\u25B6</button>
           ${muSeasonSelect('live')}
+          <button class="btn ghost" onclick="rcGenerate('live',${JSON.stringify(String(wk))})" title="Write up this week from the final scores">Recap</button>
           <span class="wk-date"><span class="eyebrow" style="margin:0">NFL Week ${wk}</span>${nflWeekRange(+wk).label}, ${nflWeekRange(+wk).year}</span>
         </div>
         <div class="row">
@@ -7899,7 +8074,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · projection line centered';
+const BUILD_STAMP = '2026-08-02 · weekly recap generator';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
