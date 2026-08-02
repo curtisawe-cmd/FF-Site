@@ -1305,6 +1305,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <select id="txTeam" onchange="window.txTeam=this.value;renderTransactions()" style="max-width:220px"></select>
       <span class="sub" id="txCount" style="margin:0"></span>
     </div>
+    <div id="txLedger"></div>
     <div id="txList"></div>
   </div>
 </section>
@@ -1500,6 +1501,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="How long the league gets to veto a trade after the other manager accepts it. Instant means accepted trades process straight away with no veto window.">Trade review window</label><select id="setTradeReview" style="max-width:200px" onchange="setTradeReview(this.value)"></select></div>
     </div>
     <p class="sub" id="tradeReviewNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
+    <div class="setgrid" style="margin-bottom:12px">
+      <div class="setrow"><label title="Charged to a team for every player it picks up, including players received in a trade.">Fee per add ($)</label><input type="number" step="0.25" min="0" id="setFeeAdd" style="max-width:110px" onchange="S.txFeeAdd=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
+      <div class="setrow"><label title="Charged for every player a team lets go, including players sent away in a trade. Draft picks are not charged.">Fee per drop ($)</label><input type="number" step="0.25" min="0" id="setFeeDrop" style="max-width:110px" onchange="S.txFeeDrop=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
+    </div>
     <div id="rulesInputs"></div>
   </div>
 
@@ -1781,6 +1786,8 @@ const DEFAULTS = {
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
+  txFeeAdd: 0.5,         /* league dues: charged per player added */
+  txFeeDrop: 0.5,        /* and per player dropped — so a full add/drop is a dollar */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
   tabFlashRandom: false, /* true = scatter around that number instead of landing on it exactly */
   mock: { team:0, auto:true },
@@ -4873,7 +4880,64 @@ async function undoTx(id){
   renderTeams(); refreshDraftUI(); renderTransactions();
   toast('Move undone');
 }
+/* ---- transaction dues ----
+   Every player movement is chargeable, which makes a trade cost both sides: each team drops
+   what it gave and adds what it got. A 1-for-1 is therefore an add plus a drop each. Draft
+   picks are not players and are not charged. Undone moves drop out of the ledger entirely —
+   a reversed transaction never really happened. */
+function txFees(){ return { add:+(S.txFeeAdd??0.5)||0, drop:+(S.txFeeDrop??0.5)||0 }; }
+function txIsPick(t){ return /round\s+\d+\s+pick/i.test(String(t||'')); }
+function txManagerFor(team){
+  const i=(S.teams||[]).findIndex(t=>t && t.name===team);
+  return (i>=0 && S.teams[i].manager) ? S.teams[i].manager : '';
+}
+function txLedger(){
+  const fees=txFees(), by={};
+  const bump=(team,k,n)=>{ if(!team||!n) return;
+    const e = by[team] || (by[team]={team, adds:0, drops:0, owed:0});
+    e[k]+=n; };
+  Object.keys(txMap||{}).forEach(id=>{
+    const x=txMap[id];
+    if(!x || x.undone || x.type==='undo') return;
+    if(x.type==='add')  bump(x.team,'adds',1);
+    else if(x.type==='drop') bump(x.team,'drops',1);
+    else if(x.type==='trade'){
+      const aP=(x.aGave||[]).filter(t=>!txIsPick(t)).length;
+      const bP=(x.bGave||[]).filter(t=>!txIsPick(t)).length;
+      bump(x.team,'drops',aP);  bump(x.team,'adds',bP);
+      bump(x.teamB,'drops',bP); bump(x.teamB,'adds',aP);
+    }
+  });
+  const rows=Object.keys(by).map(k=>by[k]);
+  rows.forEach(e=>{ e.owed = e.adds*fees.add + e.drops*fees.drop; e.manager = txManagerFor(e.team); });
+  return rows.sort((a,b)=> b.owed-a.owed || a.team.localeCompare(b.team));
+}
+function renderTxLedger(){
+  const el=document.getElementById('txLedger'); if(!el) return;
+  const rows=txLedger(), fees=txFees();
+  if(!rows.length){ el.innerHTML=''; return; }
+  const money=n=>'$'+n.toFixed(2);
+  const total=rows.reduce((s,r)=>s+r.owed,0);
+  el.innerHTML=`<div class="card" style="margin-bottom:14px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:17px">Dues owed</h2>
+      <span class="sub" style="margin:0;font-size:12px">${money(fees.add)} per add · ${money(fees.drop)} per drop · league total <b>${money(total)}</b></span>
+    </div>
+    <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px">
+      <tr style="border-bottom:1px solid var(--line);color:var(--chalk-dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em">
+        <td style="padding:4px 8px">Team</td><td style="padding:4px 8px;text-align:right">Adds</td>
+        <td style="padding:4px 8px;text-align:right">Drops</td><td style="padding:4px 8px;text-align:right">Owed</td></tr>
+      ${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
+        <td style="padding:5px 8px">${esc(r.team)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.adds}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.drops}</td>
+        <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);font-weight:700;color:var(--turf)">${money(r.owed)}</td>
+      </tr>`).join('')}
+    </table></div>
+  </div>`;
+}
 function renderTransactions(){
+  renderTxLedger();
   const el=document.getElementById('txList'); if(!el) return;
   const err=(window.FB_ERR||{})[txPath()];
   const all=Object.keys(txMap||{}).map(id=>({id,...(txMap[id]||{})}))
@@ -7595,6 +7659,8 @@ function renderSettings(){
   renderSnapExtras();
   renderTypography();
   renderTradeReview();
+  { const fa=document.getElementById('setFeeAdd'); if(fa) fa.value=String(S.txFeeAdd??0.5);
+    const fd=document.getElementById('setFeeDrop'); if(fd) fd.value=String(S.txFeeDrop??0.5); }
   lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
 }
 /* Populated from TRADE_REVIEW_CHOICES rather than hardcoded <option>s so the list and the
@@ -7646,7 +7712,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · undo older trades too';
+const BUILD_STAMP = '2026-08-02 · transaction dues';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
