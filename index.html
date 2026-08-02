@@ -197,11 +197,21 @@ header.top{
   :root[data-layout="side"] .ticker{left:212px}
 }
 
-/* ---- sticky view head: title, blurb and sub-tabs stay put while the page scrolls ---- */
-.viewhead{position:sticky;top:var(--hdr-h,72px);z-index:15;background:var(--bg);
+/* ---- sticky view head: title, blurb and sub-tabs stay put while the page scrolls ----
+   The doubled selector is not redundant. The ghost-watermark rule below sets
+   `section.view[data-ghost] > * { position:relative }` at specificity (0,2,1); a bare
+   `.viewhead` is (0,1,0) and loses, which pinned nothing at all. Naming [data-ghost]
+   explicitly takes it to (0,3,1) so sticky wins outright regardless of source order. */
+section.view[data-ghost] > .viewhead,
+section.view > .viewhead{
+  position:sticky;top:var(--hdr-h,72px);z-index:15;background:var(--bg);
   padding-top:14px;margin-top:-14px;padding-bottom:6px;
-  box-shadow:0 10px 14px -12px rgba(0,0,0,.45)}
-@media(max-width:640px){ .viewhead{padding-top:12px;margin-top:-12px} }
+  box-shadow:0 10px 14px -12px rgba(0,0,0,.45);
+}
+@media(max-width:640px){
+  section.view[data-ghost] > .viewhead,
+  section.view > .viewhead{padding-top:12px;margin-top:-12px}
+}
 
 /* ---- burger + drawer: the sidebar layout's phone form ---- */
 .burger{display:none;align-items:center;justify-content:center;width:38px;height:38px;flex:0 0 auto;
@@ -812,8 +822,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 
 @media (prefers-reduced-motion: no-preference){
   /* --- lower third: page title slides in behind a red wipe, like a broadcast name plate --- */
-  .view.active > h1{animation:bcTitle 400ms cubic-bezier(.2,.85,.25,1) both;position:relative}
-  .view.active > h1::after{
+  .view.active > h1,
+  .view.active > .viewhead > h1{animation:bcTitle 400ms cubic-bezier(.2,.85,.25,1) both;position:relative}
+  .view.active > h1::after,
+  .view.active > .viewhead > h1::after{
     content:'';position:absolute;left:0;bottom:-6px;height:4px;width:clamp(64px,22%,180px);
     background:linear-gradient(90deg,var(--charge),var(--turf));border-radius:2px;
     transform-origin:left center;animation:bcWipe 520ms cubic-bezier(.2,.9,.2,1) 90ms both;
@@ -7446,7 +7458,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · sticky page heads';
+const BUILD_STAMP = '2026-08-02 · view heads actually pin';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
