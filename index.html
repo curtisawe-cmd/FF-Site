@@ -4794,10 +4794,37 @@ function txPlayerId(x){
   const inPool=(typeof POOL!=='undefined'?POOL:[]).find(q=>String(q.name||'').toLowerCase()===nm);
   return inPool ? inPool.id : '';
 }
+/* Rebuild a trade's raw sides from the display text. Entries logged before the ids were stored
+   have only names and strings like "2026 Round 3 pick" — but the team names are there, and after
+   a trade each player sits on the OTHER team, which is enough to find them again. */
+function txTradeParts(x){
+  if(Number.isInteger(x.a) && Number.isInteger(x.b))
+    return {a:x.a, b:x.b, pa:x.pa||[], pb:x.pb||[], ra:x.ra||[], rb:x.rb||[], py:x.py||curDraftYear()};
+  const a=(S.teams||[]).findIndex(t=>t && t.name===x.team);
+  const b=(S.teams||[]).findIndex(t=>t && t.name===x.teamB);
+  if(a<0||b<0) return null;                       /* a team was renamed — cannot place it safely */
+  const picks=(realDraft().picks||[]);
+  let year=null;
+  const split=(list, nowOn)=>{
+    const ids=[], rounds=[];
+    (list||[]).forEach(txt=>{
+      const m=/^(\d{4})\s+Round\s+(\d+)\s+pick$/i.exec(String(txt).trim());
+      if(m){ year=+m[1]; rounds.push(+m[2]); return; }
+      const hit=picks.find(p=>!p.cut && p.teamIndex===nowOn && String(p.name)===String(txt));
+      if(hit) ids.push(hit.playerId);
+    });
+    return {ids, rounds};
+  };
+  const A=split(x.aGave, b);                      /* what A gave is now on B */
+  const B=split(x.bGave, a);
+  const gaveCount=(x.aGave||[]).length+(x.bGave||[]).length;
+  if(A.ids.length+A.rounds.length+B.ids.length+B.rounds.length !== gaveCount) return null;
+  return {a, b, pa:A.ids, pb:B.ids, ra:A.rounds, rb:B.rounds, py:year||curDraftYear()};
+}
 function txCanUndo(x){
   if(!x || x.undone) return false;
   if(x.type==='add'||x.type==='drop') return true;
-  return x.type==='trade' && Number.isInteger(x.a) && Number.isInteger(x.b);
+  return x.type==='trade' && !!txTradeParts(x);
 }
 async function undoTx(id){
   if(!isAdmin()){ toast('Commissioner only.'); return; }
@@ -4824,17 +4851,19 @@ async function undoTx(id){
     else d.picks.push({pickIndex:-1, teamIndex:x.teamIndex, playerId:pid, name:x.player, pos:x.pos, nfl:x.nfl, auto:false, add:true});
     saveRealDraft(d); saveState(); pushTeamData(x.teamIndex);
   } else {
+    const T = txTradeParts(x);
+    if(!T){ toast("Can't reverse this one — a team was renamed or a player has moved since."); return; }
     /* swap the sides back. Rounds are passed empty and the original pick transfers removed
        instead — re-running them in reverse would leave both directions recorded. */
-    applyTradeParts(x.b, x.a, x.pa||[], x.pb||[], [], [], x.py, null, true);
-    const nmA=x.team, nmB=x.teamB, py=x.py;
+    applyTradeParts(T.b, T.a, T.pa, T.pb, [], [], T.py, null, true);
+    const nmA=x.team, nmB=x.teamB, py=T.py;
     S.pickTrades = (S.pickTrades||[]).filter(t=>{
       const yr = pickYearOf(t);
-      const fwdA = (x.ra||[]).some(r=>+t.round===+r) && t.from===nmA && t.to===nmB && yr===py;
-      const fwdB = (x.rb||[]).some(r=>+t.round===+r) && t.from===nmB && t.to===nmA && yr===py;
+      const fwdA = (T.ra||[]).some(r=>+t.round===+r) && t.from===nmA && t.to===nmB && yr===py;
+      const fwdB = (T.rb||[]).some(r=>+t.round===+r) && t.from===nmB && t.to===nmA && yr===py;
       return !(fwdA||fwdB);
     });
-    saveState(); pushTeamData(x.a); pushTeamData(x.b);
+    saveState(); pushTeamData(T.a); pushTeamData(T.b);
   }
 
   try{ await window.FB.dbUpdate(`${txPath()}/${id}`, {undone:true, undoneAt:Date.now(), undoneBy:(window.fbUser&&window.fbUser.uid)||''}); }catch(e){}
@@ -7617,7 +7646,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · undo transactions';
+const BUILD_STAMP = '2026-08-02 · undo older trades too';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
