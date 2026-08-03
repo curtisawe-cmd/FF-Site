@@ -3841,9 +3841,14 @@ async function renderInjuries(){
 
 /* ---- player detail: career fantasy points (league scoring) + projection ---- */
 const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
-const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','xpm','xpmiss','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
+/* st_td sits here next to kr_td/pr_td because Sleeper files a return TD under EITHER that
+   pair OR st_td, never both, so scoring only the obvious pair misses more than half of them
+   (2025: st_td 27, kr_td+pr_td 22, zero players carrying both). Anything absent from this
+   list is stripped by slimSeason before season scoring ever sees it, so changing a formula
+   without adding the field here does nothing at all to season totals. */
+const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpmiss','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
 let STAT_CACHE={}, statsLoading=false, statsLoaded=false;
-function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue; if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm)) continue; const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; } m[id]=o; } return m; }
+function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue; if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm||p.st_td)) continue; const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; } m[id]=o; } return m; }
 async function loadCareerStats(){
   if(statsLoaded||statsLoading) return;
   statsLoading=true;
@@ -3863,7 +3868,7 @@ function scoreSeasonStats(st,pos){
   p+=g('pass_yd')*v("Passing yards (per yd)")+g('pass_td')*v("Passing TD")+g('pass_int')*v("Interception thrown")+g('pass_sack')*v("Sacked");
   p+=g('rush_att')*v("Rushing attempt")+g('rush_yd')*v("Rushing yards (per yd)")+g('rush_td')*v("Rushing TD");
   p+=g('rec')*v("Reception")+g('rec_yd')*v("Receiving yards (per yd)")+g('rec_td')*v("Receiving TD");
-  p+=(g('kr_td')+g('pr_td'))*v("Kick/punt return TD")+g('fum_rec_td')*v("Fumble recovered for TD")+g('fum_lost')*v("Fumble lost");
+  p+=(g('kr_td')+g('pr_td')+g('st_td'))*v("Kick/punt return TD")+g('fum_rec_td')*v("Fumble recovered for TD")+g('fum_lost')*v("Fumble lost");
   p+=(g('pass_2pt')+g('rush_2pt')+g('rec_2pt'))*v("2-pt conversion");
   p+=g('xpm')*v("PAT made")+g('xpmiss')*v("PAT missed");
   p+=g('fgm_0_19')*v("FG 0-19")+g('fgm_20_29')*v("FG 20-29")+g('fgm_30_39')*v("FG 30-39")+g('fgm_40_49')*v("FG 40-49")+g('fgm_50p')*v("FG 50+");
@@ -3893,7 +3898,7 @@ function scoreBreakdown(st,pos){
     ["Receiving TD", g('rec_td'), v("Receiving TD")],
     ["Receiving first down", g('rec_fd'), v("Receiving first down")],
     ["TE premium (per rec)", pos==='TE'?g('rec'):0, v("TE premium (per reception)")],
-    ["Kick/punt return TD", g('kr_td')+g('pr_td'), v("Kick/punt return TD")],
+    ["Kick/punt return TD", g('kr_td')+g('pr_td')+g('st_td'), v("Kick/punt return TD")],
     ["Fumble recovered for TD", g('fum_rec_td'), v("Fumble recovered for TD")],
     ["Fumble lost", g('fum_lost'), v("Fumble lost")],
     ["2-pt conversion", g('pass_2pt')+g('rush_2pt')+g('rec_2pt'), v("2-pt conversion")],
@@ -3958,7 +3963,7 @@ function scoreWeekStats(st, pos){
   p+=g('pass_yd')*v("Passing yards (per yd)")+g('pass_td')*v("Passing TD")+g('pass_int')*v("Interception thrown")+g('pass_sack')*v("Sacked");
   p+=g('rush_att')*v("Rushing attempt")+g('rush_yd')*v("Rushing yards (per yd)")+g('rush_td')*v("Rushing TD");
   p+=g('rec')*v("Reception")+g('rec_yd')*v("Receiving yards (per yd)")+g('rec_td')*v("Receiving TD");
-  p+=(g('kr_td')+g('pr_td'))*v("Kick/punt return TD")+g('fum_rec_td')*v("Fumble recovered for TD")+g('fum_lost')*v("Fumble lost");
+  p+=(g('kr_td')+g('pr_td')+g('st_td'))*v("Kick/punt return TD")+g('fum_rec_td')*v("Fumble recovered for TD")+g('fum_lost')*v("Fumble lost");
   p+=(g('pass_2pt')+g('rush_2pt')+g('rec_2pt'))*v("2-pt conversion");
   p+=g('xpm')*v("PAT made")+g('xpmiss')*v("PAT missed");
   p+=g('fgm_0_19')*v("FG 0-19")+g('fgm_20_29')*v("FG 20-29")+g('fgm_30_39')*v("FG 30-39")+g('fgm_40_49')*v("FG 40-49")+g('fgm_50p')*v("FG 50+");
@@ -6332,7 +6337,7 @@ function statLine(st, pos){
   if(g('rec'))      o.push(g('rec')+' Rec');
   if(g('rec_yd'))   o.push(g('rec_yd')+' Rec Yds');
   if(g('rec_td'))   o.push(g('rec_td')+' Rec TD');
-  if(g('kr_td')+g('pr_td')) o.push((g('kr_td')+g('pr_td'))+' Ret TD');
+  if(g('kr_td')+g('pr_td')+g('st_td')) o.push((g('kr_td')+g('pr_td')+g('st_td'))+' Ret TD');
   if(g('fum_lost')) o.push(g('fum_lost')+' Fum Lost');
   if(g('pass_2pt')+g('rush_2pt')+g('rec_2pt')) o.push('2PT');
   return o.join(', ');
@@ -8074,7 +8079,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-02 · weekly recap generator';
+const BUILD_STAMP = '2026-08-03 · return TD scoring fix';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
