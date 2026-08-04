@@ -5672,14 +5672,11 @@ function chatUnreadCount(){
   const since=getSeen('chat'), me=window.fbUser.uid;
   return (chatMsgs||[]).filter(m=>m && (+m.t||0)>since && m.uid!==me).length;   /* your own messages never count */
 }
+/* querySelectorAll, not querySelector: the phone drawer reuses class="tabs", so only the top
+   bar was ever getting the chat count. setTabBadge is defined with the trade badge. */
 function updateChatBadge(){
-  const btn=document.querySelector('nav.tabs button[data-view="chat"]'); if(!btn) return;
-  if(!btn.dataset.label) btn.dataset.label=btn.textContent.trim();
-  const n=chatUnreadCount();
-  const cur=btn.querySelector('.tabbadge');
-  if(!n){ if(cur) btn.innerHTML=btn.dataset.label; return; }
-  if(cur && cur.textContent===String(n)) return;
-  btn.innerHTML=`${btn.dataset.label}<span class="tabbadge">${n>99?'99+':n}</span>`;
+  const n = chatUnreadCount();
+  document.querySelectorAll('nav.tabs button[data-view="chat"]').forEach(b=>setTabBadge(b, n));
 }
 /* subscribe as soon as you're signed in, so unread counts work without opening the tab */
 /* who's in the room: everyone whose presence heartbeat landed in the last 2.5 minutes */
@@ -6531,6 +6528,9 @@ function goSub(k){
   }
   window.trTab = (k==='tx') ? 'moves' : 'trades';
   if(window.currentView!=='trades') showView('trades'); else setTrTab(window.trTab);
+  /* showView marks trades read on the way in, but hopping between sub-tabs while already on the
+     view never goes through it — without this the badge survives you staring right at the offers */
+  if(k==='tr'){ try{ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }catch(e){} }
   syncSubnav();
 }
 function setMuTab(t){
@@ -7596,14 +7596,27 @@ function tradeAlertCount(){
   });
   return n;
 }
-function updateTradeBadge(){
-  const btn = document.querySelector('nav.tabs button[data-view="trades"]'); if(!btn) return;
+/* Stamp a count onto a nav button, remembering its plain label so the badge can be taken off
+   again. Shared by the chat and trade badges — both need the same "don't re-animate an
+   unchanged number" behaviour. */
+function setTabBadge(btn, n){
+  if(!btn) return;
   if(!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
-  const n = tradeAlertCount();
+  const txt = n>99 ? '99+' : String(n);
   const cur = btn.querySelector('.tabbadge');
   if(!n){ if(cur) btn.innerHTML = btn.dataset.label; return; }
-  if(cur && cur.textContent === String(n)) return;                                 /* no needless re-animation */
-  btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${n}</span>`;
+  if(cur && cur.textContent === txt) return;                    /* no needless re-animation */
+  btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${txt}</span>`;
+}
+/* Trades moved inside Teams, so the old target — nav.tabs button[data-view="trades"] — stopped
+   existing and this badge had silently done nothing ever since. It now marks the Teams tab,
+   where trades now live, and every copy of the Trades sub-tab. Both the top bar and the phone
+   drawer are stamped: the drawer reuses class="tabs", so a single querySelector only ever found
+   one of them. The sub-nav markup is repeated on three views, hence querySelectorAll there too. */
+function updateTradeBadge(){
+  const n = tradeAlertCount();
+  document.querySelectorAll('nav.tabs button[data-view="teams"]').forEach(b=>setTabBadge(b, n));
+  document.querySelectorAll('.subnav button[data-k="tr"]').forEach(b=>setTabBadge(b, n));
 }
 let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
 const supersededSeen = new Set();            /* only tell you once that your offer was voided */
@@ -8374,7 +8387,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · draft picks pick from a dropdown';
+const BUILD_STAMP = '2026-08-04 · trade badge on Teams and Trades';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
