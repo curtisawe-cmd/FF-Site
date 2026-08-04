@@ -4590,11 +4590,24 @@ function trashTalk(pair){
 }
 function resetDraft(){
   if(!requireDraftControl()) return;
-  if(D.picks.length && !confirm(draftMode==='mock' ? "Clear this mock draft?" : "Clear the whole REAL draft board? This can't be undone (settings are kept).")) return;
+  /* Count the open offers before asking, so the confirm can say what else is about to go.
+     A mock board is a private sandbox and must never touch real league trades. */
+  const pend = draftMode==='real' ? pendingOfferCount() : 0;
+  const ask = draftMode==='mock'
+    ? "Clear this mock draft?"
+    : "Clear the whole REAL draft board? This can't be undone (settings are kept)."
+      + (pend ? `\n\n${pend} pending trade offer${pend===1?'':'s'} will be cancelled too — they trade players and picks that are about to stop existing.` : '');
+  if((D.picks.length || pend) && !confirm(ask)) return;
   clearInterval(timerId); timerId=null;
   const wasReal = draftMode==='real', hadPicks = D.picks.length;
   D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
   if(wasReal && hadPicks) try{ logCommish('reset the draft board', hadPicks+' picks cleared'); }catch(e){}
+  if(wasReal && pend) cancelPendingOffersOnReset().then(n=>{
+    if(!n) return;
+    toast(`${n} pending trade${n===1?'':'s'} cancelled`);
+    try{ logCommish('cancelled pending trades', n+' cleared with the draft reset'); }catch(e){}
+    try{ renderTrades(); }catch(e){}
+  });
   document.getElementById('clock').textContent='--';
   document.getElementById('btnPause').textContent='Pause';
   refreshDraftUI();
@@ -7495,6 +7508,28 @@ async function deleteOffer(id){
     toast('Trade deleted');
   }catch(e){ toast('Could not delete — try again.'); }
 }
+function pendingOfferCount(){
+  return Object.keys(offersMap||{}).filter(id=>(offersMap[id]||{}).status==='pending').length;
+}
+/* Resetting the REAL draft wipes every roster, so any still-open offer is proposing players
+   and picks that no longer exist — accepting one afterwards would move nothing and read as a
+   broken trade. They are cancelled rather than deleted, which matches a manual withdrawal and
+   keeps them visible in the list instead of silently vanishing. Votes go too: a vote on a dead
+   offer is meaningless and would otherwise sit there forever. */
+async function cancelPendingOffersOnReset(){
+  if(!fbOk() || !window.FB) return 0;
+  const ids = Object.keys(offersMap||{}).filter(id=>(offersMap[id]||{}).status==='pending');
+  let n = 0;
+  for(const id of ids){
+    try{
+      await window.FB.dbUpdate(`${offersPath()}/${id}`,
+        { status:'cancelled', closedAt:Date.now(), closedReason:'draft reset' });
+      for(const uid of Object.keys(vetoesFor(id))) await window.FB.dbRemove(`${vetoesPath()}/${id}/${uid}`).catch(()=>{});
+      n++;
+    }catch(e){}
+  }
+  return n;
+}
 /* commissioner: remove an entry from the trade history log (does not move players back) */
 function deleteTradeHistory(i){
   if(!isAdmin()){ toast('Commissioners only.'); return; }
@@ -8295,7 +8330,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · kickoff chip right-aligned on phones';
+const BUILD_STAMP = '2026-08-04 · draft reset cancels pending trades';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
