@@ -3464,11 +3464,11 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{};
-    /* !document.hidden is load-bearing: read marks sync across devices, so a laptop left
-       parked on this view in a background tab was marking every new offer read for the whole
-       account the instant it arrived — and the phone's badge never showed at all. Only a
-       visible Trades view counts as actually reading. */
-    if(window.currentView==='trades' && !document.hidden) markSeen('trades', tradeMaxTs());
+    /* Deliberately NOT marked seen here, even with the view open. Trade activity landing
+       while you happen to be on the page still badges — the badge only clears on an
+       intentional look: entering the view or clicking the Trades sub-tab. (This listener
+       once auto-marked read, which also let a background tab parked here silently eat the
+       whole account's badges.) */
     noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
@@ -8394,17 +8394,17 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · badge fix for parked tabs + badge check';
+const BUILD_STAMP = '2026-08-04 · badge shows even on the open page';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
 }
-/* The other half of the hidden-tab guard: coming BACK to a parked tab is reading, so mark
-   then. Without this, a tab you return to keeps its badge until the next navigation. */
+/* Coming back to a parked CHAT tab counts as reading it. Trades is intentionally absent:
+   the trade badge must survive even with the page open, and only clear on a deliberate
+   click into Trades — so returning to a parked tab keeps it lit too. */
 document.addEventListener('visibilitychange', ()=>{
   if(document.hidden) return;
   try{
-    if(window.currentView==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
     if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); updateChatBadge(); }
   }catch(e){}
 });
