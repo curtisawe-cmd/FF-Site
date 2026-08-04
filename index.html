@@ -6005,7 +6005,9 @@ function renderRecaps(){
       <div class="eyebrow" style="margin-top:16px">Fun facts</div>
       ${R.facts.map(f2=>`<div class="phase"><span class="tag">\uD83C\uDFC8</span><span>${esc(f2)}</span></div>`).join('')}
       ${(H.draftR1&&H.draftR1[yr]&&H.draftR1[yr].length)?`
-      <div class="eyebrow" style="margin-top:16px">First round, in order</div>
+      <!-- Labelled by year rather than hardcoded to 2025: the block renders per recap year,
+           so a fixed year would mislabel every other season the moment one is imported. -->
+      <div class="eyebrow" style="margin-top:16px">Keepers from ${yr}</div>
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
         ${H.draftR1[yr].map(p=>`<tr style="border-bottom:1px solid var(--line)">
           <td style="padding:5px 8px;font-family:var(--f-mono);color:var(--chalk-dim);width:30px">${p.pick}</td>
@@ -8178,7 +8180,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · recaps without the week tables';
+const BUILD_STAMP = '2026-08-04 · keepers heading in recaps';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
