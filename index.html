@@ -1611,6 +1611,15 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
 
     <div class="card">
+      <h2>Keeper Alarm Lines</h2>
+      <p class="sub" style="margin-bottom:10px">A player can only be kept one year. If a keeper-round pick lands on somebody who was already kept last season, this screams across the screen. <b>The pick still goes through</b> — a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for the team and <b>{y}</b> for the year they were kept. Leave blank for the built-in set.</p>
+      <textarea id="setKeeperLines" rows="6" placeholder="{p} was kept last year, you thief&#10;{team} already had {p} in {y}&#10;One year means one year" onchange="saveKeeperLines(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="keeperAlarm('Christian McCaffrey','2025','WiFi is Down','WiFi is Down')">Test alarm</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Mock Draft Trash Talk</h2>
       <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
       <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
@@ -4353,6 +4362,43 @@ function tradeAlarm(sub, a, b){
   const pool = (S.tradeAlarmLines && S.tradeAlarmLines.length) ? S.tradeAlarmLines.map(fill) : null;
   bigAlarm(pool, TRADE_LINES, '🤝', sub);
 }
+/* ---- keeper rule: a player can only be kept one season ----
+   Last season's keepers are the imported history.draftR1 list, which stores player NAMES while
+   the live board stores ids, so the match is on a normalised name.
+
+   This warns rather than blocks, deliberately. A name that fails to match exactly — a Jr., a
+   changed punctuation, a nickname in the import — must never be able to halt a live draft, and
+   the commissioner is the one typing keeper picks in anyway. The alarm tells the room; the
+   call is still yours. */
+const KEEPER_LINES = [
+  "{p} was kept last year, you thief", "Nice try — {p} is a one-and-done",
+  "{p} already had his year", "Illegal keeper, champ", "You can't keep {p} twice",
+  "That's a two-year keeper, dummy", "Read the rules, {team}", "{p} goes back in the pool",
+  "One year means one year", "Somebody check {team}'s math"
+];
+function saveKeeperLines(val){ S.keeperAlarmLines = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+function keeperNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z]/g,''); }
+/* the most recent season we actually hold a keeper list for */
+function lastKeeperSeason(){
+  const yrs = Object.keys((S.history&&S.history.draftR1)||{}).map(Number).filter(Boolean).sort((a,b)=>b-a);
+  return yrs.length ? String(yrs[0]) : null;
+}
+function keptLastSeason(name){
+  const yr = lastKeeperSeason(); if(!yr) return null;
+  const want = keeperNorm(name); if(!want) return null;
+  const hit = ((S.history.draftR1||{})[yr]||[]).find(p=>keeperNorm(p.player)===want);
+  return hit ? { year: yr, team: hit.team } : null;
+}
+function keeperAlarm(playerName, year, keptBy, teamName){
+  const fill = t => String(t)
+    .split('{p}').join(playerName || 'That player')
+    .split('{y}').join(year || '')
+    .split('{team}').join(teamName || keptBy || 'somebody');
+  const built = KEEPER_LINES.map(fill);
+  const pool = (S.keeperAlarmLines && S.keeperAlarmLines.length) ? S.keeperAlarmLines.map(fill) : built;
+  bigAlarm(pool, built, '🚫',
+    `${playerName} was kept by ${keptBy} in ${year} — keepers are one year only.`);
+}
 function makePick(playerId){
   if(!requireDraftControl()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
@@ -4363,6 +4409,11 @@ function makePick(playerId){
   const allow = pickAllowed(teamIdx, player.pos);
   if(!allow.ok){ pickAlarm(allow.why); return; }
   D.picks.push({ pickIndex: idx, teamIndex: teamIdx, playerId, name:player.name, pos:player.pos, nfl:player.team, auto:false });
+  /* keeper round only — a repeat keeper breaks the one-year rule, so shout about it */
+  if(KR() && roundForPick(idx)===0){
+    const hit = keptLastSeason(player.name);
+    if(hit) keeperAlarm(player.name, hit.year, hit.team, (S.teams[teamIdx]||{}).name);
+  }
   afterPick();
 }
 function autoPick(){
@@ -8065,6 +8116,7 @@ function renderSettings(){
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
+  { const kl=document.getElementById('setKeeperLines'); if(kl) kl.value=(S.keeperAlarmLines||[]).join('\n'); }
   if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
     const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
     const tr=document.getElementById('setTabFlashRandom'); if(tr) tr.checked=!!S.tabFlashRandom; }
@@ -8180,7 +8232,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · keepers heading in recaps';
+const BUILD_STAMP = '2026-08-04 · one-year keeper alarm';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
