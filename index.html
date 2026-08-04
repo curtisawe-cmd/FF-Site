@@ -7883,9 +7883,18 @@ function renderMyTeam(){
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   /* every unfilled slot renders as an Empty row with an Add button that jumps to the
-     Players tab, pre-filtered to the position the hole is for */
-  const emptyRow = s2 => `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td>
-    <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn" style="padding:2px 9px;font-size:12px" title="Find a player for this slot" onclick="addFromSlot('${s2}')">Add</button>`:''}</td></tr>`;
+     Players tab, pre-filtered to the position the hole is for — except IR, see below */
+  const emptyRow = s2 => {
+    /* IR is the one slot you cannot sign into. It holds players already on the roster who
+       have been designated out, so the way in is the slot dropdown on their own row. An Add
+       button here would send you to free agency and then park the pickup on the bench
+       anyway, which reads as the IR slot being broken. */
+    if(s2==='IR') return `<tr><td style="width:56px">${slotTag(s2)}</td>
+      <td style="color:var(--chalk-dim)">Empty<div style="font-size:11px">Move a player here from your roster once they are listed out</div></td>
+      <td></td><td style="width:58px"></td></tr>`;
+    return `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td>
+      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn" style="padding:2px 9px;font-size:12px" title="Find a player for this slot" onclick="addFromSlot('${s2}')">Add</button>`:''}</td></tr>`;
+  };
   order.forEach(s2=>{
     const id = (bySlot[s2]||[]).find(x=>!consumed.has(x));
     if(id){ consumed.add(id); slotRows.push(playerRow(pById[id], s2)); }
@@ -8111,7 +8120,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · IR locked to out designations';
+const BUILD_STAMP = '2026-08-03 · IR fills from your roster only';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
