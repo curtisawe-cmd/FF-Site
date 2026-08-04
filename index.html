@@ -6013,17 +6013,11 @@ function renderRecaps(){
           <td style="padding:5px 8px;text-align:right">${esc(p.team)}${mgrOf(yr,p.team)?` <span style="color:var(--chalk-dim)">(${esc(mgrOf(yr,p.team))})</span>`:''}</td>
         </tr>`).join('')}
       </table></div>`:''}
-      ${(H.resultsByWeek&&H.resultsByWeek[yr])?Object.keys(H.resultsByWeek[yr]).sort((a,b)=>a-b).map(wk=>`
-      <div class="eyebrow" style="margin-top:16px">Week ${wk} results</div>
-      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px">
-        ${H.resultsByWeek[yr][wk].map(g=>{const aw=g.pa>g.pb, bw=g.pb>g.pa; return `<tr style="border-bottom:1px solid var(--line)">
-          <td style="padding:5px 8px;${aw?'font-weight:700':''}">${esc(g.ta)}</td>
-          <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);${aw?'font-weight:700;color:var(--turf)':'color:var(--chalk-dim)'}">${g.pa.toFixed(1)}</td>
-          <td style="padding:5px 4px;color:var(--chalk-dim);text-align:center">·</td>
-          <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);${bw?'font-weight:700;color:var(--turf)':'color:var(--chalk-dim)'}">${g.pb.toFixed(1)}</td>
-          <td style="padding:5px 8px;${bw?'font-weight:700':''}">${esc(g.tb)}</td>
-        </tr>`;}).join('')}
-      </table></div>`).join(''):''}
+      <!-- The week-by-week results tables used to render here, one per imported week, which
+           pushed the recap itself off the top of the screen. The data is untouched in
+           history.resultsByWeek and is still read by the Game Center archive and the weekly
+           recap generator; only this listing is gone. -->
+
       <div class="row" style="margin-top:14px">
         <button class="btn ghost" onclick="window.histYear='${yr}';showView('history')">Full ${yr} standings \u2192</button>
       </div>
@@ -8184,7 +8178,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · preseason countdown to Week 1';
+const BUILD_STAMP = '2026-08-04 · recaps without the week tables';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
