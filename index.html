@@ -473,6 +473,13 @@ nav.tabs button{position:relative}
 .applybar .btn.apply:hover{background:#178a49;border-color:#178a49}
 .applybar .btn.reject{background:var(--charge);border-color:var(--charge);color:#fff}
 .applybar .btn.reject:hover{filter:brightness(1.08)}
+/* a draft pick sitting on the trade table. Click to take it back off. */
+.pickchip{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:12px;
+  font-weight:600;color:var(--chalk);background:var(--turf-wash);border:1px solid var(--turf);
+  border-radius:999px;padding:4px 11px;cursor:pointer;
+  transition:color .15s ease,border-color .15s ease,background .15s ease}
+.pickchip:hover{color:var(--charge);border-color:var(--charge);background:var(--panel-2)}
+.pickchip span{opacity:.65;font-size:11px}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
@@ -7246,6 +7253,14 @@ function tradeToggleRound(side, round){
   if(set.has(round)) set.delete(round); else set.add(round);
   renderTradeCenter();
 }
+/* The picker adds rather than replaces: a trade can involve several rounds, so a plain
+   single-select would silently drop everything but the last choice. Chosen rounds come back
+   out as removable chips. */
+function tradeAddRound(side, round){
+  const r = +round; if(!r) return;
+  window.tradeSel[side==='a'?'ra':'rb'].add(r);
+  renderTradeCenter();
+}
 /* a team still controls its own round-R pick for a given year unless already traded that year */
 function ownsPick(teamName, round, year){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName && pickYearOf(t)===+year); }
 function tradeSetTeam(side, ti){
@@ -7750,31 +7765,60 @@ function renderTradeCenter(){
   const after = side => side==='a' ? cnt(T.a)-T.pa.size+T.pb.size : cnt(T.b)-T.pb.size+T.pa.size;
   const py = +window.tradeSel.pickYear || curDraftYear();
   const yearOpts = Array.from({length:4},(_,i)=>curDraftYear()+i).map(y=>`<option value="${y}"${y===py?' selected':''}>${y}${y===curDraftYear()?' (this draft)':''}</option>`).join('');
+  /* A dropdown, not sixteen checkboxes. At 16 rounds per team the checkbox list was taller
+     than the roster above it and pushed the year selector off screen entirely. The select only
+     offers rounds this team still owns and hasn't already put on the table; picked rounds
+     become chips you click to take back off. */
   const pickList = (ti, side, selSet) => {
     const name = S.teams[ti].name;
     const rounds = Array.from({length:snakeRounds()},(_,i)=>i+1).filter(r=>ownsPick(name, r, py));
-    if(!rounds.length) return `<div class="eyebrow" style="margin:12px 0 4px">${py} draft picks</div><p class="sub" style="margin:0">No tradeable picks.</p>`;
-    return `<div class="eyebrow" style="margin:12px 0 4px">${py} draft picks</div>` + rounds.map(r=>`
-      <label class="row" style="padding:3px 0;gap:8px;cursor:pointer">
-        <input type="checkbox" ${selSet.has(r)?'checked':''} onchange="tradeToggleRound('${side}',${r})" style="width:auto">
-        <span style="font-family:var(--f-mono);font-size:13px">Round ${r} pick</span>
-      </label>`).join('');
+    if(!rounds.length) return `<p class="sub" style="margin:0">No tradeable ${py} picks.</p>`;
+    const open = rounds.filter(r=>!selSet.has(r));
+    const chosen = [...selSet].filter(r=>rounds.includes(r)).sort((x,y)=>x-y);
+    return `
+      <select style="width:100%;max-width:230px" ${open.length?'':'disabled'}
+              onchange="tradeAddRound('${side}',this.value)" aria-label="Add a ${py} draft pick">
+        <option value="">${open.length?`Add a ${py} pick…`:'Every pick is on the table'}</option>
+        ${open.map(r=>`<option value="${r}">Round ${r} pick</option>`).join('')}
+      </select>
+      <div class="row" style="gap:6px;margin-top:8px">
+        ${chosen.length
+          ? chosen.map(r=>`<button class="pickchip" onclick="tradeToggleRound('${side}',${r})"
+              title="Remove the Round ${r} pick from this offer">Round ${r} <span aria-hidden="true">✕</span></button>`).join('')
+          : `<span class="sub" style="margin:0">No picks on the table.</span>`}
+      </div>`;
   };
   el.innerHTML = `
-    <div class="row" style="margin-bottom:12px;gap:8px;align-items:center">
-      <label class="sub" style="margin:0">Draft‑pick year</label>
-      <select onchange="tradeSetPickYear(this.value)">${yearOpts}</select>
-    </div>
     <div class="grid2" style="margin-bottom:14px">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
         ${rosterList(T.a,'a',T.pa)}
-        ${pickList(T.a,'a',T.ra)}
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('b')}<span class="sub" style="margin:0">${cnt(T.b)} \u2192 ${after('b')} players</span></div>
         ${rosterList(T.b,'b',T.pb)}
-        ${pickList(T.b,'b',T.rb)}
+      </div>
+    </div>
+    <!-- Picks used to hang off the bottom of each roster card, seventeen player rows below the
+         year selector that governs them, so by the time you reached the checkboxes the control
+         was off screen. One section now holds both teams' picks with the year on its header. -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <h2 style="margin:0">Draft picks</h2>
+        <div class="row" style="gap:8px;align-items:center">
+          <label class="sub" style="margin:0">Year</label>
+          <select onchange="tradeSetPickYear(this.value)">${yearOpts}</select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div style="min-width:0">
+          <div class="eyebrow" style="margin:0 0 6px">${esc(S.teams[T.a].name)}</div>
+          ${pickList(T.a,'a',T.ra)}
+        </div>
+        <div style="min-width:0">
+          <div class="eyebrow" style="margin:0 0 6px">${esc(S.teams[T.b].name)}</div>
+          ${pickList(T.b,'b',T.rb)}
+        </div>
       </div>
     </div>
     ${window.counterOf?`<div class="notice" style="margin-bottom:10px">Countering <b>${esc((offersMap[window.counterOf]||{}).aName||'an offer')}</b>'s offer — adjust the terms below, then send. <a href="#" onclick="clearCounter();return false" style="color:var(--charge)">cancel</a></div>`:''}
@@ -8330,7 +8374,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · draft reset cancels pending trades';
+const BUILD_STAMP = '2026-08-04 · draft picks pick from a dropdown';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
