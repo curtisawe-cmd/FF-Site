@@ -1612,7 +1612,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
     <div class="card">
       <h2>Keeper Alarm Lines</h2>
-      <p class="sub" style="margin-bottom:10px">A player can only be kept one year. If a keeper-round pick lands on somebody who was already kept last season, this screams across the screen. <b>The pick still goes through</b> — a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for the team and <b>{y}</b> for the year they were kept. Leave blank for the built-in set.</p>
+      <p class="sub" style="margin-bottom:10px">A manager can only keep the same player one year. If a keeper-round pick lands on somebody <b>that same manager</b> already kept last season, this screams across the screen — a different manager keeping him is fine and stays quiet. <b>The pick still goes through</b>: a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for whoever kept him and <b>{y}</b> for the year. Leave blank for the built-in set.</p>
       <textarea id="setKeeperLines" rows="6" placeholder="{p} was kept last year, you thief&#10;{team} already had {p} in {y}&#10;One year means one year" onchange="saveKeeperLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="keeperAlarm('Christian McCaffrey','2025','WiFi is Down','WiFi is Down')">Test alarm</button>
@@ -4387,7 +4387,27 @@ function keptLastSeason(name){
   const yr = lastKeeperSeason(); if(!yr) return null;
   const want = keeperNorm(name); if(!want) return null;
   const hit = ((S.history.draftR1||{})[yr]||[]).find(p=>keeperNorm(p.player)===want);
-  return hit ? { year: yr, team: hit.team } : null;
+  if(!hit) return null;
+  const mgr = ((S.history.managers||{})[yr]||{})[hit.team] || null;
+  return { year: yr, team: hit.team, mgr };
+}
+/* The rule is per manager, not per player: only the manager who kept him last season is barred
+   from keeping him again. Anyone else picking him up is completely legal, so comparing the
+   player alone would cry wolf on most keeper rounds.
+
+   Identity is compared on the MANAGER where both sides are known, because team names get
+   renamed every year in this league and matching on them would miss a violation the moment
+   somebody changed theirs. Managers are not always filled in, though, so it falls back to the
+   team name rather than silently never firing. */
+function keeperViolation(playerName, teamIdx){
+  const hit = keptLastSeason(playerName);
+  if(!hit) return null;
+  const t = (S.teams||[])[teamIdx] || {};
+  const mgrNow = t.manager || null;
+  const same = (hit.mgr && mgrNow)
+    ? keeperNorm(hit.mgr) === keeperNorm(mgrNow)          /* real identity */
+    : keeperNorm(t.name) === keeperNorm(hit.team);        /* fallback: same team name */
+  return same ? hit : null;
 }
 function keeperAlarm(playerName, year, keptBy, teamName){
   const fill = t => String(t)
@@ -4409,10 +4429,10 @@ function makePick(playerId){
   const allow = pickAllowed(teamIdx, player.pos);
   if(!allow.ok){ pickAlarm(allow.why); return; }
   D.picks.push({ pickIndex: idx, teamIndex: teamIdx, playerId, name:player.name, pos:player.pos, nfl:player.team, auto:false });
-  /* keeper round only — a repeat keeper breaks the one-year rule, so shout about it */
+  /* keeper round only, and only when the SAME manager is keeping him a second year */
   if(KR() && roundForPick(idx)===0){
-    const hit = keptLastSeason(player.name);
-    if(hit) keeperAlarm(player.name, hit.year, hit.team, (S.teams[teamIdx]||{}).name);
+    const v = keeperViolation(player.name, teamIdx);
+    if(v) keeperAlarm(player.name, v.year, v.mgr || v.team, (S.teams[teamIdx]||{}).name);
   }
   afterPick();
 }
@@ -8232,7 +8252,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · one-year keeper alarm';
+const BUILD_STAMP = '2026-08-04 · keeper alarm is per manager';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
