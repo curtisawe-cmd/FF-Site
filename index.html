@@ -3566,6 +3566,21 @@ function injInfo(id){
   const kind=s==='Questionable'?'q':(s==='Doubtful'?'d':((s==='Sus'||s==='Suspended')?'sus':'out'));
   return { cls: serious?' hurt':'', flag:`<span class="inj-flag ${kind}" title="${esc(s+(p.injBody?' — '+p.injBody:''))}">${abbr}</span>` };
 }
+/* ---- who may occupy the IR slot ----
+   IR is a reserve spot for players who genuinely cannot play, not a free extra bench slot
+   to park a bye week or a handcuff in. So it is gated on the NFL's own designation rather
+   than on the manager's opinion. Same list injInfo() already treats as "serious" — the
+   designations that mean unavailable, not merely banged up (Questionable and Doubtful are
+   deliberately NOT here; those players can still suit up). */
+const IR_DESIGNATIONS = ['Out','IR','PUP','Sus','Suspended','NA','DNR','COV'];
+function irDesignation(pid){
+  const p = POOL_MAP.get(pid);
+  const s = p && p.inj ? String(p.inj) : '';
+  return IR_DESIGNATIONS.includes(s) ? s : null;
+}
+/* Fails open while the pool is still downloading: with no injury data loaded we cannot tell
+   who qualifies, and silently refusing every move would look like a broken button. */
+function irEligible(pid){ return !poolReady || !!irDesignation(pid); }
 function draftedIds(){ return new Set(D.picks.filter(p=>!p.cut).map(p=>p.playerId)); }   /* cut players are free agents again */
 /* Who is owned on the REAL board. draftedIds() follows whichever board is loaded, which is
    correct for the draft room but wrong for free agency — during a mock it would refuse to
@@ -7678,6 +7693,15 @@ function setSlot(ti, pid, slot){
     if(used>=cap){ toast(`${slot} is full \u2014 bench someone first.`); renderTeams(); return; }
   }
   if(slot==='IR'){
+    /* say which designation the player actually carries — "not eligible" on its own reads
+       as a bug when the manager is looking at a player they know is hurt */
+    if(!irEligible(pid)){
+      const p = POOL_MAP.get(pid);
+      toast(p && p.inj
+        ? `${p.name||'That player'} is listed ${p.inj} — IR is only for Out, IR, PUP, Suspended, NA, DNR or COV.`
+        : `Only players designated Out, IR, PUP, Suspended, NA, DNR or COV can go on IR.`);
+      renderTeams(); return;
+    }
     const used = Object.entries(lu).filter(([id,s2])=>s2==='IR' && id!==pid).length;
     if(used >= (+S.roster.IR||0)){ toast('IR slot is full.'); renderTeams(); return; }
   }
@@ -7834,7 +7858,15 @@ function renderMyTeam(){
   const pById = {}; roster.forEach(p=>pById[p.playerId]=p);
   const consumed = new Set();
   const playerRow = (p, slotLabel) => {
-    const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...((+S.roster.IR||0)?['IR']:[])];
+    /* IR is only offered to players who actually qualify. Anyone already sitting on IR keeps
+       the option regardless — the select has to be able to render its own current value, and
+       they need a way back off once they are healthy. */
+    const onIR = lu[p.playerId]==='IR';
+    const canIR = (+S.roster.IR||0) && (onIR || irEligible(p.playerId));
+    const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN', ...(canIR?['IR']:[])];
+    /* a player who was stashed on IR and has since been cleared is the one case this rule
+       cannot catch on the way in, so flag it rather than quietly leaving the spot occupied */
+    const cleared = onIR && poolReady && !irDesignation(p.playerId);
     const onBench = lu[p.playerId]==='BN';
     /* bench player: each occupied eligible slot also offers a direct swap with its starter */
     const optHtml = opts.map(o=>{
@@ -7846,8 +7878,8 @@ function renderMyTeam(){
       return h;
     }).join('');
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
-      <td style="text-align:right"><select style="width:84px" onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td style="text-align:right"><select style="width:84px"${canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"'} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   /* every unfilled slot renders as an Empty row with an Add button that jumps to the
@@ -8079,7 +8111,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · return TD scoring fix';
+const BUILD_STAMP = '2026-08-03 · IR locked to out designations';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
