@@ -245,6 +245,18 @@ section.view > .viewhead{
 .subnav::-webkit-scrollbar{display:none}
 .subnav button{flex:0 0 auto;white-space:nowrap}
 @media(max-width:640px){ .subnav{gap:6px;margin-bottom:12px} .subnav button{font-size:13px;padding:5px 11px} }
+/* Kickoff chip, top right of the header. Hidden until renderKickoff() decides there is
+   something to count to, so it never flashes an empty pill mid-season. Fixed-width digits stop
+   the header reflowing every second as the seconds tick. */
+.kickoff{display:none;align-items:center;gap:8px;white-space:nowrap;
+  font-family:var(--f-ui);font-weight:700;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line-strong);
+  border-radius:999px;padding:5px 13px;box-shadow:var(--sh-1)}
+.kickoff.on{display:inline-flex}
+.kickoff .ko-t{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:700;
+  font-size:13px;letter-spacing:.02em;color:var(--turf-bright)}
+@media(max-width:900px){ .kickoff .ko-lbl{display:none} }
+@media(max-width:520px){ .kickoff{padding:4px 10px;gap:6px} .kickoff .ko-t{font-size:12px} }
 .wordmark{font-family:var(--f-display);font-size:26px;letter-spacing:.02em;text-transform:uppercase;color:var(--chalk);line-height:1}
 .wordmark .yr{color:var(--charge);-webkit-text-stroke:0}
 /* The projection sits on its own line under the row and centres on the vs column. flex-basis
@@ -1137,6 +1149,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button data-view="stats">Stats</button>
     <button data-view="settings">Settings</button>
   </nav>
+  <!-- Counts to the same instant as the ticker countdown, so the two can never disagree.
+       Removes itself once the season starts. -->
+  <div class="kickoff" id="kickoffChip" title="Time until Week 1 kicks off"></div>
   <button class="role-btn" id="authBtn" onclick="openAuth()"><span class="dot"></span>Sign in</button>
   <!-- second ribbon: the per-device switches. Deliberately slimmer than the main bar — these
        are set once and then ignored, so they should not compete with the nav. -->
@@ -6756,6 +6771,27 @@ function tickTickerCountdown(){
   const html = countdownInner(ms);
   document.querySelectorAll('#tickerMove .tk-cd').forEach(el => { el.innerHTML = html; });
 }
+/* ---- header kickoff chip ----
+   Same target instant as the ticker countdown (NFL_2026_WEEK1), so the two can never show
+   different numbers. It owns its own interval because it is visible on every view, whereas the
+   ticker's countdown only exists while that bar is on screen. Both stop themselves at zero. */
+let kickoffTimer = null;
+function renderKickoff(){
+  const el = document.getElementById('kickoffChip');
+  if(!el) return;
+  const ms = NFL_2026_WEEK1.getTime() - Date.now();
+  if(ms <= 0){                       /* season is under way — the chip has nothing left to say */
+    el.classList.remove('on'); el.innerHTML = '';
+    if(kickoffTimer){ clearInterval(kickoffTimer); kickoffTimer = null; }
+    return;
+  }
+  const t = Math.floor(ms/1000);
+  const d = Math.floor(t/86400), h = Math.floor(t%86400/3600), m = Math.floor(t%3600/60), s = t%60;
+  const pad = n => String(n).padStart(2,'0');
+  el.innerHTML = `<span class="ko-lbl">Week 1 in</span><span class="ko-t">${d}d ${pad(h)}:${pad(m)}:${pad(s)}</span>`;
+  el.classList.add('on');
+  if(!kickoffTimer) kickoffTimer = setInterval(renderKickoff, 1000);
+}
 function tkSide(ti, score, lead){
   const t = (S.teams||[])[ti];
   return `<span class="tk-side${lead?' tk-lead':''}">
@@ -8252,7 +8288,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · keeper alarm is per manager';
+const BUILD_STAMP = '2026-08-04 · kickoff countdown in the header';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -9019,6 +9055,7 @@ bootStep('renderTrades', renderTrades);
 bootStep('renderHome', renderHome);
 bootStep('refreshDraftUI', refreshDraftUI);
 bootStep('renderTicker', renderTicker);
+bootStep('renderKickoff', renderKickoff);
 bootStep('loadPool', loadPool);
 bootStep('loadRecentIds', loadRecentIds);
 if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('afterend',
