@@ -821,6 +821,13 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      the iPhone status bar in the installed app */
   header.top{padding:calc(9px + var(--sa-t)) calc(12px + var(--sa-r)) 9px calc(12px + var(--sa-l));gap:8px}
   .wordmark{font-size:20px;order:1}
+  /* The chip needs an explicit order here or it inherits the flex default of 0 and sorts
+     ahead of the wordmark — which put the countdown at the top LEFT on a phone. Sharing
+     order 2 with the sign-in button keeps source order between them, and margin-left:auto
+     pushes it to the right edge of whichever row it lands on. At 375px the wordmark, chip
+     and button cannot share one line, so the chip takes the right of row one and sign-in
+     drops beneath it — which is where sign-in already sat before any of this. */
+  .kickoff{order:2;margin-left:auto}
   .role-btn{order:2;margin-left:auto}
   /* the switches ribbon sits last, under the scrollable nav, and gets tighter still on a phone */
   /* One line, always. Four controls need ~455px at the desktop scale and a phone offers ~350,
@@ -8288,7 +8295,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · kickoff countdown in the header';
+const BUILD_STAMP = '2026-08-04 · kickoff chip right-aligned on phones';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
