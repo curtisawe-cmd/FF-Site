@@ -895,7 +895,13 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* =====================================================
    Live score ticker — broadcast bottom line
 ===================================================== */
-.ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;height:50px;
+/* Height has to ADD the home-indicator inset, not absorb it. box-sizing:border-box is global
+   (see the reset), so a flat height:50px alongside padding-bottom:var(--sa-b) leaves
+   50 - 34 - 2 = 14px of usable room on a notched iPhone and crushes the two score rows out of
+   sight — a mobile-only break, invisible on desktop where the inset is 0. body.has-ticker
+   already reserves this same total. */
+.ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;
+  height:calc(50px + var(--sa-b));
   background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28);
   padding-bottom:var(--sa-b)}   /* clear the iPhone home indicator */
 .ticker.on{display:flex}
@@ -8120,7 +8126,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · IR fills from your roster only';
+const BUILD_STAMP = '2026-08-03 · ticker height fix on notched phones';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
