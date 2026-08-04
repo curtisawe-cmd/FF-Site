@@ -1689,6 +1689,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
            on purpose — it is how a phone gets onto a new build. -->
       <button class="btn ghost admin-only" style="padding:3px 11px;font-size:12px" onclick="testPush()">Send test alert</button>
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Clear the offline cache and reload the newest version" onclick="forceUpdate()">Force update</button>
+      <button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Why is / isn't the trade badge showing on this device?" onclick="diagBadgeAlert()">Badge check</button>
       <span class="sub" id="pushState" style="margin:0;font-size:12px"></span>
     </div>
     <p class="sub" id="buildStamp" style="margin:6px 0 0;font-size:11px;opacity:.7"></p>
@@ -3463,7 +3464,11 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{};
-    if(window.currentView==='trades') markSeen('trades', tradeMaxTs());     /* you're already looking at it */
+    /* !document.hidden is load-bearing: read marks sync across devices, so a laptop left
+       parked on this view in a background tab was marking every new offer read for the whole
+       account the instant it arrived — and the phone's badge never showed at all. Only a
+       visible Trades view counts as actually reading. */
+    if(window.currentView==='trades' && !document.hidden) markSeen('trades', tradeMaxTs());
     noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
@@ -5698,7 +5703,9 @@ function startChatSync(){
   window.FB.dbOnLast(chatPath(), 150, (m)=>{          /* bounded: messages can carry images now */
     chatMsgs = m ? Object.keys(m).map(k=>({...m[k], _id:k})).filter(Boolean).sort((a,b)=>(a.t||0)-(b.t||0)) : [];
     notifyNewChat();
-    if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); renderChat(); }   /* you're looking at it */
+    /* same hidden-tab guard as the trade feed: a backgrounded tab parked on chat was marking
+       every message read account-wide before any other device could badge it */
+    if(window.currentView==='chat'){ if(!document.hidden) markSeen('chat', chatMaxTs()); renderChat(); }
     updateChatBadge();
     if(chatMsgs.length >= CHAT_KEEP) pruneChat();      /* trim once we're at the cap */
   });
@@ -8387,11 +8394,69 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · trade badge on Teams and Trades';
+const BUILD_STAMP = '2026-08-04 · badge fix for parked tabs + badge check';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
 }
+/* The other half of the hidden-tab guard: coming BACK to a parked tab is reading, so mark
+   then. Without this, a tab you return to keeps its badge until the next navigation. */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden) return;
+  try{
+    if(window.currentView==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
+    if(window.currentView==='chat'){ markSeen('chat', chatMaxTs()); updateChatBadge(); }
+  }catch(e){}
+});
+/* "The badge didn't show" has too many lookalike causes to guess at: stale build, unclaimed
+   team, an offer aimed at the other side, a read mark that's newer than the offer, or a plain
+   count of zero. This names which one is true on THIS device, in the console —
+   run diagBadge() from a desktop devtools or remote inspector. */
+window.diagBadge = function(){
+  const mine = myTeamIndex(), since = getSeen('trades');
+  const rows = Object.keys(offersMap||{}).map(id=>{
+    const o=offersMap[id]||{};
+    const why =
+      o.status!=='pending' && o.status!=='accepted' ? 'dead ('+o.status+')' :
+      o.status==='pending' && o.b!==mine            ? 'aimed at team '+o.b+', not yours' :
+      o.status==='pending' && (+o.createdAt||0)<=since ? 'older than your read mark' :
+      o.status==='accepted' && Date.now()>=reviewEndsAt(o) ? 'review window over' :
+      o.status==='accepted' && (+o.acceptedAt||0)<=since ? 'accepted before your read mark' :
+      'COUNTS';
+    return { id, status:o.status, from:o.aName, to:o.bName, toIdx:o.b,
+             created:new Date(+o.createdAt||0).toLocaleString(), why };
+  });
+  const report = {
+    build: BUILD_STAMP,
+    signedIn: !!window.fbUser,
+    yourTeamIndex: mine,
+    teamClaimResolved: mine!==null,
+    readMark: since ? new Date(since).toLocaleString() : '(never)',
+    offers: rows,
+    badgeCount: tradeAlertCount(),
+    badgeTargetsFound: document.querySelectorAll('nav.tabs button[data-view="teams"], .subnav button[data-k="tr"]').length
+  };
+  console.table(rows);
+  console.log(report);
+  return report;
+};
+/* Same report, readable on a phone where there is no console. alert(), not a styled panel:
+   this exists for the moment something is already wrong, so it must not depend on any of the
+   app's own rendering working. */
+window.diagBadgeAlert = function(){
+  const r = window.diagBadge();
+  const lines = [
+    'Build: ' + r.build,
+    'Signed in: ' + (r.signedIn?'yes':'NO — badge needs a signed-in account'),
+    'Your team: ' + (r.teamClaimResolved ? '#'+r.yourTeamIndex : 'NOT CLAIMED — offers cannot be matched to you'),
+    'Read mark: ' + r.readMark,
+    'Badge should show: ' + (r.badgeCount ? r.badgeCount+' alert(s)' : 'nothing'),
+    '',
+    r.offers.length ? 'Offers:' : 'No offers in the feed at all.',
+    ...r.offers.map(o=>`- ${o.from||'?'} -> ${o.to||'?'} [${o.status}]: ${o.why}`)
+  ];
+  alert(lines.join('\n'));
+};
 async function forceUpdate(){
   /* Only the offline worker gets unregistered. OneSignal's worker is the thing that receives
      and ACKNOWLEDGES pushes — killing it left every push delivered during the gap unacked, and
