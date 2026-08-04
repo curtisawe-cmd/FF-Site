@@ -6659,9 +6659,13 @@ function renderTicker(){
   const wk = tickerWeek();
   if(!wk) return hide();
   const games = (S.season.schedule[wk])||[];
+  /* Show the whole slate, dashes and all. Dropping unscored games meant that early in a week
+     - one matchup in, five still to play - the ticker held a single game, which the seamless
+     duplication then cycled forever and read as the same two teams on a loop. tickerWeek()
+     already guarantees this week has at least one real score, so a full slate is never empty
+     and it matches what a broadcast ticker does. */
   const items = games.map((g,m)=>{
     const [a,b] = mScore(wk,m);
-    if(a==null && b==null) return '';
     const sa = a==null?'—':(+a).toFixed(1), sb = b==null?'—':(+b).toFixed(1);
     const aLead = a!=null && b!=null && +a>+b, bLead = a!=null && b!=null && +b>+a;
     const side = (ti, score, lead) => { const t=(S.teams||[])[ti];
@@ -8126,7 +8130,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · ticker height fix on notched phones';
+const BUILD_STAMP = '2026-08-03 · ticker shows the full slate';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
