@@ -936,6 +936,19 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
 }
 @media (max-width:520px){ .ticker-label span.lbl{display:none} .tk-game{padding:0 11px}
   .tk-side{grid-template-columns:16px 96px 46px;gap:5px} .tk-name,.tk-pts{font-size:11px} }
+/* preseason countdown. Deliberately NOT .tk-game — that is a two-row grid and would split
+   the digits across rows; this needs one centred line. */
+.tk-cd-wrap{display:inline-flex;align-items:center;gap:14px;padding:0 20px;border-right:1px solid var(--line)}
+.tk-cd-lead{font-family:var(--f-display);font-size:13px;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--chalk);white-space:nowrap}
+.tk-cd{display:inline-flex;align-items:center;gap:12px}
+.tk-cd-u{display:inline-flex;flex-direction:column;align-items:center;line-height:1.05}
+.tk-cd-u b{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:17px;
+  font-weight:700;color:var(--turf-bright)}
+.tk-cd-u i{font-family:var(--f-ui);font-style:normal;font-size:9px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--chalk-dim)}
+@media (max-width:520px){ .tk-cd-wrap{gap:10px;padding:0 14px} .tk-cd{gap:9px}
+  .tk-cd-u b{font-size:15px} .tk-cd-lead{font-size:11px} }
 
 /* chat: emoji picker, attachments, inline images */
 .chat-ico{flex:0 0 auto;padding:6px 10px;font-size:16px;line-height:1;cursor:pointer}
@@ -6321,7 +6334,10 @@ function tickerWeek(){
   const cur = currentNflWeek();
   if(cur && weekHasScores(cur)) return cur;
   for(let w=REG_WEEKS; w>=1; w--) if(weekHasScores(w)) return w;
-  return 0;
+  /* In season but nothing scored anywhere yet — Thursday morning of Week 1, say. Show this
+     week's slate with dashes rather than hiding the bar; the countdown has already expired
+     by then, so returning 0 here would leave nothing on screen at all. */
+  return cur || 0;
 }
 /* =====================================================
    Game Center — per-player scoring for each matchup
@@ -6651,13 +6667,57 @@ async function maybeAutoScore(){
   finally{ autoScoreBusy = false; }
 }
 function dismissTicker(){ window.tickerHidden = true; renderTicker(); }
+/* ---- preseason countdown ----
+   Counts to NFL_2026_WEEK1 exactly, which is the same instant currentNflWeek() starts
+   returning 1 — so the countdown reaches zero at the moment the ticker flips to live
+   scores, with no gap and no overlap. */
+let tickerCountTimer = null;
+function stopTickerCountdown(){ if(tickerCountTimer){ clearInterval(tickerCountTimer); tickerCountTimer = null; } }
+function countdownInner(ms){
+  const total = Math.max(0, Math.floor(ms/1000));
+  const d = Math.floor(total/86400), h = Math.floor(total%86400/3600),
+        m = Math.floor(total%3600/60), s = total%60;
+  const pad = n => String(n).padStart(2,'0');
+  const unit = (v,l) => `<span class="tk-cd-u"><b>${v}</b><i>${l}</i></span>`;
+  return unit(d,'days') + unit(pad(h),'hrs') + unit(pad(m),'min') + unit(pad(s),'sec');
+}
+/* Only the digits are rewritten on each tick. Re-rendering the whole track would restart the
+   CSS scroll animation every second and the ticker would sit frozen at its start position. */
+function tickTickerCountdown(){
+  const ms = NFL_2026_WEEK1.getTime() - Date.now();
+  if(ms <= 0){ stopTickerCountdown(); renderTicker(); return; }   /* season just started */
+  const html = countdownInner(ms);
+  document.querySelectorAll('#tickerMove .tk-cd').forEach(el => { el.innerHTML = html; });
+}
+function tkSide(ti, score, lead){
+  const t = (S.teams||[])[ti];
+  return `<span class="tk-side${lead?' tk-lead':''}">
+    <span class="tk-logo">${teamMarkHTML(t,18)}</span>
+    <span class="tk-name">${esc((t&&t.name)||('Team '+(ti+1)))}</span>
+    <span class="tk-pts">${score}</span></span>`;
+}
 function renderTicker(){
   const bar=document.getElementById('scoreTicker'), move=document.getElementById('tickerMove');
   if(!bar||!move) return;
-  const hide = ()=>{ bar.classList.remove('on'); document.body.classList.remove('has-ticker'); };
+  const hide = ()=>{ stopTickerCountdown(); bar.classList.remove('on'); document.body.classList.remove('has-ticker'); };
   if(S.tickerOff || window.tickerHidden) return hide();
   const wk = tickerWeek();
-  if(!wk) return hide();
+  const lblEl = document.getElementById('tickerLabel');
+  /* Nothing to score yet: count down to kickoff and preview the Week 1 slate rather than
+     leaving the bar missing for the whole offseason. */
+  if(!wk){
+    const ms = NFL_2026_WEEK1.getTime() - Date.now();
+    if(ms <= 0) return hide();
+    if(lblEl) lblEl.textContent = 'Kickoff';
+    const wk1 = (S.season && S.season.schedule && S.season.schedule['1']) || [];
+    const block = `<span class="tk-cd-wrap"><span class="tk-cd-lead">Week 1 in</span><span class="tk-cd">${countdownInner(ms)}</span></span>`
+      + wk1.map(g=>`<span class="tk-game">${tkSide(g[0],'',false)}${tkSide(g[1],'',false)}</span>`).join('');
+    move.innerHTML = block + block;                  /* duplicated so the loop is seamless */
+    bar.classList.add('on'); document.body.classList.add('has-ticker');
+    if(!tickerCountTimer) tickerCountTimer = setInterval(tickTickerCountdown, 1000);
+    return;
+  }
+  stopTickerCountdown();
   const games = (S.season.schedule[wk])||[];
   /* Show the whole slate, dashes and all. Dropping unscored games meant that early in a week
      - one matchup in, five still to play - the ticker held a single game, which the seamless
@@ -6668,18 +6728,12 @@ function renderTicker(){
     const [a,b] = mScore(wk,m);
     const sa = a==null?'—':(+a).toFixed(1), sb = b==null?'—':(+b).toFixed(1);
     const aLead = a!=null && b!=null && +a>+b, bLead = a!=null && b!=null && +b>+a;
-    const side = (ti, score, lead) => { const t=(S.teams||[])[ti];
-      return `<span class="tk-side${lead?' tk-lead':''}">
-        <span class="tk-logo">${teamMarkHTML(t,18)}</span>
-        <span class="tk-name">${esc((t&&t.name)||('Team '+(ti+1)))}</span>
-        <span class="tk-pts">${score}</span></span>`; };
-    return `<span class="tk-game">${side(g[0],sa,aLead)}${side(g[1],sb,bLead)}</span>`;
+    return `<span class="tk-game">${tkSide(g[0],sa,aLead)}${tkSide(g[1],sb,bLead)}</span>`;
   }).filter(Boolean);
   if(!items.length) return hide();
-  const lbl=document.getElementById('tickerLabel');
   const anyLive = games.some((g,m)=>isLiveScore(wk,m));
-  if(lbl) lbl.textContent = (currentNflWeek()===wk && anyLive) ? `Live · Wk ${wk}`
-                          : (currentNflWeek()===wk ? `Wk ${wk}` : `Final · Wk ${wk}`);
+  if(lblEl) lblEl.textContent = (currentNflWeek()===wk && anyLive) ? `Live · Wk ${wk}`
+                              : (currentNflWeek()===wk ? `Wk ${wk}` : `Final · Wk ${wk}`);
   move.innerHTML = items.join('') + items.join('');   /* duplicated so the loop is seamless */
   bar.classList.add('on'); document.body.classList.add('has-ticker');
 }
@@ -8130,7 +8184,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-03 · ticker shows the full slate';
+const BUILD_STAMP = '2026-08-03 · preseason countdown to Week 1';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
