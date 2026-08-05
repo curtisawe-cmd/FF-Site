@@ -5442,7 +5442,7 @@ function showView(v){
   if(v==='stats') renderStats();
   if(v==='recaps') renderRecaps();
   if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); renderChatOnline(); }   /* opening = reading */
-  if(v==='trades'){ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }
+  /* no markSeen for trades: the badge is live status and only resolving a trade clears it */
   if(v==='trades') setTrTab(window.trTab||'trades');
   if(v==='matchups' && !statsLoaded) loadCareerStats().then(()=>{ if(window.currentView==='matchups') renderMatchups(); });
   if(v==='polls') renderPolls();
@@ -6535,9 +6535,6 @@ function goSub(k){
   }
   window.trTab = (k==='tx') ? 'moves' : 'trades';
   if(window.currentView!=='trades') showView('trades'); else setTrTab(window.trTab);
-  /* showView marks trades read on the way in, but hopping between sub-tabs while already on the
-     view never goes through it — without this the badge survives you staring right at the offers */
-  if(k==='tr'){ try{ markSeen('trades', tradeMaxTs()); updateTradeBadge(); }catch(e){} }
   syncSubnav();
 }
 function setMuTab(t){
@@ -7589,17 +7586,21 @@ function maybeFinalizeTrades(){
   Object.keys(offersMap||{}).forEach(id=>{ const o=offersMap[id];
     if(o && o.status==='accepted' && Date.now()>=reviewEndsAt(o)) finalizeOffer(id, true); });
 }
-/* ---- trade alerts: badge on the Trades tab + a toast when a new offer lands ---- */
+/* ---- trade alerts: badge on the Teams tab / Trades sub-tab + a toast when an offer lands ----
+   The badge is live status, not an unread counter: it stays lit until the trade itself is
+   resolved. A pending offer badges its recipient until it is accepted, countered, cancelled
+   or superseded; an accepted trade badges the whole league for as long as the veto window is
+   open. Looking at the page does not clear it — resolving the trade does. Read marks play no
+   part here any more (chat still uses them). */
 let seenOfferIds = null;
 function tradeAlertCount(){
   if(!window.fbUser) return 0;
-  const mine = myTeamIndex(), since = getSeen('trades');
+  const mine = myTeamIndex();
   let n = 0;
   Object.keys(offersMap||{}).forEach(id=>{
     const o = offersMap[id]; if(!o) return;
-    /* only count activity you haven't looked at yet */
-    if(o.status==='pending' && Number.isInteger(mine) && o.b===mine){ if((+o.createdAt||0)>since) n++; }
-    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)){ if((+o.acceptedAt||0)>since) n++; }
+    if(o.status==='pending' && Number.isInteger(mine) && o.b===mine) n++;
+    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)) n++;
   });
   return n;
 }
@@ -8394,7 +8395,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · badge shows even on the open page';
+const BUILD_STAMP = '2026-08-04 · badge stays until the trade resolves';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -8413,16 +8414,14 @@ document.addEventListener('visibilitychange', ()=>{
    count of zero. This names which one is true on THIS device, in the console —
    run diagBadge() from a desktop devtools or remote inspector. */
 window.diagBadge = function(){
-  const mine = myTeamIndex(), since = getSeen('trades');
+  const mine = myTeamIndex();
   const rows = Object.keys(offersMap||{}).map(id=>{
     const o=offersMap[id]||{};
     const why =
-      o.status!=='pending' && o.status!=='accepted' ? 'dead ('+o.status+')' :
+      o.status!=='pending' && o.status!=='accepted' ? 'resolved ('+o.status+')' :
       o.status==='pending' && o.b!==mine            ? 'aimed at team '+o.b+', not yours' :
-      o.status==='pending' && (+o.createdAt||0)<=since ? 'older than your read mark' :
       o.status==='accepted' && Date.now()>=reviewEndsAt(o) ? 'review window over' :
-      o.status==='accepted' && (+o.acceptedAt||0)<=since ? 'accepted before your read mark' :
-      'COUNTS';
+      'COUNTS — clears when this trade is resolved';
     return { id, status:o.status, from:o.aName, to:o.bName, toIdx:o.b,
              created:new Date(+o.createdAt||0).toLocaleString(), why };
   });
@@ -8431,7 +8430,6 @@ window.diagBadge = function(){
     signedIn: !!window.fbUser,
     yourTeamIndex: mine,
     teamClaimResolved: mine!==null,
-    readMark: since ? new Date(since).toLocaleString() : '(never)',
     offers: rows,
     badgeCount: tradeAlertCount(),
     badgeTargetsFound: document.querySelectorAll('nav.tabs button[data-view="teams"], .subnav button[data-k="tr"]').length
@@ -8449,7 +8447,6 @@ window.diagBadgeAlert = function(){
     'Build: ' + r.build,
     'Signed in: ' + (r.signedIn?'yes':'NO — badge needs a signed-in account'),
     'Your team: ' + (r.teamClaimResolved ? '#'+r.yourTeamIndex : 'NOT CLAIMED — offers cannot be matched to you'),
-    'Read mark: ' + r.readMark,
     'Badge should show: ' + (r.badgeCount ? r.badgeCount+' alert(s)' : 'nothing'),
     '',
     r.offers.length ? 'Offers:' : 'No offers in the feed at all.',
