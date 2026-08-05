@@ -1233,8 +1233,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" id="modeReal" onclick="setDraftMode('real')">Real Draft</button>
     <button class="btn ghost" id="modeMock" onclick="setDraftMode('mock')">Mock Draft</button>
   </div>
-  </div><!--/viewhead-->
-
+  <!-- The clock, who is on the clock and the draft controls live INSIDE the sticky viewhead so
+       they stay pinned while the board scrolls under them. Sticking the bar separately would
+       need a hard-coded offset for the header plus the title block above it; nesting it inherits
+       the offset that is already correct. -->
   <div class="clockbar">
     <div class="clock" id="clock">--</div>
     <div class="onclock"><small id="pickLabel">Pre-draft</small><span id="onClockTeam">Ready when you are</span></div>
@@ -1259,6 +1261,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </span>
     <span class="viewer-only" id="draftViewerNote" style="display:none;color:var(--chalk-dim);font-size:13px">Viewer mode — the commissioner runs the draft.</span>
   </div>
+  </div><!--/viewhead-->
 
   <div class="draftwrap">
     <div>
@@ -8424,7 +8427,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · page blurbs removed';
+const BUILD_STAMP = '2026-08-04 · draft clock bar pinned';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
