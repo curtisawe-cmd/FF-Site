@@ -7618,18 +7618,25 @@ function maybeFinalizeTrades(){
 /* ---- trade alerts: badge on the Teams tab / Trades sub-tab + a toast when an offer lands ----
    The badge is live status, not an unread counter: it stays lit until the trade itself is
    resolved. A pending offer badges its recipient until it is accepted, countered, cancelled
-   or superseded; an accepted trade badges the whole league for as long as the veto window is
-   open. Looking at the page does not clear it — resolving the trade does. Read marks play no
-   part here any more (chat still uses them). */
+   or superseded; an accepted trade badges the REST of the league for as long as the veto
+   window is open. Looking at the page does not clear it — resolving the trade does. Read marks
+   play no part here any more (chat still uses them).
+
+   The two managers in a deal are excluded from its review-window count, and that exclusion is
+   what makes the number behave the way a count should: with three offers waiting on you,
+   accepting one has to leave two. Without it the accepted deal simply moved from the pending
+   branch to the review branch and the badge sat on three, which reads as broken. They also
+   cannot veto their own trade, so there is nothing there for them to act on — same rule
+   vetoCount() already applies to votes. */
 let seenOfferIds = null;
 function tradeAlertCount(){
   if(!window.fbUser) return 0;
-  const mine = myTeamIndex();
+  const mine = myTeamIndex(), uid = window.fbUser.uid;
   let n = 0;
   Object.keys(offersMap||{}).forEach(id=>{
     const o = offersMap[id]; if(!o) return;
     if(o.status==='pending' && Number.isInteger(mine) && o.b===mine) n++;
-    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o)) n++;
+    else if(o.status==='accepted' && Date.now() < reviewEndsAt(o) && !tradeInvolvesUid(o, uid)) n++;
   });
   return n;
 }
@@ -8424,7 +8431,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · draft alarms name the manager';
+const BUILD_STAMP = '2026-08-04 · accepting a trade drops your count';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -8446,10 +8453,12 @@ window.diagBadge = function(){
   const mine = myTeamIndex();
   const rows = Object.keys(offersMap||{}).map(id=>{
     const o=offersMap[id]||{};
+    const uid = (window.fbUser||{}).uid;
     const why =
       o.status!=='pending' && o.status!=='accepted' ? 'resolved ('+o.status+')' :
       o.status==='pending' && o.b!==mine            ? 'aimed at team '+o.b+', not yours' :
       o.status==='accepted' && Date.now()>=reviewEndsAt(o) ? 'review window over' :
+      o.status==='accepted' && tradeInvolvesUid(o, uid) ? 'your own deal — you cannot veto it' :
       'COUNTS — clears when this trade is resolved';
     return { id, status:o.status, from:o.aName, to:o.bName, toIdx:o.b,
              created:new Date(+o.createdAt||0).toLocaleString(), why };
