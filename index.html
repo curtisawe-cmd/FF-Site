@@ -1623,10 +1623,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="grid2 admin-only" style="margin-bottom:18px">
     <div class="card">
       <h2>Draft Alarm Insults</h2>
-      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Leave it blank to use the built-in set.</p>
-      <textarea id="setInsults" rows="6" placeholder="One insult per line…" onchange="saveInsults(this.value)"></textarea>
+      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Write <b>{mgr}</b> for the manager on the clock, <b>{team}</b> for their team, <b>{player}</b> for whoever they tried to draft and <b>{pos}</b> for the position; each alarm fills in the real ones, and a line with no tokens shows as-is. <b>{mgr}</b> falls back to the team name for anyone without a manager set. Leave it blank to use the built-in set.</p>
+      <textarea id="setInsults" rows="6" placeholder="Sit down, {mgr}&#10;{team} can't count to nine&#10;{player} is a {pos}, genius" onchange="saveInsults(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="pickAlarm('This is your alarm. Now draft legally, champ.')">Test alarm</button>
+        <button class="btn ghost" onclick="testPickAlarm()">Test alarm</button>
       </div>
     </div>
 
@@ -4389,7 +4389,27 @@ function bigAlarm(pool, fallback, icon, sub){
   document.body.appendChild(el);
   setTimeout(()=>el.remove(), 5100);
 }
-function pickAlarm(why){ bigAlarm(S.alarmInsults, PICK_INSULTS, '⚠', why); }
+/* The alarm that fires most during a draft was the only one that could not name anybody —
+   trade and keeper alarms both take tokens, this one shouted into the void. Now it knows who
+   is on the clock, so a custom line can go after the actual offender.
+   {mgr} falls back to the team name because manager fields are often left blank. */
+function pickAlarm(why, ctx){
+  const c = ctx || {};
+  const fill = t => String(t)
+    .split('{mgr}').join(c.mgr || c.team || 'somebody')
+    .split('{team}').join(c.team || 'that team')
+    .split('{player}').join(c.player || 'that guy')
+    .split('{pos}').join(c.pos || 'that spot');
+  const built = PICK_INSULTS.map(fill);
+  const pool = (S.alarmInsults && S.alarmInsults.length) ? S.alarmInsults.map(fill) : built;
+  bigAlarm(pool, built, '⚠', why);
+}
+/* the Settings test button — shows the tokens actually filling in, not a bare line */
+function testPickAlarm(){
+  const mine = (S.teams||[])[0] || {};
+  pickAlarm('This is your alarm. Now draft legally, champ.',
+    { team: mine.name || 'WiFi is Down', mgr: mine.manager || '', player:'Christian McCaffrey', pos:'RB' });
+}
 /* Custom lines support {a}, {b} and {teams} tokens so the big line can name the actual teams
    in the deal. Without this, a custom line with team names typed into it repeated those same
    teams on every trade — the real matchup only appeared in the small sub-text. */
@@ -4466,7 +4486,11 @@ function makePick(playerId){
   if(!player || draftedIds().has(playerId)) return;
   const teamIdx = ownerForPick(idx);
   const allow = pickAllowed(teamIdx, player.pos);
-  if(!allow.ok){ pickAlarm(allow.why); return; }
+  if(!allow.ok){
+    const t = S.teams[teamIdx] || {};
+    pickAlarm(allow.why, { team:t.name, mgr:t.manager, player:player.name, pos:player.pos });
+    return;
+  }
   D.picks.push({ pickIndex: idx, teamIndex: teamIdx, playerId, name:player.name, pos:player.pos, nfl:player.team, auto:false });
   /* keeper round only, and only when the SAME manager is keeping him a second year */
   if(KR() && roundForPick(idx)===0){
@@ -8400,7 +8424,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · real 2025 keeper list';
+const BUILD_STAMP = '2026-08-04 · draft alarms name the manager';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
