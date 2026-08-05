@@ -391,7 +391,10 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
    unbounded it never scrolls vertically, so they would ride away with the page and pin nothing.
    Capping the height is what turns it into the thing that scrolls. --boardmax is measured in JS
    from what the pinned header, clock bar and ticker actually cost, the same way --hdr-h is. */
-.boardscroll{border:1px solid var(--line);border-radius:var(--radius);background:var(--board-bg);padding:5px;
+/* No padding on top: overflow clips at the padding edge, so a 5px top pad is 5px of board that
+   scrolling picks stay visible in, above where the pinned names park. The names carry that 5px
+   as their own padding instead - same look at rest, nothing can show above them. */
+.boardscroll{border:1px solid var(--line);border-radius:var(--radius);background:var(--board-bg);padding:0 5px 5px;
   overflow-x:auto;-webkit-overflow-scrolling:touch;   /* phones swipe the board sideways */
   max-height:var(--boardmax,72vh);overflow-y:auto}
 .board{display:grid;gap:2px}
@@ -402,7 +405,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 }
 .board .bhead{
   font-family:var(--f-ui);font-weight:700;font-size:clamp(10px,1.15vw,15px);letter-spacing:.03em;text-transform:uppercase;
-  color:var(--chalk);text-align:center;padding:3px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  color:var(--chalk);text-align:center;padding:8px 1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
 }
 .board .rnd{
   font-family:var(--f-mono);font-size:clamp(11px,1.05vw,15px);color:var(--chalk);
