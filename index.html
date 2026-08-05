@@ -1229,7 +1229,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-draft">
 <div class="viewhead">
   <h1 id="draftTitle">Draft Room</h1>
-  <p class="sub" id="draftSub">Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.</p>
   <div class="row" style="gap:8px;margin-bottom:14px">
     <button class="btn" id="modeReal" onclick="setDraftMode('real')">Real Draft</button>
     <button class="btn ghost" id="modeMock" onclick="setDraftMode('mock')">Mock Draft</button>
@@ -1291,7 +1290,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
-  <p class="sub">Live NFL player index — injury reports, team, status, age &amp; experience, straight from the feed. Updates within ~24 hours; hit refresh for the latest.</p>
   </div><!--/viewhead-->
   <div id="injView" style="display:none"></div>
   <div id="newsView" style="display:none"></div>
@@ -1317,7 +1315,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-matchups">
 <div class="viewhead">
   <h1>Matchups</h1>
-  <p class="sub">The 2026 regular season — Weeks 1–14, then your 8-team playoff takes over in Weeks 15–17. Scores update live from NFL stats during game windows.</p>
   <div class="row musub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="board" onclick="setMuTab('board')">Matchups</button>
     <button class="btn ghost" data-sub="gc" onclick="setMuTab('gc')">Game Center</button>
@@ -1359,7 +1356,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
-  <p class="sub" id="tradesBlurb">Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.</p>
   </div><!--/viewhead-->
   <div id="tradesView"></div>
   <div id="movesPane" style="display:none">
@@ -1384,7 +1380,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-chat">
 <div class="viewhead">
   <h1>League Chat</h1>
-  <p class="sub" id="chatBanner">Trash talk lives here.</p>
   <div class="row chatsub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="chat" onclick="showView('chat')">Chat</button>
     <button class="btn ghost" data-sub="polls" onclick="showView('polls')">Polls</button>
@@ -1426,7 +1421,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-polls">
 <div class="viewhead">
   <h1>Polls</h1>
-  <p class="sub">League voting — the commissioner posts a question, everyone signed in gets one vote.</p>
   <div class="row chatsub" style="gap:8px;margin-bottom:16px">
     <button class="btn ghost" data-sub="chat" onclick="showView('chat')">Chat</button>
     <button class="btn" data-sub="polls" onclick="showView('polls')">Polls</button>
@@ -1439,7 +1433,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-stats">
 <div class="viewhead">
   <h1>All-Time Stats</h1>
-  <p class="sub">Fourteen years, every manager, every record — computed straight from the verified NFL.com archive.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="stats" onclick="showView('stats')">Stats</button>
     <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
@@ -1453,7 +1446,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-recaps">
 <div class="viewhead">
   <h1>Season Recaps</h1>
-  <p class="sub">Fourteen years of glory, robbery, and 2-12 seasons — one year at a time.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
     <button class="btn ghost" data-sub="stats" onclick="showView('stats')">Stats</button>
     <button class="btn" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
@@ -1467,7 +1459,6 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-history">
 <div class="viewhead">
   <h1>League History</h1>
-  <p class="sub">The record book — 2012 to today. More gets added as we pull each season off NFL.com.</p>
   <div class="row statssub" style="gap:8px;margin-bottom:16px">
     <button class="btn ghost" data-sub="stats" onclick="showView('stats')">Stats</button>
     <button class="btn ghost" data-sub="recaps" onclick="showView('recaps')">Recaps</button>
@@ -3500,7 +3491,10 @@ function setDraftMode(m){
     draftMode = m;
     D = loadDraft();
     document.getElementById('draftTitle').textContent = m==='mock' ? 'Mock Draft' : 'Draft Room';
-    document.getElementById('draftSub').textContent = m==='mock'
+    /* null-guarded: the page-level blurbs were removed from the viewheads, and an unguarded
+       write here threw on every switch between the real and mock boards. */
+    const dsub = document.getElementById('draftSub');
+    if(dsub) dsub.textContent = m==='mock'
       ? 'Practice runs — pick for your team and let the bots handle the rest. The real board is untouched.'
       : 'Snake draft · commissioner mode — the person on the clock makes the pick, or it auto-picks best available when time runs out.';
     document.getElementById('mockCtrls').style.display = m==='mock' ? 'inline-flex' : 'none';
@@ -8431,7 +8425,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · accepting a trade drops your count';
+const BUILD_STAMP = '2026-08-04 · page blurbs removed';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
