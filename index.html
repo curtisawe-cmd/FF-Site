@@ -385,9 +385,21 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .roundnow.pop .rn-num{animation:rn-pop .62s cubic-bezier(.2,.9,.2,1)}
 @keyframes rn-pop{0%{transform:scale(2) rotate(-7deg);opacity:0;filter:blur(5px)}42%{transform:scale(.92) rotate(2.5deg);opacity:1;filter:blur(0)}64%{transform:scale(1.06) rotate(-1deg)}82%{transform:scale(.99)}100%{transform:scale(1) rotate(0)}}
 @media (prefers-reduced-motion: reduce){.roundnow.pop .rn-num{animation:none}}
+/* The team names stick to the top of the board while the rounds scroll under them. A sticky
+   child sticks to its nearest scrollport, and overflow-x:auto already made this element one on
+   both axes, so the names can only stick to .boardscroll itself, never to the page. Left
+   unbounded it never scrolls vertically, so they would ride away with the page and pin nothing.
+   Capping the height is what turns it into the thing that scrolls. --boardmax is measured in JS
+   from what the pinned header, clock bar and ticker actually cost, the same way --hdr-h is. */
 .boardscroll{border:1px solid var(--line);border-radius:var(--radius);background:var(--board-bg);padding:5px;
-  overflow-x:auto;-webkit-overflow-scrolling:touch}   /* phones swipe the board sideways */
+  overflow-x:auto;-webkit-overflow-scrolling:touch;   /* phones swipe the board sideways */
+  max-height:var(--boardmax,72vh);overflow-y:auto}
 .board{display:grid;gap:2px}
+.board .bhead,.board .bcorner{
+  position:sticky;top:0;z-index:3;background:var(--board-bg);
+  /* the grid gap is 2px of bare board, so picks would show through just under the names */
+  box-shadow:0 2px 0 var(--board-bg);
+}
 .board .bhead{
   font-family:var(--f-ui);font-weight:700;font-size:clamp(10px,1.15vw,15px);letter-spacing:.03em;text-transform:uppercase;
   color:var(--chalk);text-align:center;padding:3px 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
@@ -5563,7 +5575,7 @@ function renderBoard(){
      Team columns floor at 56px: on desktop 1fr is bigger anyway, on phones the board
      overflows into .boardscroll's horizontal swipe instead of crushing names to 2 letters. */
   board.style.gridTemplateColumns = `clamp(40px,4.3vw,66px) repeat(${n}, minmax(56px,1fr))`;
-  let html = `<div></div>`;
+  let html = `<div class="bcorner"></div>`;   /* sticks with the names, else R1 slides in under them */
   S.teams.forEach(t=>html+=`<div class="bhead">${esc(t.name)}</div>`);
   const byIndex = {}; D.picks.forEach(p=>byIndex[p.pickIndex]=p);
   const nextIdx = currentPickIndex();
@@ -5589,6 +5601,8 @@ function renderBoard(){
     }
   }
   board.innerHTML = html;
+  /* the round banner appears once a draft starts, which changes how much room the board gets */
+  try{ syncBoardMax(); }catch(e){}
 }
 
 function renderPool(){
@@ -9195,6 +9209,25 @@ function syncHeaderH(){
   if(side){ document.documentElement.style.setProperty('--hdr-h','0px'); return; }
   const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px');
 }
+
+/* The board is its own scroll area so the team names can stick to the top of it. Give it exactly
+   the room that is left once everything pinned above and below has taken its share, measured
+   rather than guessed - the clock bar alone changes height between phone and desktop, and the
+   round banner only exists mid-draft. */
+function syncBoardMax(){
+  const bs=document.querySelector('#view-draft .boardscroll'); if(!bs) return;
+  const seen=el=>el && el.getClientRects().length ? el.getBoundingClientRect().height : 0;
+  const side = document.documentElement.getAttribute('data-layout')==='side'
+            && window.matchMedia('(min-width:641px)').matches;
+  const used = (side?0:seen(document.querySelector('header.top')))
+             + seen(document.querySelector('#view-draft .viewhead'))
+             + seen(document.querySelector('#view-draft .roundnow'))
+             + seen(document.querySelector('.ticker'))
+             + 18;                                  /* board border, padding and a little air */
+  /* Never collapse to a sliver: below this a pinned name row costs more than it gives, and the
+     page can just scroll normally instead. */
+  document.documentElement.style.setProperty('--boardmax', Math.max(260, Math.round(innerHeight-used))+'px');
+}
 function toggleDrawer(open){
   const d=document.getElementById('navDrawer'), sc=document.getElementById('drawerScrim');
   if(!d||!sc) return;
@@ -9210,7 +9243,7 @@ function setLayout(v){
   syncHeaderH();
   toast(side ? 'Sidebar layout on' : 'Top bar layout');
 }
-window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncRolePreviewBtn(); }catch(e){} });
+window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncBoardMax(); }catch(e){} try{ syncRolePreviewBtn(); }catch(e){} });
 window.addEventListener('load', syncHeaderH);
 /* The ribbon's Alerts and View-as-manager buttons appear only after push starts and the role
    resolves, and either can wrap the ribbon to a new line. Resize and load both fire before
