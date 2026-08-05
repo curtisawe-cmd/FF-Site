@@ -1915,7 +1915,7 @@ const DEFAULTS = {
     "40+ yd TD bonus":0, "Pick-six thrown":0
   },
   history: {
-    v: 57,
+    v: 58,
     /* Regular-season and playoff-week final scores, from NFL.com league history schedule
        exports. Sparse on purpose — weeks land here one saved page at a time. */
     resultsByWeek: {
@@ -2706,20 +2706,25 @@ const DEFAULTS = {
     },
     /* First round in draft order, from the NFL.com league history export. Only rounds the
        export actually contained are here — 2025 saved with round 1 only. */
+    /* The real 2025 keepers, one per manager, as supplied by the commissioner. This replaced an
+       import of NFL.com's first ROUND, which is a different thing — that list gave one manager
+       three entries (picks 1, 6 and 11) and omitted two managers entirely. Team names, not
+       manager names, because mgrOf() resolves the manager per season and teams get renamed.
+       This is also what the one-year keeper rule checks against, so it has to be the keepers. */
     draftR1: {
       "2025": [
-        {pick:1,  player:"Christian McCaffrey", pos:"RB", nfl:"SF",  team:"WiFi is Down"},
-        {pick:2,  player:"CeeDee Lamb",         pos:"WR", nfl:"DAL", team:"Jerry had a little Lamb"},
-        {pick:3,  player:"Drake London",        pos:"WR", nfl:"ATL", team:"Allen's Assholes"},
+        {pick:1,  player:"Malik Nabers",        pos:"WR", nfl:"NYG", team:"JK Ramandrew Skatabers IV"},
+        {pick:2,  player:"Ja'Marr Chase",       pos:"WR", nfl:"CIN", team:"Bill Cosbys Sleepers"},
+        {pick:3,  player:"Derrick Henry",       pos:"RB", nfl:"BAL", team:"This is my Last year"},
         {pick:4,  player:"Jayden Daniels",      pos:"QB", nfl:"WAS", team:"Nut buster"},
-        {pick:5,  player:"De'Von Achane",       pos:"RB", nfl:"MIA", team:"Brown Bag Boy"},
-        {pick:6,  player:"Bijan Robinson",      pos:"RB", nfl:"ATL", team:"WiFi is Down"},
+        {pick:5,  player:"David Montgomery",    pos:"RB", nfl:"DET", team:"uncle skips ribs"},
+        {pick:6,  player:"Christian McCaffrey", pos:"RB", nfl:"SF",  team:"WiFi is Down"},
         {pick:7,  player:"Saquon Barkley",      pos:"RB", nfl:"PHI", team:"Saquon Bacher"},
-        {pick:8,  player:"Derrick Henry",       pos:"RB", nfl:"BAL", team:"This is my Last year"},
-        {pick:9,  player:"David Montgomery",    pos:"RB", nfl:"DET", team:"uncle skips ribs"},
-        {pick:10, player:"James Cook",          pos:"RB", nfl:"BUF", team:"Prater's Leg"},
-        {pick:11, player:"Garrett Wilson",      pos:"WR", nfl:"NYJ", team:"WiFi is Down"},
-        {pick:12, player:"Jahmyr Gibbs",        pos:"RB", nfl:"DET", team:"MaddaMafia"}
+        {pick:8,  player:"James Cook",          pos:"RB", nfl:"BUF", team:"Prater's Leg"},
+        {pick:9,  player:"Jahmyr Gibbs",        pos:"RB", nfl:"DET", team:"MaddaMafia"},
+        {pick:10, player:"De'Von Achane",       pos:"RB", nfl:"MIA", team:"Brown Bag Boy"},
+        {pick:11, player:"Drake London",        pos:"WR", nfl:"ATL", team:"Allen's Assholes"},
+        {pick:12, player:"Amon-Ra St. Brown",   pos:"WR", nfl:"DET", team:"Jerry had a little Lamb"}
       ]
     },
     pointsLeaders: [
@@ -8395,7 +8400,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-08-04 · badge stays until the trade resolves';
+const BUILD_STAMP = '2026-08-04 · real 2025 keeper list';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
