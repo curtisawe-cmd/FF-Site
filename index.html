@@ -4215,7 +4215,7 @@ function addFromPlayers(pid, ev){
   if(ti===null){ toast(window.fbUser? 'Claim your team first to add players.' : 'Sign in and claim your team to add players.'); return; }
   /* on waivers he cannot be added, only claimed - so send the button where it can actually work
      rather than bouncing it off the guard with a toast */
-  if(onWaivers(pid) && !isAdmin()){ submitClaim(pid); return; }
+  if(onWaivers(pid) && !isAdmin()){ claimWaiver(pid); return; }
   addWithDrop(ti, pid);
 }
 /* key stat columns per position for the season table */
@@ -5011,6 +5011,9 @@ async function setMemberTeam(uid, val){
   if(!fbOk()) return;
   const rec=(managersMap||{})[uid]||{}, nm=rec.name||rec.email||'that manager';
   const prev=Number.isInteger(rec.teamIndex)? rec.teamIndex : null;
+  /* Enforced here, not just in the card's markup: a claimed team stays claimed until the
+     OWNER releases it. Commissioners can still hand a team to an account that has none. */
+  if(prev!==null && !isOwner()){ toast('Claimed teams are locked — only the league owner can release one.'); renderCommishCard(); return; }
   const ti = (val===''||val==null) ? null : +val;
   if(ti!==null){
     const holder=(claimsMap||{})[ti];
@@ -8336,7 +8339,10 @@ function waiverBlockedBy(){
 function pendingClaimsFor(pid){ return claimList().filter(c=>c.status==='pending' && c.pid===String(pid)); }
 function myClaimFor(pid){ const ti=addTargetTeam(); return ti===null?null:(pendingClaimsFor(pid).find(c=>c.team===ti)||null); }
 
-function submitClaim(pid, dropPid){
+/* claimWaiver, NOT submitClaim: that name already belongs to the claim-your-team overlay, and
+   both being function declarations in one script meant the later one silently replaced the
+   earlier - this function ate the overlay's button and broke team claiming for new accounts. */
+function claimWaiver(pid, dropPid){
   const ti=addTargetTeam();
   if(ti===null){ toast(window.fbUser?'Claim your team first to put in a waiver claim.':'Sign in and claim your team.'); return; }
   if(!fbOk() || !window.fbUser){ toast('Sign in to put a claim in.'); return; }
@@ -8364,7 +8370,9 @@ function cancelClaim(id){
   window.FB.dbUpdate(`${waiverPath()}/${id}`, {status:'cancelled', closedAt:Date.now()})
     .then(()=>{ renderWaivers(); toast('Claim withdrawn'); }).catch(e=>{ toast(waiverWriteError(e)); renderWaivers(); });
 }
-function closeClaim(id, status, reason){
+/* settleClaim, NOT closeClaim - that name is the claim-your-team overlay's close button, and a
+   second declaration in the same script would silently replace it (see claimWaiver above). */
+function settleClaim(id, status, reason){
   const patch={status, closedAt:Date.now(), reason:String(reason||'')};
   if(wClaims[id]) wClaims[id]={...wClaims[id], ...patch};
   try{ window.FB.dbUpdate(`${waiverPath()}/${id}`, patch).catch(()=>{}); }catch(e){}
@@ -8400,7 +8408,7 @@ function maybeProcessWaivers(){
   let awarded=false;
   byPid.forEach((claims, pid)=>{
     if(rosteredIds().has(pid)){                                  /* picked up some other way */
-      claims.forEach(c=>closeClaim(c.id,'lost','He was already rostered'));
+      claims.forEach(c=>settleClaim(c.id,'lost','He was already rostered'));
       return;
     }
     /* best priority wins; equal priority cannot happen, but an older claim breaks it anyway */
@@ -8409,8 +8417,8 @@ function maybeProcessWaivers(){
       return (ia<0?999:ia)-(ib<0?999:ib) || (+a.at||0)-(+b.at||0);
     });
     const win=claims[0], ok=awardClaim(win);
-    closeClaim(win.id, ok?'won':'failed', ok?'':'Roster was full and the named drop was gone');
-    claims.slice(1).forEach(c=>closeClaim(c.id,'lost',`${win.teamName||teamName(win.team)} had waiver priority`));
+    settleClaim(win.id, ok?'won':'failed', ok?'':'Roster was full and the named drop was gone');
+    claims.slice(1).forEach(c=>settleClaim(c.id,'lost',`${win.teamName||teamName(win.team)} had waiver priority`));
     if(ok){ moveToBackOfWaiverOrder(win.team); awarded=true; }
   });
   if(awarded){
@@ -8436,7 +8444,7 @@ function openClaimModal(pid){
       <div class="faRow">${playerFace(r,30)}
         <span class="postag pos-${r.pos}" style="--pc:var(--${String(r.pos||'').toLowerCase()})">${r.pos}</span>
         <span class="faName">${esc(r.name)}</span><span class="pmeta">${r.nfl||''}</span>
-        <button class="btn danger" style="padding:3px 11px;font-size:13px" onclick="submitClaim('${w.pid}','${r.playerId}')">Drop</button>
+        <button class="btn danger" style="padding:3px 11px;font-size:13px" onclick="claimWaiver('${w.pid}','${r.playerId}')">Drop</button>
       </div>`).join('')}</div>
   </div>`;
 }
@@ -8548,7 +8556,7 @@ function renderWaivers(){
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
           ${mineIn
             ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
-            : `<button class="pick" onclick="submitClaim('${w.pid}')">Claim</button>`}
+            : `<button class="pick" onclick="claimWaiver('${w.pid}')">Claim</button>`}
         </div>${claimantsHTML(w.pid)}</div>`;
       }).join('');
 
@@ -8609,7 +8617,7 @@ function renderFreeAgents(ti){
       <span class="pmeta">${p.team||''}</span>
       ${onWaivers(p.id)
         ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
-           <button class="pick" onclick="submitClaim('${p.id}')">Claim</button>`
+           <button class="pick" onclick="claimWaiver('${p.id}')">Claim</button>`
         : `<button class="pick" onclick="addWithDrop(${ti},'${p.id}')">Add</button>`}
     </div>`).join('') || `<p class="sub" style="margin:8px 0 0">No available players match.</p>`)
     + (fa.length>40 ? `<p class="sub" style="margin:8px 0 0">Showing 40 of ${fa.length} — search to narrow.</p>` : '');
@@ -8744,10 +8752,17 @@ function renderCommishCard(){
   list.innerHTML = accounts.map(a=>{
     const ownerRow = String(a.email||'').toLowerCase()===COMMISH_EMAIL;
     const commish = ownerRow || adminsMap[a.uid]===true;
-    const teamTxt = `<select style="max-width:190px;font-size:12px;padding:2px 6px" title="Team this manager controls" onchange="setMemberTeam('${a.uid}', this.value)">
-        <option value=""${Number.isInteger(a.teamIndex)?'':' selected'}>— no team —</option>
+    /* A claimed team is LOCKED: the dropdown was an accident waiting to happen once every
+       assignment was right, and one mis-click re-scrambled a binding. The owner gets a small
+       release button; releasing brings the dropdown back for that account. */
+    const held = Number.isInteger(a.teamIndex) && (S.teams||[])[a.teamIndex];
+    const teamTxt = held
+      ? `<span class="divtag" style="margin:0" title="Locked — only the league owner can release a claimed team">${esc(S.teams[a.teamIndex].name)}</span>`
+        + (owner ? `<button class="btn ghost" style="padding:1px 8px;font-size:11px;margin-left:5px" title="Release ${esc(S.teams[a.teamIndex].name)} so it can be reassigned" onclick="setMemberTeam('${a.uid}','')">✕</button>` : '')
+      : `<select style="max-width:190px;font-size:12px;padding:2px 6px" title="Team this manager controls" onchange="setMemberTeam('${a.uid}', this.value)">
+        <option value="" selected>— no team —</option>
         ${(S.teams||[]).map((t,i)=>{ const taken=(claimsMap||{})[i] && (claimsMap||{})[i]!==a.uid;
-          return `<option value="${i}"${i===a.teamIndex?' selected':''}${taken?' disabled':''}>${esc(t.name||('Team '+(i+1)))}${taken?' — taken':''}</option>`; }).join('')}
+          return `<option value="${i}"${taken?' disabled':''}>${esc(t.name||('Team '+(i+1)))}${taken?' — taken':''}</option>`; }).join('')}
       </select>`;
     const badge = ownerRow ? '<span class="divtag">Owner</span>' : '';   /* the toggle already shows commish state */
     const btn = ownerRow
