@@ -8303,6 +8303,24 @@ function onWaivers(pid){ return waiverWireCached().set.has(String(pid)); }
 function wireEntry(pid){ return waiverWireCached().list.find(w=>w.pid===String(pid))||null; }
 
 function claimList(){ return Object.keys(wClaims||{}).map(id=>({id, ...wClaims[id]})); }
+/* Name the cause instead of just alarming. A rejected write here is almost always the database
+   rules not being deployed yet, and "could not put the claim in" gives nobody anything to act
+   on - it looks like a bug in the app rather than a setup step nobody has done. */
+function waiverWriteError(e){
+  const code = (e && (e.code || e.message)) ? String(e.code || e.message) : '';
+  if(/permission|denied/i.test(code))
+    return `Claims are not switched on yet — the database rules have to allow league/${LEAGUE_ID}/waiverClaims. Show the commissioner.`;
+  if(/network|offline|unavailable/i.test(code)) return 'Offline, so the claim was not saved. Try again.';
+  return 'Could not put the claim in' + (code ? ` (${code})` : '') + '.';
+}
+/* Is the claims node itself unreachable? Read and write are granted by the same rule, so either
+   failing means the node was never granted at all. */
+function waiverBlockedBy(){
+  const w = Object.keys(window.FB_WERR||{}).find(k=>k.indexOf('/waiverClaims')>=0);
+  if(w) return window.FB_WERR[w];
+  const r = (window.FB_ERR||{})[`league/${LEAGUE_ID}/waiverClaims`];
+  return r || null;
+}
 function pendingClaimsFor(pid){ return claimList().filter(c=>c.status==='pending' && c.pid===String(pid)); }
 function myClaimFor(pid){ const ti=addTargetTeam(); return ti===null?null:(pendingClaimsFor(pid).find(c=>c.team===ti)||null); }
 
@@ -8326,13 +8344,13 @@ function submitClaim(pid, dropPid){
   window.FB.dbSet(`${waiverPath()}/${id}`, rec).then(()=>{
     wClaims[id]=rec; closeClaimModal(); renderWaivers();
     toast(`Claim in on ${w.name}`);
-  }).catch(()=>toast('Could not put the claim in.'));
+  }).catch(e=>{ toast(waiverWriteError(e)); renderWaivers(); });
 }
 function cancelClaim(id){
   const c=wClaims[id]; if(!c || c.status!=='pending') return;
   if(c.team!==addTargetTeam() && !isAdmin()){ toast('Not your claim.'); return; }
   window.FB.dbUpdate(`${waiverPath()}/${id}`, {status:'cancelled', closedAt:Date.now()})
-    .then(()=>{ renderWaivers(); toast('Claim withdrawn'); }).catch(()=>toast('Could not withdraw.'));
+    .then(()=>{ renderWaivers(); toast('Claim withdrawn'); }).catch(e=>{ toast(waiverWriteError(e)); renderWaivers(); });
 }
 function closeClaim(id, status, reason){
   const patch={status, closedAt:Date.now(), reason:String(reason||'')};
@@ -8497,6 +8515,15 @@ function renderWaivers(){
   const orderHTML=order.map((ti,k)=>`<span class="wv-ord${ti===mine?' me':''}">
       <span class="wv-n">${k+1}</span>${esc(teamName(ti))}</span>`).join('');
 
+  /* If the node was never granted in the rules, every claim is rejected and the only symptom is
+     a toast at the moment you press the button. Say so up front instead. */
+  const blocked=waiverBlockedBy();
+  const blockedHTML = !blocked ? '' : `<div class="notice" style="border-left-color:var(--danger);margin:0 0 14px">
+    <b>Claims cannot be saved yet (${esc(blocked)}).</b><br>
+    The database rules need to allow <code>league/${LEAGUE_ID}/waiverClaims</code>. Until then the
+    wire and the priority order below are correct, but pressing Claim will not store anything.
+    The rules to paste are in <code>push/firebase-rules.json</code> in the repo.</div>`;
+
   const wireHTML = !wire.length
     ? `<p class="sub" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for ${waiverHours()} hours before anyone can just pick them up.</p>`
     : wire.map(w=>{
@@ -8538,6 +8565,7 @@ function renderWaivers(){
   const you = mine===null ? '' : `<span class="statpill" style="margin-left:8px">Your priority: ${waiverPriority(mine)||'—'} of ${order.length}</span>`;
 
   el.innerHTML = `
+    ${blockedHTML}
     <div class="card">
       <h2>Waiver priority${you}</h2>
       <div class="wv-order">${orderHTML}</div>
