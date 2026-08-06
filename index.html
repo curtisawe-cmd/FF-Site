@@ -643,6 +643,17 @@ nav.tabs button{position:relative}
 .pcell{display:flex;align-items:center;gap:10px;min-width:0}
 /* add/drop free-agent rows */
 .faRow{display:flex;align-items:center;gap:9px;padding:6px 4px;border-bottom:1px solid var(--line)}
+/* waiver priority: one line that scrolls sideways on a phone rather than stacking twelve teams */
+.wv-order{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.wv-order::-webkit-scrollbar{display:none}
+.wv-ord{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;white-space:nowrap;
+  font-size:13px;color:var(--chalk-dim);background:var(--panel-2);border:1px solid var(--line);
+  border-radius:20px;padding:4px 12px 4px 5px}
+.wv-ord.me{color:var(--chalk);border-color:var(--turf);background:var(--turf-wash)}
+.wv-ord .wv-n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;
+  border-radius:50%;background:var(--steel,var(--line));color:var(--chalk);
+  font-family:var(--f-mono);font-size:11px;font-weight:700}
+.wv-ord.me .wv-n{background:var(--turf);color:#fff}
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .pick:disabled{opacity:.4;cursor:not-allowed}
@@ -1322,6 +1333,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
+    <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -1330,6 +1342,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   </div><!--/viewhead-->
   <div id="injView" style="display:none"></div>
   <div id="newsView" style="display:none"></div>
+  <div id="wvView" style="display:none"></div>
   <div class="card" id="plCard">
     <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
       <input type="text" id="plSearch" placeholder="Search player, team, or college…" style="flex:1;min-width:180px;max-width:360px" oninput="window.plQuery=this.value;renderPlayers()">
@@ -1369,6 +1382,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
+    <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -1388,6 +1402,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
+    <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -1598,6 +1613,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="How long the league gets to veto a trade after the other manager accepts it. Instant means accepted trades process straight away with no veto window.">Trade review window</label><select id="setTradeReview" style="max-width:200px" onchange="setTradeReview(this.value)"></select></div>
     </div>
     <p class="sub" id="tradeReviewNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
+    <div class="setgrid" style="margin-bottom:12px">
+      <div class="setrow"><label title="How long a dropped player sits on waivers before anyone can add him outright. During that time he can only be claimed, and the best waiver priority wins. Set 0 to switch waivers off entirely.">Waiver period (hours)</label><input type="number" step="1" min="0" max="336" id="setWaiverHours" style="max-width:110px" onchange="setWaiverHours(this.value)"></div>
+      <div class="setrow"><label title="Reseed the waiver order from the current standings, worst record first. Use this at the start of a season.">Waiver priority</label><button class="btn ghost" style="max-width:200px" onclick="resetWaiverOrder()">Reseed from standings</button></div>
+    </div>
+    <p class="sub" id="waiverNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="setgrid" style="margin-bottom:12px">
       <div class="setrow"><label title="Charged to a team for every player it picks up, including players received in a trade.">Fee per add ($)</label><input type="number" step="0.25" min="0" id="setFeeAdd" style="max-width:110px" onchange="S.txFeeAdd=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
       <div class="setrow"><label title="Charged for every player a team lets go, including players sent away in a trade. Draft picks are not charged.">Fee per drop ($)</label><input type="number" step="0.25" min="0" id="setFeeDrop" style="max-width:110px" onchange="S.txFeeDrop=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
@@ -1895,6 +1915,8 @@ const DEFAULTS = {
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
   txFeeAdd: 0.5,         /* league dues: charged per player added */
   txFeeDrop: 0.5,        /* and per player dropped — so a full add/drop is a dollar */
+  waiverHours: 24,       /* how long a dropped player sits on waivers; 0 = waivers off */
+  waiverOrder: [],       /* rolling priority, worst first; empty = seed from the standings */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
   tabFlashRandom: false, /* true = scatter around that number instead of landing on it exactly */
   mock: { team:0, auto:true },
@@ -3504,6 +3526,9 @@ function startLeagueSync(){
     noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/waiverClaims`, (m)=>{ wClaims = m||{};
+    if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+    try{ maybeProcessWaivers(); }catch(e){} });
 }
 /* The controls are wrapped in .admin-only, which CSS hides outright for managers — an inline
    style cannot beat `display:none !important`, so the class itself is toggled. In mock mode
@@ -3639,6 +3664,9 @@ function refreshPool(){ loadPool(true); }
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
 setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
+  /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
+  if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
+  if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
   /* Game Center pulls fresh stats itself (5-min TTL on the live week) */
@@ -3869,9 +3897,12 @@ function setPlTab(t){
   window.plTab = t;
   syncSubnav();
   const card=document.getElementById('plCard'), inj=document.getElementById('injView'), news=document.getElementById('newsView');
+  const wv=document.getElementById('wvView');
   if(card) card.style.display = t==='all' ? 'block':'none';
   if(inj)  inj.style.display  = t==='inj' ? 'block':'none';
   if(news) news.style.display = t==='news' ? 'block':'none';
+  if(wv)   wv.style.display   = t==='wv'  ? 'block':'none';
+  if(t==='wv'){ bustWire(); renderWaivers(); }
   if(t==='inj') renderInjuries();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
   updateGhost();
@@ -4151,6 +4182,9 @@ function addFromPlayers(pid, ev){
   if(ev){ ev.stopPropagation(); }
   const ti = addTargetTeam();
   if(ti===null){ toast(window.fbUser? 'Claim your team first to add players.' : 'Sign in and claim your team to add players.'); return; }
+  /* on waivers he cannot be added, only claimed - so send the button where it can actually work
+     rather than bouncing it off the guard with a toast */
+  if(onWaivers(pid) && !isAdmin()){ submitClaim(pid); return; }
   addWithDrop(ti, pid);
 }
 /* key stat columns per position for the season table */
@@ -5054,6 +5088,7 @@ const SETTING_LABELS={
   rules:'league rules', draftCfg:'draft setup', divisions:'divisions', prizes:'prize money',
   timerSec:'pick clock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
   tradeReviewMs:'trade review window', txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
+  waiverHours:'waiver period', waiverOrder:'waiver priority',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
@@ -8105,6 +8140,13 @@ function dropPlayer(ti, pid){
 function addPlayer(ti, pid){
   if(!requireTeam(ti)) return;
   if(rosteredIds().has(pid)){ toast("That player is already on a roster."); return; }
+  /* A player on waivers has to be claimed, not grabbed - that is the whole point of the wire.
+     The commissioner can still force it through to fix a mistake, but has to mean it. */
+  if(onWaivers(pid)){
+    const w=wireEntry(pid);
+    if(!isAdmin()){ toast(`${w?w.name:'He'} is on waivers — put a claim in.`); return; }
+    if(!confirm(`${w?w.name:'This player'} is on waivers for another ${waiverClearLabel(w&&w.until)}.\n\nAdd him anyway? This skips every claim already in on him.`)) return;
+  }
   if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
@@ -8120,6 +8162,9 @@ function addPlayer(ti, pid){
 function addWithDrop(ti, pid){
   if(!requireTeam(ti)) return;
   if(rosteredIds().has(pid)){ toast("That player is already on a roster."); return; }
+  /* caught here too: this is the path both Add buttons use, and a full roster would otherwise
+     open the drop-a-player modal before anything checked the wire */
+  if(onWaivers(pid) && !isAdmin()){ const w=wireEntry(pid); toast(`${w?w.name:'He'} is on waivers — put a claim in.`); return; }
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   if(rosterCount(ti) < rosterLimit()){ addPlayer(ti, pid); return; }
@@ -8154,6 +8199,270 @@ function swapPlayer(ti, dropPid, addPid){
   if(window.currentView==='players') renderPlayers();
   toast(`Added ${p?p.name:'player'} — a spot was dropped`);
 }
+/* ===================== WAIVER WIRE =====================
+   Rolling priority, worst record first. A dropped player sits on waivers for a set period
+   instead of falling straight back into the pool, so nobody can cut a star for an hour to
+   duck a roster limit and re-add him. Claims pile up until he clears, then the best priority
+   wins and that team goes to the back of the line.
+
+   Two deliberate reuses instead of new state:
+   - The wire is DERIVED from the transaction log, not stored. A drop already writes a durable
+     {type:'drop', playerId, at} row, so "who is on waivers" is a question the log can already
+     answer. A stored second copy would only give it something to disagree with. teamMoves
+     looks like the same data but is a work queue the commissioner drains, so it is no good
+     for this - the record has to outlive the sync.
+   - A won claim lands through the ordinary roster path and logs an add (and a drop, if one was
+     named), so a waiver pickup reads like every other move in Transactions and can be undone
+     by the same commissioner tooling.
+
+   Processing is commissioner-gated for exactly the reason finalizeOffer is: the database rules
+   only let an admin write rosters and settings, so a manager's browser running this would be
+   denied. Whichever commissioner device is open first after a deadline does the work. */
+function waiverPath(){ return `league/${LEAGUE_ID}/waiverClaims`; }
+/* NOT claimsMap - that name is already the team-claim map (which uid owns which team) */
+let wClaims = {};
+function waiverHours(){ const h=+S.waiverHours; return Number.isFinite(h) && h>=0 ? h : 24; }
+function waiverMs(){ return waiverHours()*3600000; }
+function waiversOn(){ return waiverHours() > 0; }   /* 0 hours turns the system off league-wide */
+
+/* Priority order, worst first. Seeded from the standings the first time it is needed, then kept
+   as a list that only moves when somebody WINS a claim - that is what makes it rolling rather
+   than just re-reading the standings every week. */
+function seedWaiverOrder(){
+  let rows=[]; try{ rows=seasonStandings(); }catch(e){ rows=[]; }
+  if(rows.length) return rows.map(r=>r.i).reverse();          /* standings come back best first */
+  return (S.teams||[]).map((_,i)=>i).reverse();
+}
+function waiverOrder(){
+  const n=(S.teams||[]).length;
+  const saved=(S.waiverOrder||[]).map(Number).filter(i=>Number.isInteger(i)&&i>=0&&i<n);
+  const seen=new Set(saved);
+  /* a team the saved list never knew about (league grew, or first run) joins at the front,
+     worst record first - the same rule that seeds the list */
+  return seedWaiverOrder().filter(i=>!seen.has(i)).concat(saved);
+}
+function waiverPriority(ti){ const k=waiverOrder().indexOf(ti); return k<0 ? null : k+1; }
+function moveToBackOfWaiverOrder(ti){
+  S.waiverOrder = waiverOrder().filter(i=>i!==ti).concat([ti]);
+  saveState();
+}
+
+/* Everyone dropped inside the window who has not been picked back up. */
+function waiverWire(){
+  if(!waiversOn()) return [];
+  const now=Date.now(), rostered=rosteredIds(), byPid=new Map();
+  Object.keys(txMap||{}).forEach(id=>{
+    const x=txMap[id];
+    if(!x || x.type!=='drop' || x.undone) return;
+    const pid=String(x.playerId||''); if(!pid || rostered.has(pid)) return;
+    const at=+x.at||0, until=at+waiverMs();
+    if(now>=until) return;                                    /* cleared to free agency already */
+    const prev=byPid.get(pid);
+    if(!prev || at>prev.at)                                   /* dropped twice: the later drop rules */
+      byPid.set(pid,{pid, at, until, from:x.teamIndex, name:x.player||'', pos:x.pos||'', nfl:x.nfl||''});
+  });
+  return [...byPid.values()].sort((a,b)=>a.until-b.until);
+}
+/* Player lists ask "is he on waivers?" once per row, hundreds of times per render, so the
+   derived wire is memoised for a beat. Anything that changes it busts the cache by hand. */
+let _wire={at:0, list:[], set:new Set()};
+function waiverWireCached(){
+  if(Date.now()-_wire.at < 1500) return _wire;
+  const list=waiverWire();
+  _wire={at:Date.now(), list, set:new Set(list.map(w=>w.pid))};
+  return _wire;
+}
+function bustWire(){ _wire.at=0; }
+function onWaivers(pid){ return waiverWireCached().set.has(String(pid)); }
+function wireEntry(pid){ return waiverWireCached().list.find(w=>w.pid===String(pid))||null; }
+
+function claimList(){ return Object.keys(wClaims||{}).map(id=>({id, ...wClaims[id]})); }
+function pendingClaimsFor(pid){ return claimList().filter(c=>c.status==='pending' && c.pid===String(pid)); }
+function myClaimFor(pid){ const ti=addTargetTeam(); return ti===null?null:(pendingClaimsFor(pid).find(c=>c.team===ti)||null); }
+
+function submitClaim(pid, dropPid){
+  const ti=addTargetTeam();
+  if(ti===null){ toast(window.fbUser?'Claim your team first to put in a waiver claim.':'Sign in and claim your team.'); return; }
+  if(!fbOk() || !window.fbUser){ toast('Sign in to put a claim in.'); return; }
+  const w=wireEntry(pid);
+  if(!w){ toast('That player is not on waivers.'); return; }
+  if(myClaimFor(pid)){ toast('You already have a claim in on him.'); return; }
+  /* A full roster has to name its drop up front. The claim processes on a deadline with nobody
+     watching, so there is no one to ask at the time - an unanswered question would just fail. */
+  const full = rosterCount(ti) >= rosterLimit();
+  if(full && !dropPid){ openClaimModal(pid); return; }
+  const dp = dropPid ? (realDraft().picks.find(x=>x.teamIndex===ti && x.playerId===String(dropPid) && !x.cut)||null) : null;
+  if(full && !dp){ toast('Pick someone to drop.'); return; }
+  const id='w'+Date.now()+Math.random().toString(36).slice(2,6);
+  const rec={ team:ti, teamName:teamName(ti), pid:String(pid), name:w.name, pos:w.pos, nfl:w.nfl,
+              dropPid: dp?String(dp.playerId):'', dropName: dp?(dp.name||''):'',
+              at:Date.now(), by:window.fbUser.uid, status:'pending', clearsAt:w.until };
+  window.FB.dbSet(`${waiverPath()}/${id}`, rec).then(()=>{
+    wClaims[id]=rec; closeClaimModal(); renderWaivers();
+    toast(`Claim in on ${w.name}`);
+  }).catch(()=>toast('Could not put the claim in.'));
+}
+function cancelClaim(id){
+  const c=wClaims[id]; if(!c || c.status!=='pending') return;
+  if(c.team!==addTargetTeam() && !isAdmin()){ toast('Not your claim.'); return; }
+  window.FB.dbUpdate(`${waiverPath()}/${id}`, {status:'cancelled', closedAt:Date.now()})
+    .then(()=>{ renderWaivers(); toast('Claim withdrawn'); }).catch(()=>toast('Could not withdraw.'));
+}
+function closeClaim(id, status, reason){
+  const patch={status, closedAt:Date.now(), reason:String(reason||'')};
+  if(wClaims[id]) wClaims[id]={...wClaims[id], ...patch};
+  try{ window.FB.dbUpdate(`${waiverPath()}/${id}`, patch).catch(()=>{}); }catch(e){}
+}
+/* Put the winner on the roster. Returns false rather than throwing so the claim can be closed
+   as failed and the loser behind him is not silently promoted into a broken state. */
+function awardClaim(c){
+  const ti=+c.team, pid=String(c.pid);
+  if(!Number.isInteger(ti) || !(S.teams||[])[ti]) return false;
+  if(rosteredIds().has(pid)) return false;
+  const p=(typeof POOL!=='undefined'?POOL:[]).find(x=>x.id===pid) || (typeof POOL_MAP!=='undefined'&&POOL_MAP?POOL_MAP.get(pid):null);
+  if(!p) return false;
+  if(rosterCount(ti) >= rosterLimit() && !c.dropPid) return false;   /* no room and nothing named */
+  const d=realDraft();
+  const dropped = c.dropPid ? cutPick(ti, String(c.dropPid), d) : null;
+  if(rosterCount(ti) >= rosterLimit()) return false;                 /* named drop was already gone */
+  d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true, waiver:true });
+  saveRealDraft(d); saveState(); pushTeamData(ti);
+  if(dropped) logMove(ti,'drop',dropped);
+  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
+  return true;
+}
+function maybeProcessWaivers(){
+  if(!waiversOn() || !isAdmin() || !fbOk() || !window.fbUser) return;
+  const now=Date.now(), byPid=new Map();
+  claimList().forEach(c=>{
+    if(c.status!=='pending' || now < (+c.clearsAt||0)) return;   /* still on the clock */
+    if(!byPid.has(c.pid)) byPid.set(c.pid, []);
+    byPid.get(c.pid).push(c);
+  });
+  if(!byPid.size) return;
+  const order=waiverOrder();
+  let awarded=false;
+  byPid.forEach((claims, pid)=>{
+    if(rosteredIds().has(pid)){                                  /* picked up some other way */
+      claims.forEach(c=>closeClaim(c.id,'lost','He was already rostered'));
+      return;
+    }
+    /* best priority wins; equal priority cannot happen, but an older claim breaks it anyway */
+    claims.sort((a,b)=>{
+      const ia=order.indexOf(a.team), ib=order.indexOf(b.team);
+      return (ia<0?999:ia)-(ib<0?999:ib) || (+a.at||0)-(+b.at||0);
+    });
+    const win=claims[0], ok=awardClaim(win);
+    closeClaim(win.id, ok?'won':'failed', ok?'':'Roster was full and the named drop was gone');
+    claims.slice(1).forEach(c=>closeClaim(c.id,'lost',`${win.teamName||teamName(win.team)} had waiver priority`));
+    if(ok){ moveToBackOfWaiverOrder(win.team); awarded=true; }
+  });
+  if(awarded){
+    bustWire(); renderTeams(); refreshDraftUI();
+    if(window.currentView==='players') renderPlayers();
+  }
+  renderWaivers();
+}
+
+function openClaimModal(pid){
+  const ti=addTargetTeam(); if(ti===null) return;
+  const w=wireEntry(pid); if(!w) return;
+  const roster=realDraft().picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR');
+  let ov=document.getElementById('claimModal');
+  if(!ov){ ov=document.createElement('div'); ov.id='claimModal'; ov.className='pmodal-overlay';
+    ov.addEventListener('click',e=>{ if(e.target===ov) closeClaimModal(); }); document.body.appendChild(ov); }
+  ov.style.display='flex';
+  ov.innerHTML=`<div class="pmodal" style="max-width:460px">
+    <button class="pmodal-x" onclick="closeClaimModal()">✕</button>
+    <h2 style="margin:0 0 4px">Roster full, ${rosterLimit()} max</h2>
+    <p class="sub" style="margin:0 0 12px">Claiming <b>${esc(w.name)}</b>. Name who you drop if the claim wins, it is applied at ${esc(waiverClearLabel(w.until))}:</p>
+    <div style="max-height:52vh;overflow-y:auto">${roster.map(r=>`
+      <div class="faRow">${playerFace(r,30)}
+        <span class="postag pos-${r.pos}" style="--pc:var(--${String(r.pos||'').toLowerCase()})">${r.pos}</span>
+        <span class="faName">${esc(r.name)}</span><span class="pmeta">${r.nfl||''}</span>
+        <button class="btn danger" style="padding:3px 11px;font-size:13px" onclick="submitClaim('${w.pid}','${r.playerId}')">Drop</button>
+      </div>`).join('')}</div>
+  </div>`;
+}
+function closeClaimModal(){ const ov=document.getElementById('claimModal'); if(ov) ov.style.display='none'; }
+
+function waiverClearLabel(until){
+  const ms=(+until||0)-Date.now();
+  if(ms<=0) return 'processing';
+  const h=Math.floor(ms/3600000), m=Math.floor(ms%3600000/60000);
+  if(h>=24){ const d=Math.floor(h/24); return `${d}d ${h%24}h`; }
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+function waiverFace(w){ return playerFace({id:w.pid, name:w.name, pos:w.pos, team:w.nfl}, 32); }
+
+function renderWaivers(){
+  const el=document.getElementById('wvView'); if(!el) return;
+  /* the interval calls this every tick; skip the work when nobody is looking at it */
+  if(el.style.display==='none') return;
+  const mine=addTargetTeam(), order=waiverOrder(), wire=waiverWireCached().list, all=claimList();
+
+  if(!waiversOn()){
+    el.innerHTML=`<div class="card"><h2>Waivers</h2>
+      <div class="notice" style="margin:0">Waivers are switched off, so every dropped player goes straight back to free agency.
+      The commissioner can set a waiver period in Settings.</div></div>`;
+    return;
+  }
+
+  const orderHTML=order.map((ti,k)=>`<span class="wv-ord${ti===mine?' me':''}">
+      <span class="wv-n">${k+1}</span>${esc(teamName(ti))}</span>`).join('');
+
+  const wireHTML = !wire.length
+    ? `<p class="sub" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for ${waiverHours()} hours before anyone can just pick them up.</p>`
+    : wire.map(w=>{
+        const claims=pendingClaimsFor(w.pid), mineIn=mine===null?null:claims.find(c=>c.team===mine);
+        const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : 'dropped';
+        return `<div class="faRow">${waiverFace(w)}
+          <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
+          <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}</span>
+          <span class="pmeta">${esc(w.nfl||'')} · ${from}</span>
+          <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
+          ${claims.length?`<span class="pmeta">${claims.length} claim${claims.length>1?'s':''}</span>`:''}
+          ${mineIn
+            ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
+            : `<button class="pick" onclick="submitClaim('${w.pid}')">Claim</button>`}
+        </div>`;
+      }).join('');
+
+  const mineClaims = mine===null ? [] : all.filter(c=>c.team===mine && c.status==='pending').sort((a,b)=>(+a.clearsAt||0)-(+b.clearsAt||0));
+  const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>${
+    mineClaims.map(c=>`<div class="faRow">
+      <span class="faName">${esc(c.name)}</span>
+      <span class="pmeta">${esc(c.pos||'')} ${esc(c.nfl||'')}${c.dropName?` · dropping ${esc(c.dropName)}`:''}</span>
+      <span class="statpill">${esc(waiverClearLabel(c.clearsAt))}</span>
+      <button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${c.id}')">Withdraw</button>
+    </div>`).join('')}</div>`;
+
+  const settled = all.filter(c=>c.status && c.status!=='pending')
+                     .sort((a,b)=>(+b.closedAt||0)-(+a.closedAt||0)).slice(0,12);
+  const settledHTML = !settled.length ? '' : `<div class="card"><h2>Settled</h2>${
+    settled.map(c=>{
+      const tag = c.status==='won' ? `<span class="divtag">won</span>`
+                : c.status==='cancelled' ? `<span class="divtag" style="opacity:.7">withdrawn</span>`
+                : `<span class="divtag" style="opacity:.7">${esc(c.status)}</span>`;
+      return `<div class="faRow" style="${c.status==='won'?'':'opacity:.7;'}">
+        <span class="faName">${esc(c.teamName||teamName(c.team))} — ${esc(c.name)}</span>
+        ${tag}${c.reason?`<span class="pmeta">${esc(c.reason)}</span>`:''}
+      </div>`;
+    }).join('')}</div>`;
+
+  const you = mine===null ? '' : `<span class="statpill" style="margin-left:8px">Your priority: ${waiverPriority(mine)||'—'} of ${order.length}</span>`;
+
+  el.innerHTML = `
+    <div class="card">
+      <h2>Waiver priority${you}</h2>
+      <div class="wv-order">${orderHTML}</div>
+      <p class="sub" style="margin:10px 0 0">Worst record picks first. Win a claim and you drop to the back.
+        Dropped players sit here ${waiverHours()} hours before anyone can add them outright.</p>
+    </div>
+    <div class="card"><h2>On waivers</h2>${wireHTML}</div>
+    ${mineHTML}${settledHTML}`;
+}
+
 function freeAgents(q){
   const taken = rosteredIds();          /* free agency is about real rosters, not the mock board */
   q = String(q||'').toLowerCase().trim();
@@ -8412,6 +8721,7 @@ function renderSettings(){
   renderTradeReview();
   { const fa=document.getElementById('setFeeAdd'); if(fa) fa.value=String(S.txFeeAdd??0.5);
     const fd=document.getElementById('setFeeDrop'); if(fd) fd.value=String(S.txFeeDrop??0.5); }
+  renderWaiverSetting();
   lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
 }
 /* Populated from TRADE_REVIEW_CHOICES rather than hardcoded <option>s so the list and the
@@ -8430,6 +8740,28 @@ function renderTradeReview(){
   if(note) note.textContent = tradeReviewMs()===0
     ? 'Accepted trades process straight away. Nobody gets to veto.'
     : `After a manager accepts, the league has ${tradeReviewLabel()} to veto. ${vetoNeeded()} vetoes block it. Trades already accepted keep the window they started under.`;
+}
+function renderWaiverSetting(){
+  const inp=document.getElementById('setWaiverHours'); if(inp) inp.value=String(waiverHours());
+  const note=document.getElementById('waiverNote'); if(!note) return;
+  note.textContent = !waiversOn()
+    ? 'Waivers are off. Dropped players go straight back to free agency and can be picked up immediately.'
+    : `A dropped player can only be claimed for ${waiverHours()}h. Best priority wins, then that team drops to the back of the order. Claims are processed by a commissioner device.`;
+}
+function setWaiverHours(v){
+  const h=Math.max(0, Math.min(336, Math.round(+v||0)));
+  S.waiverHours=h; saveState(); bustWire(); renderWaiverSetting();
+  if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+  toast(h===0 ? 'Waivers switched off' : `Waiver period set to ${h}h`);
+}
+function resetWaiverOrder(){
+  if(!isAdmin()){ toast('Commissioner only.'); return; }
+  const seeded=seedWaiverOrder();
+  const preview=seeded.map((i,k)=>`${k+1}. ${teamName(i)}`).join('\n');
+  if(!confirm(`Reseed waiver priority from the standings, worst record first?\n\n${preview}`)) return;
+  S.waiverOrder=seeded; saveState();
+  if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+  toast('Waiver priority reseeded');
 }
 /* ---- push setup (commissioner) ---- */
 function setPushApp(v){
