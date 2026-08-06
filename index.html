@@ -9207,13 +9207,18 @@ function remapTeamSlots(perm){
   if(window.myClaim && Number.isInteger(window.myClaim.teamIndex)) window.myClaim.teamIndex=m(window.myClaim.teamIndex);
   if(window.tradeSel){ window.tradeSel.a=m(window.tradeSel.a); window.tradeSel.b=m(window.tradeSel.b); }
 
-  /* the shared bindings in Firebase. Only a commissioner can reorder, so these writes are
-     allowed; each is fire-and-forget in the app's usual style. */
+  /* The shared bindings in Firebase. PER-CHILD writes only: the rules grant an admin
+     claims/$ti and teamData/$ti, not the parent nodes, so a whole-node dbSet comes back
+     permission_denied and the .catch swallows it - the remap silently does nothing. Each row
+     is rewritten at its new slot individually, and slots left empty are removed. */
   if(fbOk() && isAdmin()){
     const move=(path)=>window.FB.dbGet(path).then(all=>{
       if(!all) return;
       const next={}; Object.keys(all).forEach(k=>{ next[m(k)]=all[k]; });
-      return window.FB.dbSet(path, next);
+      Object.keys(next).forEach(k=>{
+        if(JSON.stringify(all[k])!==JSON.stringify(next[k])) window.FB.dbSet(`${path}/${k}`, next[k]).catch(()=>{});
+      });
+      Object.keys(all).forEach(k=>{ if(next[k]==null) window.FB.dbRemove(`${path}/${k}`).catch(()=>{}); });
     }).catch(()=>{});
     move('claims');
     move(`league/${LEAGUE_ID}/teamData`);
