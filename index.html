@@ -516,7 +516,14 @@ nav.tabs button{position:relative}
 .pickchip span{opacity:.65;font-size:11px}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-.teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
+/* The slot number is an editable field now, but it has to stay a badge and not grow into a
+   form control - the global input styling would give it a full-width box in the flex row. */
+.teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center;
+  flex:0 0 auto;width:34px;padding:3px 2px;background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  -moz-appearance:textfield;cursor:text}
+.teamcard .num::-webkit-outer-spin-button,
+.teamcard .num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}   /* spinners are too small to hit */
+.teamcard .num:focus{border-color:var(--turf);outline:none;color:var(--chalk)}
 .teamcard input[type=text]{flex:1 1 120px;min-width:100px}
 .teamcard select{flex:1 1 130px;min-width:110px}
 .teamcard .mv{display:flex;gap:4px;margin-left:auto}
@@ -8779,7 +8786,10 @@ function renderSettings(){
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
-    <div class="teamcard"><span class="num">${i+1}</span>
+    <div class="teamcard"><input class="num" type="number" min="1" max="${S.teams.length}" value="${i+1}"
+        title="Draft slot — type a number to move this team straight there" aria-label="Draft slot for ${esc(t.name)}"
+        onfocus="this.select()" onchange="setTeamSlot(${i}, this.value)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       <label class="team-logo-up" title="${t.logo?'Change':'Upload'} team logo (JPG/PNG)">
         ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
         <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
@@ -9172,6 +9182,22 @@ function moveTeam(i,d){
   const j=i+d; if(j<0||j>=N()) return;
   [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]];
   saveState(); renderSettings(); renderTrades(); refreshDraftUI();
+}
+/* Type a slot number to send a team straight there, instead of walking it up with the arrows.
+   Lift-and-reinsert, the same end state as holding the arrow down: everyone in between shifts
+   by one. Deliberately NOT a swap with whoever is standing in that slot - a swap throws a second
+   team somewhere you did not ask for, which undoes the part of the order you already set. */
+function setTeamSlot(i, v){
+  if(!requireAdmin()){ renderSettings(); return; }
+  if(D.started && D.picks.length){ toast("Can't change draft positions mid-draft — reset the draft first."); renderSettings(); return; }
+  const n=S.teams.length, to=Math.round(+v);
+  /* re-render on every bad value: the box is showing what was typed, not where the team is */
+  if(!Number.isFinite(to) || to<1 || to>n){ toast(`Pick a slot between 1 and ${n}.`); renderSettings(); return; }
+  if(to-1===i){ renderSettings(); return; }
+  const [t]=S.teams.splice(i,1);
+  S.teams.splice(to-1, 0, t);
+  saveState(); renderSettings(); renderTrades(); refreshDraftUI();
+  toast(`${t.name||('Team '+to)} moved to slot ${to}`);
 }
 function setTeamCount(n){
   if(!requireAdmin()) return;
