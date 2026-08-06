@@ -3504,6 +3504,7 @@ function startLeagueSync(){
     applyingRemote = false;
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamData`, (m)=>{
+    if(slotSyncing()) return;   /* our own reorder writes echoing back; the mirror is already truth */
     applyingRemote = true;
     try{
       TD = {};
@@ -3525,6 +3526,7 @@ function startLeagueSync(){
     if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamMoves`, (m)=>{
+    if(slotSyncing()) return;   /* reorder echo - see remapTeamSlots */
     movesMap = m||{};
     applyingRemote = true;
     try{ if(draftMode==='real'){ D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileMoves(); reconcileTeamData(); reRenderLive(); } }catch(e){}
@@ -3532,7 +3534,9 @@ function startLeagueSync(){
     setTimeout(()=>{ try{ commitMoves(); }catch(e){} }, 0);   /* commish bakes them into the draft */
   });
   window.FB.dbOn('admins', (m)=>{ adminsMap = m||{}; refreshRoleFromAuth(); if(window.currentView==='settings') renderCommishCard(); });
-  window.FB.dbOn('managers', (m)=>{ managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
+  window.FB.dbOn('managers', (m)=>{
+    if(slotSyncing()) return;   /* reorder echo - see remapTeamSlots */
+    managersMap = m||{}; if(window.currentView==='settings') renderCommishCard();
     if(window.currentView==='chat'){ renderChatOnline(); syncChatIdentity(); renderChat(); }   /* names resolve off managersMap */
     if(window.currentView==='polls') renderPolls();
     /* this feed is where a manager's team index comes from when the one-shot claim lookup is
@@ -5444,7 +5448,9 @@ function managerNameFor(uid, fallback){
 function initClaims(){
   if(!fbOk() || !window.fbUser) return;
   if(!claimsStarted){ claimsStarted = true;
-    window.FB.dbOn('claims', (m)=>{ claimsMap = m||{};
+    window.FB.dbOn('claims', (m)=>{
+      if(slotSyncing()) return;   /* reorder echo - see remapTeamSlots */
+      claimsMap = m||{};
       if(window.currentView==='teams') renderTeams();
       if(document.getElementById('claimOverlay').classList.contains('on')) openClaim();
       updateClaimBadge();
@@ -9181,6 +9187,12 @@ function saveFromInputs(){
    a team without moving those handed an account to whoever landed in its old slot - Curtis
    reordered the board and his own login started answering as Garrett. Every reorder now goes
    through here: mutate S.teams, then carry every slot-keyed thing along with the same map. */
+/* True while a reorder's Firebase writes are landing. The claims/managers/teamData/teamMoves
+   subscriptions drop snapshots during this window: they would be our own writes echoing back,
+   possibly mid-burst, and replacing a mirror that is already the truth with a half-landed
+   server state is how a run of arrow clicks scrambled the bindings. A change made by another
+   device inside the window is dropped too - it reappears on that node's next event. */
+function slotSyncing(){ return !!(window.__slotSyncUntil && Date.now() < window.__slotSyncUntil); }
 function reorderTeams(mutate){
   (S.teams||[]).forEach((t,i)=>{ t.__slot=i; });
   mutate();
@@ -9203,27 +9215,33 @@ function remapTeamSlots(perm){
   { const rb=realDraft();
     (rb===D ? [D] : [D, rb]).forEach(b=>{ if(b && Array.isArray(b.picks)) b.picks.forEach(p=>{ p.teamIndex=m(p.teamIndex); }); });
     if(rb!==D) saveRealDraft(rb); }
-  { const td={}; Object.keys(TD||{}).forEach(k=>{ td[m(k)]=TD[k]; }); TD=td; }
+  /* The local mirrors of the shared nodes remap for everyone, synchronously, so the very next
+     click composes on top of this one. The befores are kept so the admin write-out below can
+     diff. This is what makes arrow BURSTS safe: the old dbGet-then-write version interleaved
+     two async read-modify-write cycles into exactly the scramble this code exists to prevent. */
+  const clBefore={...(claimsMap||{})}; { const cm={}; Object.keys(clBefore).forEach(k=>{ cm[m(k)]=clBefore[k]; }); claimsMap=cm; }
+  const tdBefore={...(TD||{})};        { const td={}; Object.keys(tdBefore).forEach(k=>{ td[m(k)]=tdBefore[k]; }); TD=td; }
+  const mvBefore={...(movesMap||{})};  { const mv={}; Object.keys(mvBefore).forEach(k=>{ mv[m(k)]=mvBefore[k]; }); movesMap=mv; }
   if(window.myClaim && Number.isInteger(window.myClaim.teamIndex)) window.myClaim.teamIndex=m(window.myClaim.teamIndex);
   if(window.tradeSel){ window.tradeSel.a=m(window.tradeSel.a); window.tradeSel.b=m(window.tradeSel.b); }
 
   /* The shared bindings in Firebase. PER-CHILD writes only: the rules grant an admin
      claims/$ti and teamData/$ti, not the parent nodes, so a whole-node dbSet comes back
-     permission_denied and the .catch swallows it - the remap silently does nothing. Each row
-     is rewritten at its new slot individually, and slots left empty are removed. */
+     permission_denied and the .catch swallows it - the remap silently does nothing. Values
+     come from the mirrors just remapped, never from a dbGet, so each write in a burst carries
+     the cumulative truth and the last one wins cleanly. The suppression stamp keeps our own
+     echoes from regressing the mirrors mid-burst - see the subscription callbacks. */
   if(fbOk() && isAdmin()){
-    const move=(path)=>window.FB.dbGet(path).then(all=>{
-      if(!all) return;
-      const next={}; Object.keys(all).forEach(k=>{ next[m(k)]=all[k]; });
-      Object.keys(next).forEach(k=>{
-        if(JSON.stringify(all[k])!==JSON.stringify(next[k])) window.FB.dbSet(`${path}/${k}`, next[k]).catch(()=>{});
+    window.__slotSyncUntil = Date.now() + 4000;
+    const sync=(path, before, after)=>{
+      Object.keys(after).forEach(k=>{
+        if(JSON.stringify(before[k])!==JSON.stringify(after[k])) window.FB.dbSet(`${path}/${k}`, after[k]).catch(()=>{});
       });
-      Object.keys(all).forEach(k=>{ if(next[k]==null) window.FB.dbRemove(`${path}/${k}`).catch(()=>{}); });
-    }).catch(()=>{});
-    move('claims');
-    move(`league/${LEAGUE_ID}/teamData`);
-    move(`league/${LEAGUE_ID}/teamMoves`);
-    { const cm={}; Object.keys(claimsMap||{}).forEach(k=>{ cm[m(k)]=claimsMap[k]; }); claimsMap=cm; }
+      Object.keys(before).forEach(k=>{ if(after[k]==null) window.FB.dbRemove(`${path}/${k}`).catch(()=>{}); });
+    };
+    sync('claims', clBefore, claimsMap);
+    sync(`league/${LEAGUE_ID}/teamData`, tdBefore, TD);
+    sync(`league/${LEAGUE_ID}/teamMoves`, mvBefore, movesMap);
     Object.keys(managersMap||{}).forEach(uid=>{ const r=managersMap[uid];
       if(r && Number.isInteger(r.teamIndex) && m(r.teamIndex)!==r.teamIndex){
         r.teamIndex=m(r.teamIndex);
