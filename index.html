@@ -654,6 +654,24 @@ nav.tabs button{position:relative}
   border-radius:50%;background:var(--steel,var(--line));color:var(--chalk);
   font-family:var(--f-mono);font-size:11px;font-weight:700}
 .wv-ord.me .wv-n{background:var(--turf);color:#fff}
+/* who else is in on a player: the row keeps its own border so the claim line reads as part of
+   the same block rather than the top of the next one */
+.wv-item{border-bottom:1px solid var(--line)}
+.wv-item .faRow{border-bottom:none}
+.wv-claimants{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 4px 8px 45px;font-size:12px}
+.wv-lbl{color:var(--chalk-dim);letter-spacing:.03em;text-transform:uppercase;font-size:11px;font-weight:700}
+.wv-cl{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--chalk-dim);
+  background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:2px 9px 2px 3px}
+.wv-cl.lead{color:var(--chalk);border-color:var(--turf)}
+.wv-cl.me{font-weight:700}
+.wv-cl .wv-p{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;
+  border-radius:50%;background:var(--steel,var(--line));color:var(--chalk);
+  font-family:var(--f-mono);font-size:10px;font-weight:700}
+.wv-cl.lead .wv-p{background:var(--turf);color:#fff}
+.wv-verdict{font-weight:700;letter-spacing:.02em}
+.wv-verdict.win{color:var(--turf-bright)}
+.wv-verdict.lose{color:var(--chalk-dim)}
+@media(max-width:640px){ .wv-claimants{padding-left:4px} }
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .pick:disabled{opacity:.4;cursor:not-allowed}
@@ -3528,6 +3546,8 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/waiverClaims`, (m)=>{ wClaims = m||{};
     if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+    /* claims show as pending rows above the log, so that list is stale the moment one lands */
+    if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
     try{ maybeProcessWaivers(); }catch(e){} });
 }
 /* The controls are wrapped in .admin-only, which CSS hides outright for managers — an inline
@@ -3667,6 +3687,7 @@ setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalize
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+  if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
   /* Game Center pulls fresh stats itself (5-min TTL on the live week) */
@@ -5283,6 +5304,9 @@ function renderTransactions(){
   const ftSel=document.getElementById('txFilter');
   if(ftSel && ftSel.value!==(window.txFilter||'all')) ftSel.value = window.txFilter||'all';
   const fType=window.txFilter||'all', fTeam=window.txTeam||'all';
+  /* Pending claims ride above the log on every exit path below, including the empty-log one -
+     an empty log with claims outstanding is exactly when "nothing here yet" would be wrong. */
+  let pendHTML=''; try{ pendHTML=pendingClaimsHTML(fType, fTeam); }catch(e){}
   const list=all.filter(x=>(fType==='all'||x.type===fType) && (fTeam==='all'||x.team===fTeam||x.teamB===fTeam));
   const cnt=document.getElementById('txCount');
   if(cnt) cnt.textContent = list.length===all.length ? `${all.length} total` : `${list.length} of ${all.length}`;
@@ -5295,18 +5319,18 @@ function renderTransactions(){
       : wkey ? 'Moves are being made but cannot be saved to the log (' + esc(window.FB_WERR[wkey]) + '). The database rules need to allow league/main/transactions.'
       : (window.fbUser ? 'No moves logged yet. Trades, adds and drops appear here as they happen.'
                        : "Sign in to see the league's transactions.");
-    el.innerHTML=`<div class="card"><p class="sub" style="margin:0">${why}</p></div>`;
+    el.innerHTML=pendHTML+`<div class="card"><p class="sub" style="margin:0">${why}</p></div>`;
     return;
   }
   if(!list.length){
     /* name the active filter — "nothing matches" with the controls apparently on "all" is the
        most confusing thing this page can say */
     const bits=[fType!=='all'?fType+'s only':'', fTeam!=='all'?'team: '+esc(fTeam):''].filter(Boolean).join(' · ');
-    el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No moves match ${bits?'<b>'+bits+'</b>':'the current filter'} — ${all.length} in the log. <a href="#" onclick="window.txFilter='all';window.txTeam='all';renderTransactions();return false" style="color:var(--charge)">show all</a></p></div>`;
+    el.innerHTML=pendHTML+`<div class="card"><p class="sub" style="margin:0">No moves match ${bits?'<b>'+bits+'</b>':'the current filter'} — ${all.length} in the log. <a href="#" onclick="window.txFilter='all';window.txTeam='all';renderTransactions();return false" style="color:var(--charge)">show all</a></p></div>`;
     return;
   }
   const when = t => new Date(+t||0).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
-  el.innerHTML = list.map(x=>{
+  el.innerHTML = pendHTML + list.map(x=>{
     const mgr = x.by ? managerNameFor(x.by, '') : '';
     /* the badge is what tells a manager the change was not one of their own */
     const badge = x.admin ? ' · <b style="color:var(--charge)">commissioner</b>' : '';
@@ -8397,6 +8421,66 @@ function waiverClearLabel(until){
 }
 function waiverFace(w){ return playerFace({id:w.pid, name:w.name, pos:w.pos, team:w.nfl}, 32); }
 
+/* Pending claims on a player in the order they would actually settle. Same comparator
+   maybeProcessWaivers uses, so what this shows is what will happen, not a second guess at it. */
+function claimantsSorted(pid){
+  const order=waiverOrder();
+  return pendingClaimsFor(pid).slice().sort((a,b)=>{
+    const ia=order.indexOf(a.team), ib=order.indexOf(b.team);
+    return (ia<0?999:ia)-(ib<0?999:ib) || (+a.at||0)-(+b.at||0);
+  });
+}
+/* Who else is in on him. Priority is the point of showing this at all: "3 claims" tells you
+   nothing you can act on, "you are second behind Nut buster" tells you whether to bother
+   burning your priority here or save it. */
+function claimantsHTML(pid){
+  const mine=addTargetTeam(), list=claimantsSorted(pid);
+  if(!list.length) return '';
+  const nameOf=c=>c.teamName||teamName(c.team);
+  const chips=list.map((c,k)=>{
+    const pr=waiverPriority(c.team), me=c.team===mine;
+    return `<span class="wv-cl${k===0?' lead':''}${me?' me':''}" title="${k===0?'Wins as it stands':'Behind '+esc(nameOf(list[0]))}">`+
+           `<span class="wv-p">${pr||'?'}</span>${esc(nameOf(c))}${me?' (you)':''}</span>`;
+  }).join('');
+  const at=list.findIndex(c=>c.team===mine);
+  const verdict = at<0 ? ''
+    : at===0 ? `<span class="wv-verdict win">you win this as it stands</span>`
+    : `<span class="wv-verdict lose">${esc(nameOf(list[0]))} beats you on priority</span>`;
+  return `<div class="wv-claimants"><span class="wv-lbl">${list.length} claim${list.length>1?'s':''} in</span>${chips}${verdict}</div>`;
+}
+/* Claims that have not settled yet, for the top of the Transactions list. Nothing has actually
+   happened, so these are deliberately NOT written into the log - they sit above it as pending
+   and only become real rows when they are awarded. Grouped by player, because what a manager
+   wants to know is "who is on this guy and am I ahead", not one row per claim. */
+function pendingClaimsHTML(fType, fTeam){
+  if(!waiversOn()) return '';
+  if(fType && fType!=='all' && fType!=='add') return '';      /* a claim is a pending add */
+  const pend=claimList().filter(c=>c.status==='pending');
+  if(!pend.length) return '';
+  const pids=[...new Set(pend.map(c=>c.pid))];
+  const blocks=pids.map(pid=>{
+    const sorted=claimantsSorted(pid);
+    if(!sorted.length) return '';
+    const nameOf=c=>c.teamName||teamName(c.team);
+    if(fTeam && fTeam!=='all' && !sorted.some(c=>nameOf(c)===fTeam)) return '';
+    const lead=sorted[0];
+    const chips=sorted.map((c,k)=>`<span class="wv-cl${k===0?' lead':''}">`+
+      `<span class="wv-p">${waiverPriority(c.team)||'?'}</span>${esc(nameOf(c))}`+
+      `${c.dropName?` <span style="opacity:.7">drops ${esc(c.dropName)}</span>`:''}</span>`).join('');
+    return `<div class="card" style="margin-bottom:8px;padding:10px 14px;border-left:3px solid var(--gold)">
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <span style="min-width:0"><span class="divtag" style="margin:0 6px 0 0">pending</span>
+          <b>${esc(lead.name)}</b> <span style="color:var(--chalk-dim)">${esc(lead.pos||'')} ${esc(lead.nfl||'')}</span>
+          <span style="color:var(--chalk-dim)"> · ${sorted.length} waiver claim${sorted.length>1?'s':''}</span></span>
+        <span class="sub" style="margin:0;font-size:12px">settles in ${esc(waiverClearLabel(lead.clearsAt))}</span>
+      </div>
+      <div class="wv-claimants" style="padding:8px 0 0">${chips}</div>
+    </div>`;
+  }).filter(Boolean);
+  if(!blocks.length) return '';
+  return `<h2 style="font-size:14px;letter-spacing:.06em;color:var(--chalk-dim);margin:0 0 8px">Pending waiver claims</h2>${blocks.join('')}`;
+}
+
 function renderWaivers(){
   const el=document.getElementById('wvView'); if(!el) return;
   /* the interval calls this every tick; skip the work when nobody is looking at it */
@@ -8418,26 +8502,25 @@ function renderWaivers(){
     : wire.map(w=>{
         const claims=pendingClaimsFor(w.pid), mineIn=mine===null?null:claims.find(c=>c.team===mine);
         const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : 'dropped';
-        return `<div class="faRow">${waiverFace(w)}
+        return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
           <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}</span>
           <span class="pmeta">${esc(w.nfl||'')} · ${from}</span>
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
-          ${claims.length?`<span class="pmeta">${claims.length} claim${claims.length>1?'s':''}</span>`:''}
           ${mineIn
             ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
             : `<button class="pick" onclick="submitClaim('${w.pid}')">Claim</button>`}
-        </div>`;
+        </div>${claimantsHTML(w.pid)}</div>`;
       }).join('');
 
   const mineClaims = mine===null ? [] : all.filter(c=>c.team===mine && c.status==='pending').sort((a,b)=>(+a.clearsAt||0)-(+b.clearsAt||0));
   const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>${
-    mineClaims.map(c=>`<div class="faRow">
+    mineClaims.map(c=>`<div class="wv-item"><div class="faRow">
       <span class="faName">${esc(c.name)}</span>
       <span class="pmeta">${esc(c.pos||'')} ${esc(c.nfl||'')}${c.dropName?` · dropping ${esc(c.dropName)}`:''}</span>
       <span class="statpill">${esc(waiverClearLabel(c.clearsAt))}</span>
       <button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${c.id}')">Withdraw</button>
-    </div>`).join('')}</div>`;
+    </div>${claimantsHTML(c.pid)}</div>`).join('')}</div>`;
 
   const settled = all.filter(c=>c.status && c.status!=='pending')
                      .sort((a,b)=>(+b.closedAt||0)-(+a.closedAt||0)).slice(0,12);
