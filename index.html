@@ -9174,10 +9174,71 @@ function saveFromInputs(){
   S.draftCfg.maxPicks = Math.max(0, +document.getElementById('setMaxPicks').value || 0);
   saveState(); renderHome(); renderTrades(); refreshDraftUI();
 }
+/* Reordering moves the entries in S.teams, but a pile of state is keyed by SLOT NUMBER, not by
+   team: claims/<slot> (which account owns which team), managers/<uid>.teamIndex, teamData and
+   teamMoves rows, S.lineups, the teamIndex on every pick, the season schedule's [a,b] pairs,
+   the waiver order, and the team indexes riding on live trade offers and waiver claims. Moving
+   a team without moving those handed an account to whoever landed in its old slot - Curtis
+   reordered the board and his own login started answering as Garrett. Every reorder now goes
+   through here: mutate S.teams, then carry every slot-keyed thing along with the same map. */
+function reorderTeams(mutate){
+  (S.teams||[]).forEach((t,i)=>{ t.__slot=i; });
+  mutate();
+  const perm={}; let changed=false;
+  (S.teams||[]).forEach((t,i)=>{ if(t.__slot!=null){ perm[t.__slot]=i; if(t.__slot!==i) changed=true; delete t.__slot; } });
+  if(changed) remapTeamSlots(perm);
+  return changed;
+}
+function remapTeamSlots(perm){
+  const m=v=>{ const i=+v; return Number.isInteger(i)&&perm[i]!=null ? perm[i] : i; };
+
+  /* local slot-keyed state */
+  { const lu={}; Object.keys(S.lineups||{}).forEach(k=>{ lu[m(k)]=S.lineups[k]; }); S.lineups=lu; }
+  if(Array.isArray(S.waiverOrder) && S.waiverOrder.length) S.waiverOrder=S.waiverOrder.map(m);
+  if(S.season && S.season.schedule)
+    Object.values(S.season.schedule).forEach(gs=>(gs||[]).forEach(g=>{ if(Array.isArray(g)){ g[0]=m(g[0]); g[1]=m(g[1]); } }));
+  /* Picks carry their owner. The mid-draft guard means these are offseason add/keeper rows,
+     not live draft picks. With the mock board loaded, realDraft() hands back a parsed COPY of
+     the stored real board - remapping the copy does nothing unless it is saved back. */
+  { const rb=realDraft();
+    (rb===D ? [D] : [D, rb]).forEach(b=>{ if(b && Array.isArray(b.picks)) b.picks.forEach(p=>{ p.teamIndex=m(p.teamIndex); }); });
+    if(rb!==D) saveRealDraft(rb); }
+  { const td={}; Object.keys(TD||{}).forEach(k=>{ td[m(k)]=TD[k]; }); TD=td; }
+  if(window.myClaim && Number.isInteger(window.myClaim.teamIndex)) window.myClaim.teamIndex=m(window.myClaim.teamIndex);
+  if(window.tradeSel){ window.tradeSel.a=m(window.tradeSel.a); window.tradeSel.b=m(window.tradeSel.b); }
+
+  /* the shared bindings in Firebase. Only a commissioner can reorder, so these writes are
+     allowed; each is fire-and-forget in the app's usual style. */
+  if(fbOk() && isAdmin()){
+    const move=(path)=>window.FB.dbGet(path).then(all=>{
+      if(!all) return;
+      const next={}; Object.keys(all).forEach(k=>{ next[m(k)]=all[k]; });
+      return window.FB.dbSet(path, next);
+    }).catch(()=>{});
+    move('claims');
+    move(`league/${LEAGUE_ID}/teamData`);
+    move(`league/${LEAGUE_ID}/teamMoves`);
+    { const cm={}; Object.keys(claimsMap||{}).forEach(k=>{ cm[m(k)]=claimsMap[k]; }); claimsMap=cm; }
+    Object.keys(managersMap||{}).forEach(uid=>{ const r=managersMap[uid];
+      if(r && Number.isInteger(r.teamIndex) && m(r.teamIndex)!==r.teamIndex){
+        r.teamIndex=m(r.teamIndex);
+        window.FB.dbUpdate('managers/'+uid, {teamIndex:r.teamIndex}).catch(()=>{});
+      } });
+    Object.keys(offersMap||{}).forEach(id=>{ const o=offersMap[id]; if(!o) return;
+      const na=m(o.a), nb=m(o.b);
+      if(na!==o.a || nb!==o.b){ o.a=na; o.b=nb;
+        window.FB.dbUpdate(`${offersPath()}/${id}`, {a:na, b:nb}).catch(()=>{}); } });
+    Object.keys(wClaims||{}).forEach(id=>{ const c=wClaims[id]; if(!c) return;
+      const nt=m(c.team);
+      if(nt!==c.team){ c.team=nt;
+        window.FB.dbUpdate(`${waiverPath()}/${id}`, {team:nt}).catch(()=>{}); } });
+  }
+  saveDraft();
+}
 function moveTeam(i,d){
   if(D.started && D.picks.length){ toast("Can't change draft positions mid-draft — reset the draft first."); return; }
   const j=i+d; if(j<0||j>=N()) return;
-  [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]];
+  reorderTeams(()=>{ [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]]; });
   saveState(); renderSettings(); renderTrades(); refreshDraftUI();
 }
 /* Type a slot number to send a team straight there, instead of walking it up with the arrows.
@@ -9191,8 +9252,8 @@ function setTeamSlot(i, v){
   /* re-render on every bad value: the box is showing what was typed, not where the team is */
   if(!Number.isFinite(to) || to<1 || to>n){ toast(`Pick a slot between 1 and ${n}.`); renderSettings(); return; }
   if(to-1===i){ renderSettings(); return; }
-  const [t]=S.teams.splice(i,1);
-  S.teams.splice(to-1, 0, t);
+  const t=S.teams[i];
+  reorderTeams(()=>{ S.teams.splice(to-1, 0, S.teams.splice(i,1)[0]); });
   saveState(); renderSettings(); renderTrades(); refreshDraftUI();
   toast(`${t.name||('Team '+to)} moved to slot ${to}`);
 }
@@ -9222,7 +9283,9 @@ function setTeamCount(n){
 }
 function randomizeOrder(){
   if(D.started && D.picks.length){ toast("Can't reshuffle mid-draft — reset the draft first."); return; }
-  for(let i=S.teams.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]]; }
+  reorderTeams(()=>{
+    for(let i=S.teams.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]]; }
+  });
   saveState(); renderSettings(); refreshDraftUI();
   toast("Draft order shuffled 🎲");
 }
