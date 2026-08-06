@@ -4293,7 +4293,9 @@ function renderPlayers(){
       <td style="text-align:center;font-family:var(--f-mono)">${p.exp==null?'—':(p.exp===0?'R':p.exp)}</td>
       <td>${p.inj?`${injBadge(p.inj,p.injBody).trim()}${p.injNote?`<div style="color:var(--chalk-dim);font-size:11px;max-width:280px">${esc(p.injNote)}</div>`:''}`:'<span style="color:var(--rb);font-size:13px">Healthy</span>'}</td>
       <td style="color:var(--chalk-dim);font-size:13px">${esc(p.status||'—')}</td>
-      ${canAdd?`<td style="text-align:right"><button class="pick" onclick="addFromPlayers('${p.id}', event)">Add</button></td>`:''}
+      ${canAdd?`<td style="text-align:right">${onWaivers(p.id)
+        ? `<button class="pick" onclick="addFromPlayers('${p.id}', event)" title="On waivers, clears in ${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}">Claim</button>`
+        : `<button class="pick" onclick="addFromPlayers('${p.id}', event)">Add</button>`}</td>`:''}
     </tr>`).join('')}
   </table></div>${total>200?`<p class="sub" style="margin-top:10px">Showing 200 of ${total} — narrow it down with search or the filters.</p>`:(total?'':'<p class="sub" style="margin-top:10px">No players match those filters.</p>')}`;
 }
@@ -8482,7 +8484,10 @@ function renderFreeAgents(ti){
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
       <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
       <span class="pmeta">${p.team||''}</span>
-      <button class="pick" onclick="addWithDrop(${ti},'${p.id}')">Add</button>
+      ${onWaivers(p.id)
+        ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
+           <button class="pick" onclick="submitClaim('${p.id}')">Claim</button>`
+        : `<button class="pick" onclick="addWithDrop(${ti},'${p.id}')">Add</button>`}
     </div>`).join('') || `<p class="sub" style="margin:8px 0 0">No available players match.</p>`)
     + (fa.length>40 ? `<p class="sub" style="margin:8px 0 0">Showing 40 of ${fa.length} — search to narrow.</p>` : '');
 }
