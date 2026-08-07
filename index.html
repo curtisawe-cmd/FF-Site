@@ -1645,6 +1645,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <p class="sub" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
     <div class="setgrid" style="margin-bottom:12px">
       <div class="setrow"><label title="How long the league gets to veto a trade after the other manager accepts it. Instant means accepted trades process straight away with no veto window.">Trade review window</label><select id="setTradeReview" style="max-width:200px" onchange="setTradeReview(this.value)"></select></div>
+      <div class="setrow"><label title="Trades close for everyone, commissioner included, the moment this week's games kick off. Offers still pending at the deadline die unaccepted. Off = trade all season.">Trade deadline</label><select id="setTradeDeadline" style="max-width:200px" onchange="setTradeDeadline(this.value)"></select></div>
     </div>
     <p class="sub" id="tradeReviewNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="setgrid" style="margin-bottom:12px">
@@ -1938,6 +1939,7 @@ const DEFAULTS = {
   roster: {QB:1, RB:2, WR:2, TE:1, FLEX:1, K:1, DEF:1, BN:8, IR:1},  /* 9 starters + 8 bench = 17 = keeper + 16 rounds; IR extra, no draft round */
   draftCfg: { rounds:16, keeper:true, maxPicks:0 },   /* maxPicks 0 = no limit on total picks per manager */
   tradeReviewMs: 48*60*60*1000,   /* league veto window after a trade is accepted; 0 = instant */
+  tradeDeadlineWk: 0,    /* trades close when this NFL week kicks off; 0 = no deadline */
   divisions: 0,          /* number of divisions (0 = none); each team gets t.div = 1..divisions */
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   pushAppId: '',         /* OneSignal App ID — public by design; the REST key never lives here */
@@ -5143,7 +5145,8 @@ const SETTING_LABELS={
   leagueName:'league name', teams:'teams', roster:'roster slots', scoring:'scoring',
   rules:'league rules', draftCfg:'draft setup', divisions:'divisions', prizes:'prize money',
   timerSec:'pick clock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
-  tradeReviewMs:'trade review window', txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
+  tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
+  txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
@@ -7464,6 +7467,16 @@ const TRADE_REVIEW_CHOICES = [
   [24*60*60*1000, '1 day'],
   [48*60*60*1000, '2 days']
 ];
+/* Trade deadline, as a week number: trades close the moment that NFL week kicks off and stay
+   closed for the season. Blocks EVERYONE, commissioner included - the escape hatch is moving
+   the deadline in Settings, which the league can see, not a quiet admin exception. Offers still
+   pending when the deadline hits simply become unacceptable where they sit. */
+function tradeDeadlineWk(){ const w=+S.tradeDeadlineWk; return Number.isInteger(w)&&w>=1&&w<=17 ? w : 0; }
+function tradeDeadlineAt(){ const w=tradeDeadlineWk(); if(!w) return null;
+  const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+(w-1)*7); return d.getTime(); }
+function tradesClosed(){ const at=tradeDeadlineAt(); return !!at && Date.now()>=at; }
+function tradeDeadlineLabel(){ const at=tradeDeadlineAt(); if(!at) return '';
+  return `Week ${tradeDeadlineWk()} kickoff (${new Date(at).toLocaleDateString([], {month:'short', day:'numeric'})})`; }
 /* League setting: how long the veto window runs after an offer is accepted. */
 function tradeReviewMs(){
   const v = S && S.tradeReviewMs;
@@ -7600,6 +7613,7 @@ function executeTrade(){
 /* propose: goes to the other manager for acceptance, then league review */
 function sendTradeOffer(){
   if(!window.fbUser){ toast('Sign in to propose a trade.'); openAuth(); return; }
+  if(tradesClosed()){ toast(`Trade deadline has passed — trades closed at ${tradeDeadlineLabel()}.`); return; }
   if(!fbOk()) return;
   const T = window.tradeSel;
   if(T.a===T.b){ toast("Pick two different teams."); return; }
@@ -7622,6 +7636,7 @@ function sendTradeOffer(){
 }
 function offerCanAccept(o){
   if(o.status!=='pending') return false;
+  if(tradesClosed()) return false;                     /* deadline passed - pending offers die where they sit */
   if(conflictingLiveOffer(o, o.id)) return false;      /* a live deal already claimed one of these */
   return isAdmin() || myTeamIndex()===o.b;
 }
@@ -7983,7 +7998,23 @@ function renderTradeCenter(){
           : `<span class="sub" style="margin:0">No picks on the table.</span>`}
       </div>`;
   };
-  el.innerHTML = `
+  /* past the deadline the builder disappears entirely - a form whose Send always refuses is
+     just a trap. The offer list below stays so settled trades remain readable. */
+  if(tradesClosed()){
+    el.innerHTML = `
+      <div class="notice" style="border-left-color:var(--danger);margin:0 0 18px">
+        <b>Trade deadline has passed.</b> Trades closed at ${esc(tradeDeadlineLabel())} and reopen next season.
+      </div>
+      <div class="card" style="margin-bottom:18px">
+        <h2>Pending Offers &amp; Reviews</h2>
+        <div id="tradeOffers"></div>
+      </div>`;
+    renderOffers();
+    return;
+  }
+  const deadlineNote = tradeDeadlineWk()
+    ? `<div class="notice" style="margin:0 0 14px">Trade deadline: <b>${esc(tradeDeadlineLabel())}</b>. Offers still pending at the deadline die unaccepted.</div>` : '';
+  el.innerHTML = deadlineNote + `
     <div class="grid2" style="margin-bottom:14px">
       <div class="card">
         <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
@@ -8910,9 +8941,24 @@ function renderTradeReview(){
       sel.insertAdjacentHTML('afterbegin', `<option value="${cur}" selected>${esc(tradeReviewLabel(cur))}</option>`);
   }
   const note=document.getElementById('tradeReviewNote');
-  if(note) note.textContent = tradeReviewMs()===0
+  if(note) note.textContent = (tradeReviewMs()===0
     ? 'Accepted trades process straight away. Nobody gets to veto.'
-    : `After a manager accepts, the league has ${tradeReviewLabel()} to veto. ${vetoNeeded()} vetoes block it. Trades already accepted keep the window they started under.`;
+    : `After a manager accepts, the league has ${tradeReviewLabel()} to veto. ${vetoNeeded()} vetoes block it. Trades already accepted keep the window they started under.`)
+    + (tradeDeadlineWk() ? ` Trades close at ${tradeDeadlineLabel()}.` : '');
+  const dl=document.getElementById('setTradeDeadline');
+  if(dl){
+    const cur=tradeDeadlineWk();
+    const wkLabel=w=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+(w-1)*7);
+      return `Week ${w} · ${d.toLocaleDateString([], {month:'short', day:'numeric'})}`; };
+    dl.innerHTML=`<option value="0"${cur?'':' selected'}>No deadline</option>`+
+      Array.from({length:17},(_,k)=>k+1).map(w=>`<option value="${w}"${w===cur?' selected':''}>${wkLabel(w)}</option>`).join('');
+  }
+}
+function setTradeDeadline(v){
+  const w=Math.max(0, Math.min(17, Math.round(+v||0)));
+  S.tradeDeadlineWk=w; saveState(); renderTradeReview();
+  if(window.currentView==='trades') renderTradeCenter();
+  toast(w ? `Trade deadline set: ${tradeDeadlineLabel()}` : 'Trade deadline removed — trades all season');
 }
 function renderWaiverSetting(){
   const inp=document.getElementById('setWaiverHours'); if(inp) inp.value=String(waiverHours());
