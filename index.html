@@ -406,7 +406,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .board .bhead{
   font-family:var(--f-ui);font-weight:700;font-size:clamp(10px,1.15vw,15px);letter-spacing:.03em;text-transform:uppercase;
   color:var(--chalk);text-align:center;padding:8px 1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
-  border-bottom:2px solid var(--tc,transparent);   /* the team's colour - traded cells match it */
+  border-bottom:4px solid var(--tc,transparent);   /* the team's colour - traded cells match it */
 }
 .board .rnd{
   font-family:var(--f-mono);font-size:clamp(11px,1.05vw,15px);color:var(--chalk);
@@ -428,7 +428,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
    receiving team; filled cells keep their sticker and bold the arrow in the meta line.
    --tc is the receiving team's colour (teamColor), and the same colour underlines that team's
    own column header - match the colours and you know the owner without reading a name. */
-.slot.traded{border:1px dashed var(--tc,var(--charge))}
+.slot.traded{border:2px dashed var(--tc,var(--charge))}
 .slot .toTeam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:2px 4px;min-width:0;text-align:center}
 .slot .tt-tag{font-family:var(--f-ui);font-weight:700;font-size:8px;letter-spacing:.14em;color:var(--tc,var(--charge));
@@ -5656,10 +5656,14 @@ function renderHome(){
     </table>`;
 }
 
-/* One stable colour per team for the draft board. Spaced by golden angle so 12 teams stay
-   visually distinct - the mgrColor hash palette only has 10 entries, which guarantees two
-   teams collide. Keyed by slot, so a column and every pick traded TO that column match. */
-function teamColor(ti){ return `hsl(${Math.round((ti*137.508)%360)} 72% 62%)`; }
+/* One stable colour per team for the draft board, keyed by slot so a column and every pick
+   traded TO that column match. Hand-picked, not generated: golden-angle hues left several
+   pairs only ~20 degrees apart (two reds, two greens, two purples), which read as the same
+   colour at cell size. These twelve differ in hue AND weight, and they are ORDERED so that
+   neighbouring columns never wear look-alike colours. */
+const TEAM_COLORS = ['#ff4d5e','#45c1ff','#ffd24d','#b45cff','#33cc7a','#ff85b3',
+                     '#5a6bff','#ff9430','#2ee6c8','#e858e0','#b8e33d','#cfd6e4'];
+function teamColor(ti){ return TEAM_COLORS[((+ti||0)%TEAM_COLORS.length+TEAM_COLORS.length)%TEAM_COLORS.length]; }
 function renderBoard(){
   const board = document.getElementById('board');
   const n = N(), rounds = snakeRounds();
