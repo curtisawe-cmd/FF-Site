@@ -4030,7 +4030,7 @@ const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
    (2025: st_td 27, kr_td+pr_td 22, zero players carrying both). Anything absent from this
    list is stripped by slimSeason before season scoring ever sees it, so changing a formula
    without adding the field here does nothing at all to season totals. */
-const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpmiss','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
+const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_tgt','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpa','xpmiss','fgm','fga','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
 let STAT_CACHE={}, statsLoading=false, statsLoaded=false;
 function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue; if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm||p.st_td)) continue; const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; } m[id]=o; } return m; }
 async function loadCareerStats(){
@@ -4229,11 +4229,16 @@ function addFromPlayers(pid, ev){
   addWithDrop(ti, pid);
 }
 /* key stat columns per position for the season table */
+/* Column sets per position. An entry is [label, key-or-fn, 'dec'?] - 'dec' renders one decimal
+   for the derived rates (YPC, Y/R, FG%), everything else rounds. The table scrolls sideways in
+   its own container, so more columns cost nothing on a phone. Every key here must also be in
+   STAT_FIELDS or slimSeason strips it from the cache and the column reads 0 forever. */
 function statCols(pos){
-  if(pos==='QB') return [['Pa Yd','pass_yd'],['Pa TD','pass_td'],['INT','pass_int'],['Ru Yd','rush_yd'],['Ru TD','rush_td']];
-  if(pos==='RB') return [['Ru Yd','rush_yd'],['Ru TD','rush_td'],['Rec','rec'],['Re Yd','rec_yd'],['Re TD','rec_td']];
-  if(pos==='WR'||pos==='TE') return [['Rec','rec'],['Re Yd','rec_yd'],['Re TD','rec_td'],['Ru Yd','rush_yd']];
-  if(pos==='K') return [['FGM',s=>(+(s.fgm_0_19||0)+ +(s.fgm_20_29||0)+ +(s.fgm_30_39||0)+ +(s.fgm_40_49||0)+ +(s.fgm_50p||0))],['XPM','xpm']];
+  const fgm = s => +(s.fgm!=null ? s.fgm : (+(s.fgm_0_19||0)+ +(s.fgm_20_29||0)+ +(s.fgm_30_39||0)+ +(s.fgm_40_49||0)+ +(s.fgm_50p||0)));
+  if(pos==='QB') return [['Cmp','pass_cmp'],['Att','pass_att'],['Pa Yd','pass_yd'],['Pa TD','pass_td'],['INT','pass_int'],['Sack','pass_sack'],['Ru Att','rush_att'],['Ru Yd','rush_yd'],['Ru TD','rush_td'],['Fum','fum_lost']];
+  if(pos==='RB') return [['Att','rush_att'],['Ru Yd','rush_yd'],['YPC',s=>(+s.rush_att? +(s.rush_yd||0)/+s.rush_att : 0),'dec'],['Ru TD','rush_td'],['Tgt','rec_tgt'],['Rec','rec'],['Re Yd','rec_yd'],['Re TD','rec_td'],['Fum','fum_lost']];
+  if(pos==='WR'||pos==='TE') return [['Tgt','rec_tgt'],['Rec','rec'],['Re Yd','rec_yd'],['Y/R',s=>(+s.rec? +(s.rec_yd||0)/+s.rec : 0),'dec'],['Re TD','rec_td'],['Ru Att','rush_att'],['Ru Yd','rush_yd'],['Ru TD','rush_td'],['Fum','fum_lost']];
+  if(pos==='K') return [['FGM',fgm],['FGA',s=>+(s.fga||0)],['FG%',s=>(+s.fga? fgm(s)/+s.fga*100 : 0),'dec'],['50+','fgm_50p'],['XPM','xpm'],['XPA',s=>+(s.xpa||0)]];
   return [['Ru Yd','rush_yd'],['Re Yd','rec_yd'],['Re TD','rec_td']];
 }
 function renderPlayerModal(id){
@@ -4248,12 +4253,15 @@ function renderPlayerModal(id){
     body=`<div class="pcareer-loading">Loading career stats…</div>`;
   }else{
     const cols=statCols(pos);
-    const rows=CAREER_YEARS.map(y=>{ const st=STAT_CACHE[String(y)]?.[id]; return {label:"'"+String(y).slice(2), full:y, st, pts:scoreSeasonStats(st,pos), gp:st?+(st.gp||0):0, proj:false}; });
+    /* years with no stats are omitted, not shown as dashes - a 2nd-year player gets 2 rows,
+       not 6. The seasons a player DID play keep their real year labels. */
+    const rows=CAREER_YEARS.map(y=>{ const st=STAT_CACHE[String(y)]?.[id]; return {label:"'"+String(y).slice(2), full:y, st, pts:scoreSeasonStats(st,pos), gp:st?+(st.gp||0):0, proj:false}; })
+      .filter(r=>r.st);
     rows.push({label:"'26", full:'2026', st:STAT_CACHE['proj']?.[id], pts:scoreSeasonStats(STAT_CACHE['proj']?.[id],pos), gp:null, proj:true});
     const max=Math.max(1,...rows.map(r=>r.pts||0));
     const chart=`<div class="pcareer">${rows.map(r=>{ const h=r.pts?Math.max(3,Math.round(r.pts/max*100)):0;
       return `<div class="pbar${r.proj?' proj':''}"><span class="pv">${r.pts!=null?Math.round(r.pts):'–'}</span><div class="bar" style="height:${h}%"></div><span class="py">${r.label}</span></div>`; }).join('')}</div>`;
-    const cell=(r,c)=>{ if(!r.st) return '—'; const v=typeof c[1]==='function'?c[1](r.st):+(r.st[c[1]]||0); return Math.round(v); };
+    const cell=(r,c)=>{ if(!r.st) return '—'; const v=typeof c[1]==='function'?c[1](r.st):+(r.st[c[1]]||0); return c[2]==='dec'?(+v).toFixed(1):Math.round(v); };
     const table=`<div style="overflow-x:auto"><table class="plain" style="margin-top:16px;white-space:nowrap">
       <tr><th>Season</th><th style="text-align:right">Pts</th><th style="text-align:right">GP</th>${cols.map(c=>`<th style="text-align:right">${c[0]}</th>`).join('')}</tr>
       ${rows.map(r=>`<tr${r.proj?' class="top"':''}><td>${r.proj?'2026 proj':r.full}</td>
@@ -4262,8 +4270,10 @@ function renderPlayerModal(id){
         ${cols.map(c=>`<td style="text-align:right;font-family:var(--f-mono)">${cell(r,c)}</td>`).join('')}</tr>`).join('')}
     </table></div>`;
     body=chart+table+`<p class="sub" style="font-size:12px;margin-top:12px">Scored in <b>your league's rules</b> from season totals (per-game yardage/long-TD bonuses excluded). 2026 is Sleeper's projection.</p>`;
-    body+=`<div class="eyebrow" style="margin:18px 0 6px">Verify scoring · itemized breakdown</div>
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${[...CAREER_YEARS].reverse().map(y=>`<option value="${y}"${y===2025?' selected':''}>${y}</option>`).join('')}</select></div>
+    /* only seasons the player actually has stats for; newest first and selected */
+    const brkYears=[...CAREER_YEARS].reverse().filter(y=>STAT_CACHE[String(y)]?.[id]);
+    if(brkYears.length) body+=`<div class="eyebrow" style="margin:18px 0 6px">Verify scoring · itemized breakdown</div>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
   /* rostered on another team → offer a one-tap route into the Trade Center for this player */
@@ -4289,7 +4299,7 @@ function renderPlayerModal(id){
         <span class="sub" style="margin:0">On the bench ·</span>${btns.join('')}</div>`;
     }
   }
-  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${swapRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · last 6 years + 2026 projection</div>${body}</div>`;
+  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${swapRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · career + 2026 projection</div>${body}</div>`;
   if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
