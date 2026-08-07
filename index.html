@@ -422,6 +422,17 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
   position:relative;overflow:hidden;min-width:0;
 }
 .slot.next{border:1px solid var(--turf-bright);box-shadow:0 0 0 1px var(--turf-bright)}
+/* A traded pick has to read from across the room: whose slot it WAS is the column it sits in,
+   so the cell only needs to shout who it goes to now. Empty cells get a TRADE tag and the
+   receiving team; filled cells keep their sticker and bold the arrow in the meta line. */
+.slot.traded{border:1px dashed var(--charge)}
+.slot .toTeam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;padding:2px 4px;min-width:0;text-align:center}
+.slot .tt-tag{font-family:var(--f-ui);font-weight:700;font-size:8px;letter-spacing:.14em;color:var(--charge);
+  border:1px solid var(--charge);border-radius:3px;padding:0 4px;line-height:1.5}
+.slot .tt-name{font-family:var(--f-mono);font-weight:700;font-size:10px;color:var(--chalk);
+  max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sticker .mt .mt-trade{font-weight:800;white-space:nowrap}
 .sticker{
   position:absolute;inset:0;border-radius:5px;
   background:var(--pc,#555);color:#0e1114;
@@ -5668,9 +5679,11 @@ function renderBoard(){
       const isNext = idx===nextIdx && !D.finished && D.started;
       const own = ownerForPick(idx);
       const isKeep = KR() && row===0;
-      html += `<div class="slot${isNext?' next':''}">` +
-        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?' → '+esc(S.teams[p.teamIndex]?.name||''):''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div>`:'') +
-        ((!p && own!==teamForPick(idx))? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono)">${esc(S.teams[own].name.slice(0,14))}</div>`:'') + `</div>`;
+      const traded = own!==teamForPick(idx);
+      const tradeTip = traded ? `${(S.teams[teamForPick(idx)]||{}).name||''}'s pick — traded to ${(S.teams[own]||{}).name||''}` : '';
+      html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` title="${esc(tradeTip)}"`:''}>` +
+        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?` <b class="mt-trade">→ ${esc(S.teams[p.teamIndex]?.name||'')}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div>`:'') +
+        ((!p && traded)? `<div class="toTeam"><span class="tt-tag">TRADE</span><span class="tt-name">→ ${esc(S.teams[own].name)}</span></div>`:'') + `</div>`;
     }
   }
   board.innerHTML = html;
