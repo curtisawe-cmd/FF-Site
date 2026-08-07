@@ -406,6 +406,7 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .board .bhead{
   font-family:var(--f-ui);font-weight:700;font-size:clamp(10px,1.15vw,15px);letter-spacing:.03em;text-transform:uppercase;
   color:var(--chalk);text-align:center;padding:8px 1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  border-bottom:2px solid var(--tc,transparent);   /* the team's colour - traded cells match it */
 }
 .board .rnd{
   font-family:var(--f-mono);font-size:clamp(11px,1.05vw,15px);color:var(--chalk);
@@ -424,15 +425,19 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .slot.next{border:1px solid var(--turf-bright);box-shadow:0 0 0 1px var(--turf-bright)}
 /* A traded pick has to read from across the room: whose slot it WAS is the column it sits in,
    so the cell only needs to shout who it goes to now. Empty cells get a TRADE tag and the
-   receiving team; filled cells keep their sticker and bold the arrow in the meta line. */
-.slot.traded{border:1px dashed var(--charge)}
+   receiving team; filled cells keep their sticker and bold the arrow in the meta line.
+   --tc is the receiving team's colour (teamColor), and the same colour underlines that team's
+   own column header - match the colours and you know the owner without reading a name. */
+.slot.traded{border:1px dashed var(--tc,var(--charge))}
 .slot .toTeam{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:2px;padding:2px 4px;min-width:0;text-align:center}
-.slot .tt-tag{font-family:var(--f-ui);font-weight:700;font-size:8px;letter-spacing:.14em;color:var(--charge);
-  border:1px solid var(--charge);border-radius:3px;padding:0 4px;line-height:1.5}
-.slot .tt-name{font-family:var(--f-mono);font-weight:700;font-size:10px;color:var(--chalk);
+.slot .tt-tag{font-family:var(--f-ui);font-weight:700;font-size:8px;letter-spacing:.14em;color:var(--tc,var(--charge));
+  border:1px solid var(--tc,var(--charge));border-radius:3px;padding:0 4px;line-height:1.5}
+.slot .tt-name{font-family:var(--f-mono);font-weight:700;font-size:10px;color:var(--tc,var(--chalk));
   max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sticker .mt .mt-trade{font-weight:800;white-space:nowrap}
+.sticker .tdot{display:inline-block;width:7px;height:7px;border-radius:50%;vertical-align:baseline;
+  margin-right:2px;border:1px solid rgba(0,0,0,.45)}   /* outlined so it reads on any sticker colour */
 .sticker{
   position:absolute;inset:0;border-radius:5px;
   background:var(--pc,#555);color:#0e1114;
@@ -5651,6 +5656,10 @@ function renderHome(){
     </table>`;
 }
 
+/* One stable colour per team for the draft board. Spaced by golden angle so 12 teams stay
+   visually distinct - the mgrColor hash palette only has 10 entries, which guarantees two
+   teams collide. Keyed by slot, so a column and every pick traded TO that column match. */
+function teamColor(ti){ return `hsl(${Math.round((ti*137.508)%360)} 72% 62%)`; }
 function renderBoard(){
   const board = document.getElementById('board');
   const n = N(), rounds = snakeRounds();
@@ -5660,7 +5669,7 @@ function renderBoard(){
      overflows into .boardscroll's horizontal swipe instead of crushing names to 2 letters. */
   board.style.gridTemplateColumns = `clamp(40px,4.3vw,66px) repeat(${n}, minmax(56px,1fr))`;
   let html = `<div class="bcorner"></div>`;   /* sticks with the names, else R1 slides in under them */
-  S.teams.forEach(t=>html+=`<div class="bhead">${esc(t.name)}</div>`);
+  S.teams.forEach((t,i)=>html+=`<div class="bhead" style="--tc:${teamColor(i)}">${esc(t.name)}</div>`);
   const byIndex = {}; D.picks.forEach(p=>byIndex[p.pickIndex]=p);
   const nextIdx = currentPickIndex();
   // how many of each team's picks fill starting-lineup slots (keeper counts as the first)
@@ -5681,8 +5690,8 @@ function renderBoard(){
       const isKeep = KR() && row===0;
       const traded = own!==teamForPick(idx);
       const tradeTip = traded ? `${(S.teams[teamForPick(idx)]||{}).name||''}'s pick — traded to ${(S.teams[own]||{}).name||''}` : '';
-      html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` title="${esc(tradeTip)}"`:''}>` +
-        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?` <b class="mt-trade">→ ${esc(S.teams[p.teamIndex]?.name||'')}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div>`:'') +
+      html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` style="--tc:${teamColor(own)}" title="${esc(tradeTip)}"`:''}>` +
+        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(p.teamIndex)}"></span>→ ${esc(S.teams[p.teamIndex]?.name||'')}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div>`:'') +
         ((!p && traded)? `<div class="toTeam"><span class="tt-tag">TRADE</span><span class="tt-name">→ ${esc(S.teams[own].name)}</span></div>`:'') + `</div>`;
     }
   }
