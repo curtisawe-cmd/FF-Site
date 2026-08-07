@@ -516,13 +516,7 @@ nav.tabs button{position:relative}
 .pickchip span{opacity:.65;font-size:11px}
 .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
-/* The slot is a picker now, but it still has to read as the little number badge it replaced -
-   .teamcard select would otherwise stretch it to 130px and shove the row around. It beats that
-   rule on specificity, so the width here is the one that applies. */
-.teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);text-align:center;
-  flex:0 0 auto;width:52px;min-width:0;padding:3px 4px;background:var(--panel);
-  border:1px solid var(--line);border-radius:6px;cursor:pointer}
-.teamcard .num:focus{border-color:var(--turf);outline:none;color:var(--chalk)}
+.teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
 .teamcard input[type=text]{flex:1 1 120px;min-width:100px}
 .teamcard select{flex:1 1 130px;min-width:110px}
 .teamcard .mv{display:flex;gap:4px;margin-left:auto}
@@ -8806,8 +8800,7 @@ function renderSettings(){
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
   document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
-    <div class="teamcard"><select class="num" title="Draft slot — pick where this team drafts" aria-label="Draft slot for ${esc(t.name)}"
-        onchange="setTeamSlot(${i}, this.value)">${S.teams.map((_,k)=>`<option value="${k+1}"${k===i?' selected':''}>${k+1}</option>`).join('')}</select>
+    <div class="teamcard"><span class="num">${i+1}</span>
       <label class="team-logo-up" title="${t.logo?'Change':'Upload'} team logo (JPG/PNG)">
         ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
         <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
@@ -9279,10 +9272,11 @@ function moveTeam(i,d){
   reorderTeams(()=>{ [S.teams[i],S.teams[j]]=[S.teams[j],S.teams[i]]; });
   saveState(); renderSettings(); renderTrades(); refreshDraftUI();
 }
-/* Type a slot number to send a team straight there, instead of walking it up with the arrows.
-   Lift-and-reinsert, the same end state as holding the arrow down: everyone in between shifts
-   by one. Deliberately NOT a swap with whoever is standing in that slot - a swap throws a second
-   team somewhere you did not ask for, which undoes the part of the order you already set. */
+/* Send a team straight to a slot. No UI calls this any more - the typed box could not hold a
+   selection on input[type=number] and the select that replaced it rendered as garbage on the
+   commissioner's machine, so the slot badge went back to being just a number and the arrows are
+   the interface. Kept because it is the tested lift-and-reinsert move (everyone in between
+   shifts by one, never a swap) and works from the console: setTeamSlot(teamIndex, slotNumber). */
 function setTeamSlot(i, v){
   if(!requireAdmin()){ renderSettings(); return; }
   if(D.started && D.picks.length){ toast("Can't change draft positions mid-draft — reset the draft first."); renderSettings(); return; }
