@@ -3705,7 +3705,8 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
+setInterval(()=>{ try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
+  try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
@@ -8163,8 +8164,62 @@ Bench players are not dropped, only reordered.`)) return;
   saveState(); pushTeamData(ti); renderTeams();
   toast(`Lineup set — ${best.total.toFixed(1)} projected (+${gain.toFixed(1)})`);
 }
+/* ===================== LINEUP LOCKS =====================
+   A player locks the moment his NFL team kicks off and stays locked for the rest of the
+   week - no benching a 1 o'clock dud to promote whoever went off in the late window.
+   Kickoff times come from ESPN's scoreboard (already the injuries source), fetched for the
+   current week only and cached for six hours.
+
+   FAILS OPEN, like irEligible: no schedule data means nothing locks. A data outage freezing
+   every roster in the league is strictly worse than a brief window where the honour system
+   applies. Preseason and bye weeks lock nothing for the same reason - no kickoff, no lock.
+   The commissioner can push through any locked move behind a confirm, because fixing a
+   lineup for someone at the bar IS the commissioner's job. */
+let NFL_KICKS = { wk: 0, map: {}, at: 0 };
+const ESPN_TEAM_FIX = { WSH:'WAS' };   /* the one code ESPN and Sleeper disagree on */
+async function loadKickoffs(force){
+  const wk = currentNflWeek();
+  if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, at: Date.now() }; return; }
+  if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < 6*3600000) return;
+  try{
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${wk}&dates=2026`);
+    const j = await r.json();
+    const map = {};
+    (j.events||[]).forEach(ev=>{
+      const t = Date.parse(ev.date); if(!Number.isFinite(t)) return;
+      (((ev.competitions||[])[0]||{}).competitors||[]).forEach(c=>{
+        const ab = String((c.team||{}).abbreviation||'').toUpperCase();
+        if(ab) map[ESPN_TEAM_FIX[ab]||ab] = t;
+      });
+    });
+    if(Object.keys(map).length) NFL_KICKS = { wk, map, at: Date.now() };
+  }catch(e){}
+}
+function playerKickoff(pid){
+  if(NFL_KICKS.wk < 1 || NFL_KICKS.wk !== currentNflWeek()) return null;
+  const p = POOL_MAP.get(pid) || (POOL||[]).find(x=>x.id===pid)
+         || (realDraft().picks||[]).find(x=>x.playerId===pid && !x.cut);
+  const tm = p && (p.team || p.nfl);
+  const at = tm ? NFL_KICKS.map[String(tm).toUpperCase()] : null;
+  return Number.isFinite(at) ? at : null;
+}
+function playerLocked(pid){ const at = playerKickoff(pid); return !!at && Date.now() >= at; }
+/* Boot fetch DEFERRED: loadKickoffs reads NFL_2026_WEEK1, a const declared further down this
+   script, so calling it inline here would die in the temporal dead zone. After the current
+   task the whole script has run and every binding exists. The minute tick keeps it fresh. */
+setTimeout(()=>{ try{ loadKickoffs(); }catch(e){} }, 0);
+/* true = go ahead. Names the player and, for the commissioner, asks instead of refusing. */
+function lockGuard(pid, what){
+  if(!playerLocked(pid)) return true;
+  const p = POOL_MAP.get(pid) || (realDraft().picks||[]).find(x=>x.playerId===pid) || {};
+  const nm = p.name || 'That player';
+  if(isAdmin()) return confirm(`${nm} is locked — his game has started.\n\nCommissioner override: ${what} anyway?`);
+  toast(`${nm} is locked — his game has started. Lineups unlock next week.`);
+  return false;
+}
 function setSlot(ti, pid, slot){
   if(!requireTeam(ti)){ renderTeams(); return; }
+  if(!lockGuard(pid, 'move him')){ renderTeams(); return; }
   const lu = ensureLineup(ti);
   if(slot!=='BN' && slot!=='IR'){
     const cap = +S.roster[slot]||0;
@@ -8190,6 +8245,10 @@ function setSlot(ti, pid, slot){
    `starterPid` if someone holds it (empty slot -> straight promotion, no one benched) */
 function swapToSlot(ti, benchPid, starterPid, slot){
   if(!requireTeam(ti)){ return; }
+  /* both ends of a swap must be free: promoting an unlocked bench player is no better if it
+     benches a starter whose game is already running */
+  if(!lockGuard(benchPid, 'promote him')){ renderTeams(); return; }
+  if(starterPid && !lockGuard(starterPid, 'bench him')){ renderTeams(); return; }
   const lu = ensureLineup(ti);
   const bp = D.picks.find(p=>p.teamIndex===ti && p.playerId===benchPid && !p.cut);
   if(!bp || lu[benchPid]!=='BN'){ renderTeams(); return; }   /* stale popup/select — roster changed under it */
@@ -8229,6 +8288,7 @@ function cutPick(ti, pid, d){
 }
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
+  if(!lockGuard(pid, 'drop him')) return;
   const d = realDraft();
   const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return;
@@ -8289,6 +8349,7 @@ function addWithDrop(ti, pid){
 }
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
+  if(!lockGuard(dropPid, 'drop him')) return;
   const d = realDraft();
   const dropped = cutPick(ti, dropPid, d);
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
@@ -8725,10 +8786,15 @@ function renderMyTeam(){
         });
       return h;
     }).join('');
+    /* locked: game under way. Managers get dead controls, not controls that scold on use;
+       the commissioner keeps live ones because lockGuard asks instead of refusing. */
+    const locked = playerLocked(p.playerId);
+    const dead = locked && !isAdmin();
+    const lockChip = locked ? ` <span class="inj q" title="His game has started \u2014 locked until next week">\uD83D\uDD12</span>` : '';
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
-      <td style="text-align:right"><select style="width:84px"${canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"'} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
-      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px" title="Drop to free agents" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
+      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${dead?' disabled':''} title="${dead?'Locked \u2014 his game has started':'Drop to free agents'}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   /* every unfilled slot renders as an Empty row with an Add button that jumps to the
      Players tab, pre-filtered to the position the hole is for — except IR, see below */
