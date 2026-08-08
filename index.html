@@ -1839,6 +1839,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <button class="auth-primary" id="authSubmit" type="submit">Sign in</button>
       </form>
       <div class="auth-toggle"><span id="authToggleTxt">New to the league?</span> <a href="#" id="authToggleLink" onclick="toggleAuthMode();return false">Create an account</a></div>
+      <div class="auth-toggle" style="margin-top:6px"><a href="#" onclick="authForgot();return false">Forgot password?</a></div>
     </div>
     <div id="authAccount" style="display:none">
       <div class="auth-title">Your account</div>
@@ -4846,7 +4847,11 @@ const AUTH_ERRS = {
   'auth/operation-not-allowed':'This sign-in method is not enabled in Firebase yet.',
   'auth/popup-closed-by-user':'Google sign-in was cancelled.',
   'auth/unauthorized-domain':'This site is not authorized in Firebase Auth settings.',
-  'auth/network-request-failed':'Network error — check your connection.'
+  'auth/network-request-failed':'Network error — check your connection.',
+  'auth/popup-blocked':'The browser blocked the Google window — trying another way…',
+  'auth/operation-not-supported-in-this-environment':'This browser cannot open the Google window — trying another way…',
+  'auth/missing-email':'Type your email first.',
+  'auth/user-disabled':'That account has been disabled — talk to the commissioner.'
 };
 function authErr(err){ setAuthErr(AUTH_ERRS[err && err.code] || (err && err.message) || 'Something went wrong.'); }
 /* Persistence was already 'local', so a session is meant to outlive closing the app. What
@@ -4882,7 +4887,28 @@ async function doGoogle(){
      unrequested. Persistence is already set — at load, and again whenever the checkbox is
      toggled — so there is nothing to wait for here. */
   try{ await window.FB.google(); closeAuth(); }
-  catch(err){ authErr(err); }
+  catch(err){
+    /* Where popups cannot exist - the installed Home Screen app, or the link opened inside
+       Messenger/Instagram's built-in browser - fall back to a full-page redirect. That is why
+       "Continue with Google" worked on someone's laptop and not on their phone. */
+    const code = (err && err.code) || '';
+    if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment','auth/cancelled-popup-request','auth/internal-error'].includes(code)){
+      setAuthErr('Sending you to Google to sign in…');
+      try{ await window.FB.googleRedirect(); return; }catch(e2){ authErr(e2); return; }
+    }
+    authErr(err);
+  }
+}
+/* the redirect comes back as a fresh page load; a failure there has nowhere else to speak */
+window.onAuthRedirectErr = err => { try{ openAuth(); authErr(err); }catch(e){} };
+async function authForgot(){
+  if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
+  const email=(document.getElementById('authEmail').value||'').trim();
+  if(!email){ setAuthErr('Type your email above first, then tap Forgot password.'); return; }
+  try{
+    await window.FB.resetPass(email);
+    setAuthErr(`Reset link sent to ${email} — check spam too.`);
+  }catch(err){ authErr(err); }
 }
 async function doLogout(){ if(fbReady()) try{ await window.FB.logout(); }catch(e){} closeAuth(); }
 /* called by the Firebase module whenever auth state changes */
@@ -10030,7 +10056,8 @@ if(!store.ok){ document.querySelector('#view-home .hero').insertAdjacentHTML('af
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence,
+         signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+         sendPasswordResetEmail, setPersistence, browserLocalPersistence,
          browserSessionPersistence }
          from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getDatabase, ref, get, set, update, remove, onValue, serverTimestamp, query, limitToLast, runTransaction }
@@ -10079,6 +10106,8 @@ window.FB = {
   signup: (e,p) => createUserWithEmailAndPassword(auth, e, p),
   login:  (e,p) => signInWithEmailAndPassword(auth, e, p),
   google: ()    => signInWithPopup(auth, gprov),
+  googleRedirect: () => signInWithRedirect(auth, gprov),   /* popup fallback: PWAs and in-app browsers */
+  resetPass: (e) => sendPasswordResetEmail(auth, e),
   logout: ()    => signOut(auth),
   setPersist: (keep) => setPersistence(auth, keep ? browserLocalPersistence : browserSessionPersistence),
   /* Realtime Database helpers (path-based) */
@@ -10106,6 +10135,12 @@ window.FB = {
 onAuthStateChanged(auth, (user) => {
   window.fbUser = user || null;
   if (typeof window.onFbUser === 'function') window.onFbUser(user);
+});
+/* Completes a Google sign-in that came back via full-page redirect (the popup fallback).
+   Success lands through onAuthStateChanged like any other login; only failures need a voice,
+   and without this catch they would vanish - the page just reloads looking signed out. */
+getRedirectResult(auth).catch(err => {
+  try{ if (typeof window.onAuthRedirectErr === 'function') window.onAuthRedirectErr(err); }catch(e){}
 });
 console.log('[BBL] Firebase connected:', firebaseConfig.projectId);
 </script>
