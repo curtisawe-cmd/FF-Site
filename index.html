@@ -883,6 +883,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 @keyframes tt-flash{0%{opacity:0}8%{opacity:.5}34%{opacity:.22}100%{opacity:0}}
 /* ---------- illegal-pick alarm ---------- */
 .alarm-overlay{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;pointer-events:none;overflow:hidden}
+/* konami confetti - pieces fall past the viewport and the wrapper removes itself */
+.kfetti{position:fixed;inset:0;z-index:2050;pointer-events:none;overflow:hidden}
+.kfetti i{position:absolute;top:-5vh;border-radius:2px;animation:kfall linear forwards}
+@keyframes kfall{to{transform:translateY(112vh) rotate(720deg)}}
+@media (prefers-reduced-motion: reduce){.kfetti{display:none}}
 .alarm-flash{position:absolute;inset:0;background:var(--danger);opacity:0;animation:alarm-flash 5s steps(1,end) forwards}
 @keyframes alarm-flash{0%{opacity:.32}9%{opacity:0}18%{opacity:.32}27%{opacity:0}36%{opacity:.28}45%{opacity:0}70%{opacity:.1}100%{opacity:0}}
 .alarm-box{position:relative;text-align:center;color:#fff;padding:0 16px;animation:alarm-shake .5s ease-in-out 9, alarm-out .5s ease-in 4.5s forwards}
@@ -4533,6 +4538,60 @@ const TRADE_LINES=[
   "TRADE ACCEPTED","Deal's done","Somebody got fleeced","A trade has been made","Shots fired",
   "The board just moved","Handshake complete","Someone's rebuilding","Blockbuster","Papers signed"
 ];
+/* ---- easter eggs: the Konami spice pack and the logo tap ---- */
+const SPICY_INSULTS=[
+  "YOUR KEEPER MISSES YOU ALREADY","{mgr} DRAFTS LIKE A DISCONNECTED CONTROLLER",
+  "EVEN THE AUTO-DRAFT IS EMBARRASSED","{player} JUST REQUESTED A TRADE","A BOLD MOVE FOR LAST PLACE",
+  "THE {pos} ROOM CALLED. THEY'RE FULL.","{team} IS A REBUILDING YEAR. AGAIN.",
+  "COMMISSIONER, CHECK THIS MAN'S EYES","YOUR MOCK DRAFTS WERE FAKE AND SO IS THIS",
+  "THE TOILET BOWL HAS A RESERVED SEAT"
+];
+const KONAMI=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+let konamiAt=0;
+window.addEventListener('keydown', e=>{
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  konamiAt = (k===KONAMI[konamiAt]) ? konamiAt+1 : (k===KONAMI[0]?1:0);
+  if(konamiAt<KONAMI.length) return;
+  konamiAt=0;
+  const already = store.get('ffl_spice')==='1';
+  store.set('ffl_spice','1');
+  confettiStorm();
+  toast(already ? 'The spice remembers you. 🌶️' : 'Secret unlocked — the draft alarms just got meaner. 🌶️');
+});
+function confettiStorm(){
+  const wrap=document.createElement('div'); wrap.className='kfetti'; wrap.setAttribute('aria-hidden','true');
+  const colors=['#ff4d5e','#45c1ff','#ffd24d','#b45cff','#33cc7a','#ff85b3','#ff9430','#2ee6c8'];
+  for(let i=0;i<120;i++){
+    const p=document.createElement('i');
+    p.style.cssText=`left:${Math.random()*100}vw;background:${colors[i%colors.length]};`
+      +`animation-duration:${(2.2+Math.random()*2.2).toFixed(2)}s;animation-delay:${(Math.random()*0.9).toFixed(2)}s;`
+      +`width:${6+Math.random()*7|0}px;height:${9+Math.random()*8|0}px;`;
+    wrap.appendChild(p);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(()=>{ try{ wrap.remove(); }catch(e){} }, 6000);
+}
+/* triple-tap the wordmark: a random jab at a random manager, from the same voice as the alarms */
+const TAP_LINES=[
+  "{mgr} is checking the waiver wire again. It won't help.","{mgr} still thinks last year was a fluke. It wasn't.",
+  "Breaking: {mgr} benched the wrong guy. Developing story.","{mgr}'s draft board is just vibes.",
+  "Vegas has {mgr} at 1000-to-1. Generous.","{mgr} trades like the deadline is a suggestion.",
+  "Sources say {mgr} is 'due for a big week'. Sources are lying.","The Toilet Bowl watches {mgr} with interest."
+];
+let tapN=0, tapAt=0;
+document.querySelectorAll('.wordmark').forEach(el=>{
+  el.style.cursor='default';
+  el.addEventListener('click', ()=>{
+    const now=Date.now();
+    tapN = (now-tapAt<700) ? tapN+1 : 1; tapAt=now;
+    if(tapN<3) return;
+    tapN=0;
+    const withMgr=(S.teams||[]).filter(t=>t.manager||t.name);
+    if(!withMgr.length) return;
+    const t=withMgr[Math.floor(Math.random()*withMgr.length)];
+    toast(TAP_LINES[Math.floor(Math.random()*TAP_LINES.length)].split('{mgr}').join(t.manager||t.name));
+  });
+});
 function saveInsults(val){ S.alarmInsults = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 /* the full-screen shout. `kind` picks which word pool and icon it uses. */
@@ -4555,8 +4614,10 @@ function pickAlarm(why, ctx){
     .split('{team}').join(c.team || 'that team')
     .split('{player}').join(c.player || 'that guy')
     .split('{pos}').join(c.pos || 'that spot');
-  const built = PICK_INSULTS.map(fill);
-  const pool = (S.alarmInsults && S.alarmInsults.length) ? S.alarmInsults.map(fill) : built;
+  /* the Konami unlock folds the spicy pack into whatever pool is active */
+  const spice = (store.get('ffl_spice')==='1') ? SPICY_INSULTS.map(fill) : [];
+  const built = PICK_INSULTS.map(fill).concat(spice);
+  const pool = ((S.alarmInsults && S.alarmInsults.length) ? S.alarmInsults.map(fill) : PICK_INSULTS.map(fill)).concat(spice);
   bigAlarm(pool, built, '⚠', why);
 }
 /* the Settings test button — shows the tokens actually filling in, not a bare line */
@@ -4633,6 +4694,20 @@ function keeperAlarm(playerName, year, keptBy, teamName){
   bigAlarm(pool, built, '🚫',
     `${playerName} was kept by ${keptBy} in ${year} — keepers are one year only.`);
 }
+/* Round-9-or-earlier kicker: a legal pick that deserves its own siren. Distinct pool from the
+   illegal-pick insults - this is mockery, not correction. */
+const KICKER_LINES=[
+  "A KICKER?! IT'S ROUND {r}!","SOMEBODY STOP {mgr}","LEG SO GOOD YOU REACHED {n} ROUNDS EARLY?",
+  "THE BOLDEST PICK EVER MADE","SCOUTS HATE THIS ONE TRICK","{mgr} HAS SEEN ENOUGH FOOTBALL",
+  "DRAFTING FOR ACCURACY","A KICKER. ON PURPOSE.","GRANDPA'S DRAFT STRATEGY","THE LEG WHISPERER"
+];
+function kickerAlarm(teamIdx, rd){
+  const t=(S.teams||[])[teamIdx]||{};
+  const fill=s=>String(s).split('{mgr}').join(t.manager||t.name||'this maniac')
+    .split('{r}').join(rd===0?'THE KEEPER ROUND':String(rd)).split('{n}').join(String(Math.max(1,10-rd)));
+  const built=KICKER_LINES.map(fill);
+  bigAlarm(built, built, '🦵', `${t.name||'Somebody'} drafted a kicker in ${rd===0?'the keeper round':'round '+rd}. The pick stands. So does the shame.`);
+}
 function makePick(playerId){
   if(!requireDraftControl()) return;
   if(!D.started || D.paused || D.finished) { toast(D.started? "Draft is paused." : "Hit Start Draft first."); return; }
@@ -4652,6 +4727,9 @@ function makePick(playerId){
     const v = keeperViolation(player.name, teamIdx);
     if(v) keeperAlarm(player.name, v.year, v.mgr || v.team, (S.teams[teamIdx]||{}).name);
   }
+  /* the pick counts — the shame is the point. The auto-draft refuses to do this before round
+     10 (bestAvailableForClockTeam), so a human doing it on purpose has earned the ceremony. */
+  if(player.pos==='K' && roundForPick(idx)<10) kickerAlarm(teamIdx, roundForPick(idx));
   afterPick();
 }
 function autoPick(){
@@ -7128,9 +7206,29 @@ function seasonStandings(){
   });
   return rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
 }
+/* The Toilet Bowl: lowest score of the most recent scored week wears the crown until somebody
+   earns it off them. Derived from the scores on every render - no state to desync. */
+function toiletBowlTeam(){
+  if(!(S.season && S.season.schedule)) return null;
+  for(let wk=REG_WEEKS; wk>=1; wk--){
+    if(!weekHasScores(wk)) continue;
+    let worst=null;
+    (S.season.schedule[wk]||[]).forEach((g,m)=>{
+      const [pa,pb]=mScore(wk,m);
+      if(pa!=null && (!worst || pa<worst.pts)) worst={ti:g[0], pts:pa, wk};
+      if(pb!=null && (!worst || pb<worst.pts)) worst={ti:g[1], pts:pb, wk};
+    });
+    if(worst) return worst;
+  }
+  return null;
+}
+function toiletCrown(ti){
+  const tb=toiletBowlTeam();
+  return (tb && tb.ti===ti) ? ` <span title="Toilet Bowl — lowest score of week ${tb.wk} (${tb.pts.toFixed(1)}). Someone else has to earn it off you.">🚽</span>` : '';
+}
 function standingsRowHTML(r, rank, leader){
   return `<tr${leader?' class="top"':''}><td style="font-family:var(--f-mono)">${rank}</td>`+
-    `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
+    `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${toiletCrown(r.i)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
     `<td style="text-align:center;font-family:var(--f-mono)">${r.w}-${r.l}-${r.t}</td>`+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pf.toFixed(1)}</td>`+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pa.toFixed(1)}</td></tr>`;
