@@ -1959,6 +1959,7 @@ const DEFAULTS = {
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
   txFeeAdd: 0.5,         /* league dues: charged per player added */
   txFeeDrop: 0.5,        /* and per player dropped — so a full add/drop is a dollar */
+  buyInPaid: {},         /* $ each team has paid toward the buy-in, keyed by slot */
   waiverHours: 24,       /* how long a dropped player sits on waivers; 0 = waivers off */
   waiverOrder: [],       /* rolling priority, worst first; empty = seed from the standings */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
@@ -5304,6 +5305,7 @@ const SETTING_LABELS={
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
+  buyInPaid:'buy-ins',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
@@ -9686,6 +9688,7 @@ function remapTeamSlots(perm){
 
   /* local slot-keyed state */
   { const lu={}; Object.keys(S.lineups||{}).forEach(k=>{ lu[m(k)]=S.lineups[k]; }); S.lineups=lu; }
+  { const bp={}; Object.keys(S.buyInPaid||{}).forEach(k=>{ bp[m(k)]=S.buyInPaid[k]; }); S.buyInPaid=bp; }
   if(Array.isArray(S.waiverOrder) && S.waiverOrder.length) S.waiverOrder=S.waiverOrder.map(m);
   if(S.season && S.season.schedule)
     Object.values(S.season.schedule).forEach(gs=>(gs||[]).forEach(g=>{ if(Array.isArray(g)){ g[0]=m(g[0]); g[1]=m(g[1]); } }));
@@ -10013,6 +10016,22 @@ function renderPrizes(){
       <div class="setrow"><label>Managers</label><b>${n}</b></div>
       <div class="setrow"><label>Total pot</label><b class="prize-pot">${money(pot)}</b></div>
     </div>
+    <div class="eyebrow" style="margin:16px 0 6px">Buy-ins collected</div>
+    ${(()=>{ const paid=S.buyInPaid||{}; const adm=isAdmin();
+      const collected=S.teams.reduce((s,_,i)=>s+Math.max(0,+paid[i]||0),0);
+      const rows=S.teams.map((t,i)=>{ const full=buyIn>0&&Math.max(0,+paid[i]||0)>=buyIn;
+        return `<div class="setrow" style="gap:8px;align-items:center">
+          <label style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(t.name)}${t.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(t.manager)}</span>`:''}</label>
+          ${full
+            ? `<span style="color:var(--rb);font-weight:700;white-space:nowrap">✅ Paid${adm?` <a href="#" title="Undo — mark as not paid" onclick="unmarkBuyInPaid(${i});return false" style="color:var(--chalk-dim);font-weight:400;font-size:12px">undo</a>`:''}</span>`
+            : (adm?`<button class="btn" style="padding:3px 16px;font-size:13px" title="${esc(t.name)} handed over the ${money(buyIn)}" onclick="markBuyInPaid(${i})">Paid</button>`
+                  :`<span style="color:var(--charge);font-weight:600">owes ${money(buyIn)}</span>`)}
+        </div>`; }).join('');
+      const short=S.teams.filter((t,i)=>buyIn>0&&Math.max(0,+paid[i]||0)<buyIn).length;
+      return rows+`<div class="notice" style="margin-top:10px">Collected <b>${money(collected)}</b> of <b>${money(pot)}</b>${
+        short?` — <span style="color:var(--charge);font-weight:600">${short} still owe</span>`
+             :` — <span style="color:var(--rb);font-weight:600">everyone is paid in 🎉</span>`}</div>`;
+    })()}
     <div class="eyebrow" style="margin:16px 0 6px">Payouts</div>
     <div class="setgrid">
       <div class="setrow"><label>🥇 1st place</label>${dollarIn('first',10)}</div>
@@ -10031,6 +10050,24 @@ function renderPrizes(){
       </div>`).join('') || `<p class="sub" style="margin:0">No custom payouts yet — add side pots like weekly high score, most points, or a punishment fund.</p>` }</div>
     <div class="row" style="margin-top:8px"><button class="btn" onclick="addPrize()">+ Add payout</button></div>
     <div class="notice" style="margin-top:14px">Allocated <b>${money(allocated)}</b> of <b>${money(pot)}</b> — <span style="color:${left<0?'var(--danger)':'var(--rb)'};font-weight:600">${left<0?('over by '+money(-left)):(money(left)+' left to allocate')}</span></div>`;
+}
+/* One button per team: Paid. The stored value is the buy-in amount at the moment it was
+   pressed, so the collected total stays honest even if the buy-in changes later. The function
+   gates on admin because a button is not a lock. */
+function markBuyInPaid(ti){
+  if(!requireAdmin()) return;
+  const buyIn=+(S.prizes&&S.prizes.buyIn)||0; if(!buyIn) return;
+  S.buyInPaid=S.buyInPaid||{}; S.buyInPaid[ti]=buyIn; saveState();
+  try{ logCommish(`recorded ${teamName(ti)}'s buy-in`, `${money(buyIn)} — paid in full`); }catch(e){}
+  renderPrizes();
+  toast(`${teamName(ti)} is paid in ✅`);
+}
+function unmarkBuyInPaid(ti){
+  if(!requireAdmin()) return;
+  if(!confirm(`Mark ${teamName(ti)} as NOT paid?`)) return;
+  S.buyInPaid=S.buyInPaid||{}; delete S.buyInPaid[ti]; saveState();
+  renderPrizes();
+  toast(`${teamName(ti)} owes the buy-in again`);
 }
 function addPrize(){
   S.prizes = S.prizes||{}; S.prizes.extra = Array.isArray(S.prizes.extra)?S.prizes.extra:[];
