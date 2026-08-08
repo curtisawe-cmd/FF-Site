@@ -3561,7 +3561,9 @@ function startLeagueSync(){
        slow or missing, and the trade buttons are gated on it */
     if(window.currentView==='trades') renderTradeCenter();
     try{ updateChatBadge(); updateTradeBadge(); }catch(e){} });   /* another device may have advanced your read marks */
-  window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{}; if(window.currentView==='polls') renderPolls(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/polls`, (m)=>{ pollsMap = m||{};
+    noticeNewPolls(); updatePollBadge(); updateChatBadge();
+    if(window.currentView==='polls') renderPolls(); });
   startChatSync();                                  /* stream chat from login so unread counts work */
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeOffers`, (m)=>{ offersMap = m||{};
     /* Deliberately NOT marked seen here, even with the view open. Trade activity landing
@@ -3571,7 +3573,9 @@ function startLeagueSync(){
        whole account's badges.) */
     noticeNewOffers(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/tradeVetoes`, (m)=>{ vetoesMap = m||{}; updateTradeBadge(); if(window.currentView==='trades') renderOffers(); maybeFinalizeTrades(); });
-  window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{}; if(window.currentView==='polls') renderPolls(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{};
+    updatePollBadge(); updateChatBadge();               /* your vote landing clears your badge */
+    if(window.currentView==='polls') renderPolls(); });
   window.FB.dbOn(`league/${LEAGUE_ID}/waiverClaims`, (m)=>{ wClaims = m||{};
     if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
     /* claims show as pending rows above the log, so that list is stale the moment one lands */
@@ -3718,6 +3722,7 @@ setInterval(()=>{ try{ if(typeof loadKickoffs==='function') loadKickoffs(); }cat
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
   if(typeof maybeExpirePolls==='function') maybeExpirePolls();     /* stamps closed once a poll timer runs out */
+  if(typeof updatePollBadge==='function') updatePollBadge();       /* expiry can clear it with no vote cast */
   if(window.currentView==='polls') renderPolls();                  /* poll countdowns tick */
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
@@ -5991,8 +5996,36 @@ function chatUnreadCount(){
 }
 /* querySelectorAll, not querySelector: the phone drawer reuses class="tabs", so only the top
    bar was ever getting the chat count. setTabBadge is defined with the trade badge. */
+/* Poll badge: OPEN polls you have not voted in - status, not an unread counter, same
+   philosophy as the trade badge. Casting your vote clears your own count; a poll closing
+   clears it for everyone. Nothing to mark read, nothing for a parked tab to eat. */
+function pollAlertCount(){
+  if(!window.fbUser) return 0;
+  const uid=window.fbUser.uid; let n=0;
+  Object.keys(pollsMap||{}).forEach(id=>{ const p=pollsMap[id];
+    if(p && !pollClosed(p) && !(((pollVotesMap||{})[id]||{})[uid])) n++; });
+  return n;
+}
+function updatePollBadge(){
+  const n=pollAlertCount();
+  /* querySelectorAll on purpose: the sub-nav renders on both the chat and polls views */
+  document.querySelectorAll('.chatsub button[data-sub="polls"]').forEach(b=>setTabBadge(b,n));
+}
+/* a freshly posted poll announces itself, same as an incoming trade offer */
+let pollSeenIds = null;
+function noticeNewPolls(){
+  const ids=Object.keys(pollsMap||{});
+  if(pollSeenIds===null){ pollSeenIds=new Set(ids); return; }   /* first sync = backlog, not news */
+  const fresh=ids.filter(id=>!pollSeenIds.has(id));
+  fresh.forEach(id=>pollSeenIds.add(id));
+  fresh.map(id=>pollsMap[id])
+    .filter(p=>p && !pollClosed(p) && !(window.fbUser && p.createdByUid===window.fbUser.uid))
+    .forEach(p=>toast(`🗳️ New poll: ${p.q||'go vote'}`));
+}
 function updateChatBadge(){
-  const n = chatUnreadCount();
+  /* the Chat tab carries chat unreads PLUS unvoted polls - polls live inside Chat, and a badge
+     nobody can see from another view is not a notification */
+  const n = chatUnreadCount() + pollAlertCount();
   document.querySelectorAll('nav.tabs button[data-view="chat"]').forEach(b=>setTabBadge(b, n));
 }
 /* subscribe as soon as you're signed in, so unread counts work without opening the tab */
