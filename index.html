@@ -5303,7 +5303,7 @@ const SETTING_LABELS={
   timerSec:'pick clock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
-  waiverHours:'waiver period', waiverOrder:'waiver priority', feesResetAt:'dues ledger',
+  waiverHours:'waiver period', waiverOrder:'waiver priority', feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
@@ -5431,22 +5431,25 @@ function txManagerFor(team){
 function txLedger(){
   const fees=txFees(), by={};
   /* A dues reset is a BASELINE, not a purge: the log stays append-only and readable forever,
-     the ledger just starts counting from the reset. That also makes a reset reversible. */
+     the ledger just counts from the reset. Baselines come in two grains - the league-wide
+     reset, and a per-team "paid" stamp for when managers settle up at different times. Each
+     team counts from whichever of its baselines is later. */
   const since=+S.feesResetAt||0;
-  const bump=(team,k,n)=>{ if(!team||!n) return;
+  const paid=S.feesPaidAt||{};
+  const bump=(team,k,n,at)=>{ if(!team||!n) return;
+    if((+at||0) < Math.max(since, +paid[team]||0)) return;   /* settled business for this team */
     const e = by[team] || (by[team]={team, adds:0, drops:0, owed:0});
     e[k]+=n; };
   Object.keys(txMap||{}).forEach(id=>{
     const x=txMap[id];
     if(!x || x.undone || x.type==='undo') return;
-    if((+x.at||0) < since) return;                 /* settled under the previous ledger */
-    if(x.type==='add')  bump(x.team,'adds',1);
-    else if(x.type==='drop') bump(x.team,'drops',1);
+    if(x.type==='add')  bump(x.team,'adds',1,x.at);
+    else if(x.type==='drop') bump(x.team,'drops',1,x.at);
     else if(x.type==='trade'){
       const aP=(x.aGave||[]).filter(t=>!txIsPick(t)).length;
       const bP=(x.bGave||[]).filter(t=>!txIsPick(t)).length;
-      bump(x.team,'drops',aP);  bump(x.team,'adds',bP);
-      bump(x.teamB,'drops',bP); bump(x.teamB,'adds',aP);
+      bump(x.team,'drops',aP,x.at);  bump(x.team,'adds',bP,x.at);
+      bump(x.teamB,'drops',bP,x.at); bump(x.teamB,'adds',aP,x.at);
     }
   });
   const rows=Object.keys(by).map(k=>by[k]);
@@ -5459,15 +5462,28 @@ function resetDuesLedger(){
   if(!requireAdmin()) return;
   const total=txLedger().reduce((s,r)=>s+r.owed,0);
   if(!confirm(`Reset the dues ledger?\n\nEveryone's count starts over from now. The current $${total.toFixed(2)} owed is treated as settled. The transaction log itself is untouched.`)) return;
-  S.feesResetAt=Date.now(); saveState();
+  S.feesResetAt=Date.now(); S.feesPaidAt={};   /* the league-wide baseline supersedes per-team stamps */
+  saveState();
   try{ logCommish('reset the dues ledger', 'counts start fresh from today'); }catch(e){}
   renderTxLedger(); renderFeesReset();
   toast('Dues reset — everyone starts at $0.00');
 }
+/* Per-team settle: a manager pays up, their count restarts from that moment, everyone else's
+   dues are untouched. Available any time, right on the ledger. */
+function settleTeamDues(team){
+  if(!requireAdmin()) return;
+  const row=txLedger().find(r=>r.team===team);
+  const owed=row?row.owed:0;
+  if(!confirm(`Mark ${team}'s $${owed.toFixed(2)} as paid?\n\nTheir count restarts from now. Nobody else's dues change.`)) return;
+  S.feesPaidAt=S.feesPaidAt||{}; S.feesPaidAt[team]=Date.now(); saveState();
+  try{ logCommish(`marked ${team}'s dues paid`, `$${owed.toFixed(2)} settled`); }catch(e){}
+  renderTxLedger();
+  toast(`${team} settled — $0.00 owed`);
+}
 function clearFeesReset(){
   if(!requireAdmin()) return;
-  if(!confirm('Remove the dues reset and count the whole season again?')) return;
-  S.feesResetAt=0; saveState();
+  if(!confirm('Remove the dues reset and count the whole season again? Per-team paid marks are cleared too.')) return;
+  S.feesResetAt=0; S.feesPaidAt={}; saveState();
   try{ logCommish('removed the dues reset', 'the full season counts again'); }catch(e){}
   renderTxLedger(); renderFeesReset();
   toast('Counting the full season again');
@@ -5494,12 +5510,13 @@ function renderTxLedger(){
     <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:14px">
       <tr style="border-bottom:1px solid var(--line);color:var(--chalk-dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em">
         <td style="padding:4px 8px">Team</td><td style="padding:4px 8px;text-align:right">Adds</td>
-        <td style="padding:4px 8px;text-align:right">Drops</td><td style="padding:4px 8px;text-align:right">Owed</td></tr>
+        <td style="padding:4px 8px;text-align:right">Drops</td><td style="padding:4px 8px;text-align:right">Owed</td>${isAdmin()?'<td></td>':''}</tr>
       ${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">
         <td style="padding:5px 8px">${esc(r.team)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</td>
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.adds}</td>
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.drops}</td>
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);font-weight:700;color:var(--turf)">${money(r.owed)}</td>
+        ${isAdmin()?`<td style="padding:5px 4px;text-align:right"><button class="btn ghost" style="padding:2px 10px;font-size:12px" title="Mark ${esc(r.team)}'s dues paid — their count restarts from now" onclick="settleTeamDues('${esc(r.team).replace(/'/g,'&#39;')}')">Paid</button></td>`:''}
       </tr>`).join('')}
     </table></div>
   </div>`;
