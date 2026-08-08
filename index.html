@@ -3717,6 +3717,8 @@ setInterval(()=>{ try{ if(typeof loadKickoffs==='function') loadKickoffs(); }cat
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
+  if(typeof maybeExpirePolls==='function') maybeExpirePolls();     /* stamps closed once a poll timer runs out */
+  if(window.currentView==='polls') renderPolls();                  /* poll countdowns tick */
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
   /* Game Center pulls fresh stats itself (5-min TTL on the live week) */
@@ -6300,7 +6302,21 @@ function renderChat(){
 let pollsMap = {}, pollVotesMap = {};
 function pollsPath(){ return `league/${LEAGUE_ID}/polls`; }
 function pollVotesPath(){ return `league/${LEAGUE_ID}/pollVotes`; }
-function canManagePoll(poll){ return isAdmin() || (poll && window.fbUser && poll.createdByUid===window.fbUser.uid); }
+/* Poll management is COMMISSIONER-ONLY by league decision (2026-08-07) - it used to include
+   the poll's creator, but close/reopen/timer live behind the commish permission now. Anyone
+   signed in can still create and vote. */
+function canManagePoll(poll){ return isAdmin(); }
+/* closed by hand, or ran out its timer. The timer alone blocks the UI immediately; a commish
+   device also writes the closed flag once it expires (maybeExpirePolls), which is what makes
+   the DATABASE rule refuse late votes too - the rule can only see the flag. */
+function pollClosed(p){ return !!(p && (p.closed || (+p.closesAt && Date.now()>=+p.closesAt))); }
+function maybeExpirePolls(){
+  if(!isAdmin() || !fbOk() || !window.fbUser) return;
+  Object.keys(pollsMap||{}).forEach(id=>{ const p=pollsMap[id];
+    if(p && !p.closed && +p.closesAt && Date.now()>=+p.closesAt)
+      window.FB.dbSet(`${pollsPath()}/${id}/closed`, true).catch(()=>{});
+  });
+}
 function addPollOption(){
   const wrap=document.getElementById('pollOpts'); if(!wrap) return;
   const n=wrap.querySelectorAll('.poll-opt-input').length+1;
@@ -6315,18 +6331,39 @@ function createPoll(){
   if(opts.length<2){ toast('Add at least two options.'); return; }
   const id='p'+Date.now()+Math.random().toString(36).slice(2,6);
   const options={}; opts.forEach((o,i)=>options['o'+i]=o);
-  window.FB.dbSet(`${pollsPath()}/${id}`, { q, options, createdAt:Date.now(), createdBy:(window.fbUser.email||''), createdByUid:window.fbUser.uid })
-    .then(()=>toast('Poll posted ✅')).catch(()=>toast('Could not post — try again.'));
+  const rec={ q, options, createdAt:Date.now(), createdBy:(window.fbUser.email||''), createdByUid:window.fbUser.uid };
+  /* the duration picker only renders for the commissioner; anyone else's polls run open-ended */
+  const durMs=+((document.getElementById('pollDur')||{}).value||0);
+  if(durMs>0) rec.closesAt=Date.now()+durMs;
+  window.FB.dbSet(`${pollsPath()}/${id}`, rec)
+    .then(()=>toast(durMs>0?`Poll posted — voting closes in ${waiverClearLabel(rec.closesAt)} ⏱️`:'Poll posted ✅'))
+    .catch(()=>toast('Could not post — try again.'));
 }
 function votePoll(pollId, optId){
   if(!window.fbUser){ toast('Sign in to vote.'); openAuth(); return; }
   if(!fbOk()) return;
-  if(pollsMap[pollId] && pollsMap[pollId].closed){ toast('Voting is closed on this poll.'); return; }
+  if(pollClosed(pollsMap[pollId])){ toast('Voting is closed on this poll.'); return; }
   window.FB.dbSet(`${pollVotesPath()}/${pollId}/${window.fbUser.uid}`, optId).catch(()=>toast("Couldn't record your vote."));
 }
 function closePoll(id, closed){
   if(!canManagePoll(pollsMap[id])) return;
-  window.FB.dbSet(`${pollsPath()}/${id}/closed`, !!closed).catch(()=>toast('Could not update — try again.'));
+  /* reopening also clears the timer - otherwise an expired poll re-closes on the next tick.
+     The commissioner can give it a new deadline from the reopen prompt below. */
+  const patch = closed ? { closed:true } : { closed:false, closesAt:null };
+  window.FB.dbUpdate(`${pollsPath()}/${id}`, patch)
+    .then(()=>toast(closed?'Voting closed.':'Voting reopened — no time limit.'))
+    .catch(()=>toast('Could not update — try again.'));
+}
+/* reopen with a fresh clock: asks how long, 0 = open-ended */
+function reopenPollTimed(id){
+  if(!canManagePoll(pollsMap[id])) return;
+  const h=window.prompt('Reopen voting for how many hours? (0 = no time limit)', '24');
+  if(h===null) return;
+  const ms=Math.max(0, +h||0)*3600000;
+  const patch={ closed:false, closesAt: ms>0 ? Date.now()+ms : null };
+  window.FB.dbUpdate(`${pollsPath()}/${id}`, patch)
+    .then(()=>toast(ms>0?`Voting reopened for ${Math.max(0,+h||0)}h`:'Voting reopened — no time limit.'))
+    .catch(()=>toast('Could not update — try again.'));
 }
 function deletePoll(id){
   if(!canManagePoll(pollsMap[id])) return;
@@ -6345,7 +6382,19 @@ function renderPolls(){
       <input type="text" class="poll-opt-input" placeholder="Option 1" style="width:100%;margin-bottom:8px">
       <input type="text" class="poll-opt-input" placeholder="Option 2" style="width:100%;margin-bottom:8px">
     </div>
-    <div class="row" style="gap:8px"><button class="btn ghost" onclick="addPollOption()">+ Add option</button><button class="btn" onclick="createPoll()">Post poll</button></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn ghost" onclick="addPollOption()">+ Add option</button>
+      ${isAdmin()?`<select id="pollDur" title="How long voting stays open (commissioner)" style="max-width:170px">
+        <option value="0">No time limit</option>
+        <option value="${3600000}">1 hour</option>
+        <option value="${6*3600000}">6 hours</option>
+        <option value="${24*3600000}" selected>1 day</option>
+        <option value="${48*3600000}">2 days</option>
+        <option value="${72*3600000}">3 days</option>
+        <option value="${7*24*3600000}">1 week</option>
+      </select>`:''}
+      <button class="btn" onclick="createPoll()">Post poll</button>
+    </div>
   </div>` : `<div class="notice" style="margin-bottom:18px">Sign in to create polls and vote.</div>`;
   const polls = Object.keys(pollsMap||{}).map(id=>({id, ...(pollsMap[id]||{})})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const list = polls.length ? polls.map(poll=>{
@@ -6353,7 +6402,8 @@ function renderPolls(){
     const counts={}; Object.values(votes).forEach(o=>counts[o]=(counts[o]||0)+1);
     const total=Object.keys(votes).length;
     const myVote=myUid?votes[myUid]:null;
-    const closed=!!poll.closed, canManage=canManagePoll(poll);
+    const closed=pollClosed(poll), canManage=canManagePoll(poll);
+    const ticking=!closed && +poll.closesAt>0;
     const rows=Object.keys(opts).map(oid=>{
       const c=counts[oid]||0, pct=total?Math.round(c/total*100):0, mine=myVote===oid;
       return `<button class="poll-opt${mine?' mine':''}" ${(!myUid||closed)?'disabled':''} onclick="votePoll('${poll.id}','${oid}')">
@@ -6362,15 +6412,17 @@ function renderPolls(){
         <span class="poll-opt-count">${pct}% · ${c}</span></button>`;
     }).join('');
     const controls = canManage ? `<div class="row" style="gap:6px;flex:0 0 auto">
-      <button class="btn ghost" style="padding:3px 9px" onclick="closePoll('${poll.id}',${closed?'false':'true'})">${closed?'Reopen':'Close voting'}</button>
+      ${closed
+        ? `<button class="btn ghost" style="padding:3px 9px" title="Reopen voting, with or without a new time limit" onclick="reopenPollTimed('${poll.id}')">Reopen</button>`
+        : `<button class="btn ghost" style="padding:3px 9px" onclick="closePoll('${poll.id}',true)">Close voting</button>`}
       <button class="btn ghost" style="padding:3px 9px" title="Delete poll" onclick="deletePoll('${poll.id}')">✕</button></div>` : '';
     return `<div class="card" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
-        <h2 style="margin:0 0 4px">${esc(poll.q)}${closed?' <span class="divtag">Closed</span>':''}</h2>
+        <h2 style="margin:0 0 4px">${esc(poll.q)}${closed?' <span class="divtag">Closed</span>':''}${ticking?` <span class="statpill" title="Voting closes automatically">⏱ ${esc(waiverClearLabel(poll.closesAt))}</span>`:''}</h2>
         ${controls}
       </div>
       <div class="poll-opts">${rows}</div>
-      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(myVote?' · you voted':(myUid?' · tap an option to vote':''))}${(poll.createdByUid||poll.createdBy)?` · by ${esc(managerNameFor(poll.createdByUid, String(poll.createdBy||'').split('@')[0]))}`:''}</p>
+      <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(ticking?` · closes in ${esc(waiverClearLabel(poll.closesAt))}`:'')}${!closed?(myVote?' · you voted':(myUid?' · tap an option to vote':'')):''}${(poll.createdByUid||poll.createdBy)?` · by ${esc(managerNameFor(poll.createdByUid, String(poll.createdBy||'').split('@')[0]))}`:''}</p>
     </div>`;
   }).join('') : `<div class="card"><p class="sub" style="margin:0">No polls yet.${myUid?' Post one above.':''}</p></div>`;
   el.innerHTML = create + list;
