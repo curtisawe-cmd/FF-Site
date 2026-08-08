@@ -5504,6 +5504,7 @@ function initClaims(){
     window.FB.dbOn('claims', (m)=>{
       if(slotSyncing()) return;   /* reorder echo - see remapTeamSlots */
       claimsMap = m||{};
+      if(window.currentView==='settings') renderCommishCard();   /* the Team claims strip */
       if(window.currentView==='teams') renderTeams();
       if(document.getElementById('claimOverlay').classList.contains('on')) openClaim();
       updateClaimBadge();
@@ -8934,6 +8935,27 @@ function renderCommishCard(){
         <div class="sub" style="margin:2px 0 0">${esc(a.email||'')} · ${teamTxt}</div></div>
       <div class="row" style="gap:6px;flex:0 0 auto">${btn}${rmBtn}</div></div>`;
   }).join('');
+  /* Every team's claim state, including GHOSTS - a claim held by an account that no longer
+     exists. The list above iterates accounts, so a ghost is invisible there while still making
+     the team read "taken" in the claim overlay with no one apparently holding it. The binding
+     scramble manufactured these: removeMember cleared the claim at the account's recorded slot,
+     which at the time was the wrong one, stranding the real claim. */
+  const claimChips = (S.teams||[]).map((t,ti)=>{
+    const uid=(claimsMap||{})[ti];
+    if(!uid) return `<span class="wv-cl" style="opacity:.6" title="Nobody has claimed this team yet">${esc(t.name)} · open</span>`;
+    const acc=(managersMap||{})[uid];
+    if(acc) return `<span class="wv-cl lead" title="${esc(acc.email||'')}">${esc(t.name)} · ${esc(acc.name||acc.email||'claimed')}</span>`;
+    return `<span class="wv-cl" style="border-color:var(--danger)" title="Held by a deleted account — nobody can claim this team until it is released">${esc(t.name)} · <b style="color:var(--danger)">ghost</b>${owner?` <button class="btn ghost" style="padding:0 7px;font-size:11px;margin-left:4px" onclick="releaseClaimSlot(${ti})">release</button>`:''}</span>`;
+  }).join('');
+  list.innerHTML += `<div class="eyebrow" style="margin:14px 0 6px">Team claims</div>
+    <div class="wv-order" style="flex-wrap:wrap">${claimChips}</div>
+    <p class="sub" style="margin:8px 0 0;font-size:12px">A <b style="color:var(--danger)">ghost</b> claim is held by an account that was removed — the team shows as taken but nobody can use it. Release it and the manager can claim normally.</p>`;
+}
+async function releaseClaimSlot(ti){
+  if(!isOwner()){ toast('Only the league owner can release a claim.'); return; }
+  if(!confirm(`Release ${teamName(ti)}?\n\nThe account holding it is gone from the league, so nobody can claim this team until it is cleared.`)) return;
+  try{ await window.FB.dbRemove('claims/'+ti); toast(`${teamName(ti)} is claimable again`); }
+  catch(e){ toast('Could not release — try again.'); }
 }
 function renderSettings(){
   document.getElementById('setLeagueName').value = S.leagueName;
