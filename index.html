@@ -4044,6 +4044,7 @@ async function loadCareerStats(){
     const jobs=CAREER_YEARS.map(y=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${y}`).then(r=>r.json()).then(d=>[String(y),slimSeason(d)]));
     jobs.push(fetch('https://api.sleeper.app/v1/projections/nfl/regular/2026').then(r=>r.json()).then(d=>['proj',slimSeason(d)]));
     (await Promise.all(jobs)).forEach(([k,m])=>STAT_CACHE[k]=m);
+    RANK_CACHE={};                       /* ranks are derived from the cache they just replaced */
     statsLoaded=true;
   }catch(e){}
   statsLoading=false;
@@ -4245,6 +4246,25 @@ function statCols(pos){
   if(pos==='K') return [['FGM',fgm],['FGA',s=>+(s.fga||0)],['FG%',s=>(+s.fga? fgm(s)/+s.fga*100 : 0),'dec'],['50+','fgm_50p'],['XPM','xpm'],['XPA',s=>+(s.xpa||0)]];
   return [['Ru Yd','rush_yd'],['Re Yd','rec_yd'],['Re TD','rec_td']];
 }
+/* Where a season ranked among everyone at the position, in THIS league's scoring - "212 points"
+   means nothing until it says RB #4. Built lazily per season+position over the whole stat cache
+   and kept for the session; a fresh stats load clears it. Retired players whose ids are no
+   longer in the pool can't be position-checked, so they rank among the identifiable - close
+   enough for a rank chip. */
+let RANK_CACHE={};
+function posRankOf(id, pos, yr){
+  if(!pos || pos==='DEF') return null;
+  const key=String(yr)+':'+pos;
+  if(!RANK_CACHE[key]){
+    const dict=STAT_CACHE[String(yr)]||{};
+    RANK_CACHE[key]=Object.keys(dict)
+      .filter(pid=>{ const m=POOL_MAP.get(pid)||findPlayerMeta(pid); return m && m.pos===pos; })
+      .map(pid=>({pid, pts:scoreSeasonStats(dict[pid],pos)||0}))
+      .sort((a,b)=>b.pts-a.pts);
+  }
+  const i=RANK_CACHE[key].findIndex(x=>x.pid===id);
+  return i<0 ? null : i+1;
+}
 function renderPlayerModal(id){
   const ov=document.getElementById('playerModal'); if(!ov) return;
   const m=findPlayerMeta(id)||{name:'Player',pos:'',team:''}; const pos=m.pos||'';
@@ -4266,12 +4286,26 @@ function renderPlayerModal(id){
     const chart=`<div class="pcareer">${rows.map(r=>{ const h=r.pts?Math.max(3,Math.round(r.pts/max*100)):0;
       return `<div class="pbar${r.proj?' proj':''}"><span class="pv">${r.pts!=null?Math.round(r.pts):'–'}</span><div class="bar" style="height:${h}%"></div><span class="py">${r.label}</span></div>`; }).join('')}</div>`;
     const cell=(r,c)=>{ if(!r.st) return '—'; const v=typeof c[1]==='function'?c[1](r.st):+(r.st[c[1]]||0); return c[2]==='dec'?(+v).toFixed(1):Math.round(v); };
+    const rankOf=r=>{ const n=posRankOf(id, pos, r.proj?'proj':r.full); return n?`${pos} ${n}`:'—'; };
+    /* career line: counting stats sum; the derived rates then compute FROM the totals, which is
+       what makes career YPC and FG% come out right instead of an average of averages */
+    const played=rows.filter(r=>!r.proj && r.st);
+    const merged={}; played.forEach(r=>Object.keys(r.st).forEach(k=>{ const v=+r.st[k]; if(Number.isFinite(v)) merged[k]=(merged[k]||0)+v; }));
+    const career=played.length>1 ? { st:merged, pts:played.reduce((n,r)=>n+(r.pts||0),0), gp:played.reduce((n,r)=>n+(r.gp||0),0) } : null;
     const table=`<div style="overflow-x:auto"><table class="plain" style="margin-top:16px;white-space:nowrap">
-      <tr><th>Season</th><th style="text-align:right">Pts</th><th style="text-align:right">GP</th>${cols.map(c=>`<th style="text-align:right">${c[0]}</th>`).join('')}</tr>
+      <tr><th>Season</th><th style="text-align:right">Pts</th><th style="text-align:right">PPG</th><th style="text-align:right">Rank</th><th style="text-align:right">GP</th>${cols.map(c=>`<th style="text-align:right">${c[0]}</th>`).join('')}</tr>
       ${rows.map(r=>`<tr${r.proj?' class="top"':''}><td>${r.proj?'2026 proj':r.full}</td>
         <td style="text-align:right;font-family:var(--f-mono);font-weight:600">${r.pts!=null?r.pts.toFixed(1):'—'}</td>
+        <td style="text-align:right;font-family:var(--f-mono)">${r.pts!=null&&r.gp?(r.pts/r.gp).toFixed(1):'—'}</td>
+        <td style="text-align:right;font-family:var(--f-mono)">${rankOf(r)}</td>
         <td style="text-align:right;font-family:var(--f-mono)">${r.gp?r.gp:'—'}</td>
         ${cols.map(c=>`<td style="text-align:right;font-family:var(--f-mono)">${cell(r,c)}</td>`).join('')}</tr>`).join('')}
+      ${career?`<tr style="border-top:2px solid var(--line-strong,var(--line))"><td><b>Career</b></td>
+        <td style="text-align:right;font-family:var(--f-mono);font-weight:700">${career.pts.toFixed(1)}</td>
+        <td style="text-align:right;font-family:var(--f-mono)">${career.gp?(career.pts/career.gp).toFixed(1):'—'}</td>
+        <td style="text-align:right;font-family:var(--f-mono)">—</td>
+        <td style="text-align:right;font-family:var(--f-mono)">${career.gp||'—'}</td>
+        ${cols.map(c=>`<td style="text-align:right;font-family:var(--f-mono)">${cell(career,c)}</td>`).join('')}</tr>`:''}
     </table></div>`;
     body=chart+table+`<p class="sub" style="font-size:12px;margin-top:12px">Scored in <b>your league's rules</b> from season totals (per-game yardage/long-TD bonuses excluded). 2026 is Sleeper's projection.</p>`;
     /* only seasons the player actually has stats for; newest first and selected */
