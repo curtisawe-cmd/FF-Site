@@ -5243,6 +5243,14 @@ function reconcileTeamData(){
        which was clobbering live draft picks for any team that had a teamData node */
     if(td.lineup && typeof td.lineup==='object'){ S.lineups = S.lineups||{}; S.lineups[ti] = td.lineup; }
     if(S.teams[ti] && ('logo' in td)){ if(td.logo) S.teams[ti].logo = td.logo; else delete S.teams[ti].logo; }
+    /* the mirror carries manager renames - settings is commissioner-only, so this fold is how a
+       rename reaches every other device. Witnessing the transition here is also the one moment
+       the by-name pickTrades records can be carried along on this device. */
+    if(S.teams[ti] && td.name && td.name!==S.teams[ti].name){
+      const old=S.teams[ti].name;
+      S.teams[ti].name=td.name;
+      try{ remapPickTradeNames(old, td.name); }catch(e){}
+    }
   }); }catch(e){}
 }
 /* ---- manager add/drop sync as ADDITIVE MOVES ----
@@ -5600,7 +5608,7 @@ async function commitMoves(){
 }
 function pushTeamData(ti){
   if(!fbOk() || !canEditTeam(ti)) return;
-  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null })).catch(()=>{}); }catch(e){}
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null, name: (S.teams[ti]||{}).name || null })).catch(()=>{}); }catch(e){}
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
 /* The league's manager name for an account — what people are called in chat, polls and the
@@ -9069,7 +9077,7 @@ function renderMyTeam(){
     <div class="card" style="max-width:760px">
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,54)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
-        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''}</div>`:''}</div></div>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · ${(teamNamesLocked()&&!isAdmin())?`<span title="Team names are locked during the season" style="color:var(--chalk-dim)">Rename 🔒</span>`:`<a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
         ${sel}
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:14px">
@@ -10024,6 +10032,21 @@ function teamNameOptions(cur, self){
   html += `<option value="__custom__">Custom…</option>`;
   return html;
 }
+/* Traded picks reference teams BY NAME (pickTrades from/to), so every rename must carry those
+   records along or the picks silently revert to their original owner - ownsPick simply stops
+   matching. This was a latent bug in the commissioner rename too. */
+function remapPickTradeNames(oldName, newName){
+  const o=String(oldName||'').trim(); if(!o || o===newName) return;
+  (S.pickTrades||[]).forEach(t=>{ if(t.from===o) t.from=newName; if(t.to===o) t.to=newName; });
+}
+/* Names are frozen while the season runs - week 1 kickoff through the end of week 18, playoffs
+   included. Records, trash talk and the transaction log all read better when "WiFi is Down"
+   still means the same team in December that it did in September. */
+function teamNamesLocked(){
+  const start=NFL_2026_WEEK1.getTime();
+  const end=(()=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+18*7); return d.getTime(); })();
+  const n=Date.now(); return n>=start && n<end;
+}
 function setTeamName(i, val){
   if(val==='__custom__'){
     const v = window.prompt('Team name:', S.teams[i].name||'');
@@ -10035,8 +10058,32 @@ function setTeamName(i, val){
     toast(`"${val}" is already another team's name.`);
     renderSettings(); return;
   }
+  const old=S.teams[i].name;
   S.teams[i].name = val;
-  saveState(); renderSettings(); renderHome();
+  remapPickTradeNames(old, val);
+  saveState(); pushTeamData(i);   /* keep the manager-visible mirror in step with the rename */
+  renderSettings(); renderHome();
+}
+/* A manager renames their own team here; the commissioner uses this or Settings. Locked for
+   managers while the season runs - the commissioner can always fix a name. */
+function renameTeam(ti){
+  if(!requireTeam(ti)) return;
+  if(teamNamesLocked() && !isAdmin()){ toast('Team names are locked during the season — new name next year.'); return; }
+  const cur=(S.teams[ti]||{}).name||'';
+  const v=window.prompt('Team name (max 28 characters):', cur);
+  if(v===null) return;
+  const val=String(v).trim().slice(0,28);
+  if(!val){ toast('A team needs a name.'); return; }
+  if((S.teams||[]).some((t,j)=>j!==ti && String(t.name||'').trim().toLowerCase()===val.toLowerCase())){
+    toast(`"${val}" is already another team's name.`); return;
+  }
+  if(val===cur) return;
+  S.teams[ti].name=val;
+  remapPickTradeNames(cur, val);
+  saveState();                      /* persists for the commissioner; local-only for a manager */
+  pushTeamData(ti);                 /* ...and THIS is what carries a manager's rename to everyone */
+  renderTeams(); renderHome(); refreshDraftUI();
+  toast(`You are now ${val} 🎉`);
 }
 /* ---- avatar helpers (monogram chips, photo-inspired) ---- */
 function mgrColor(name){
