@@ -293,6 +293,12 @@ h2{font-family:var(--f-ui);font-weight:700;font-size:22px;letter-spacing:.04em;t
 .sub{color:var(--chalk-dim);margin-bottom:20px;max-width:70ch;text-wrap:pretty}
 .eyebrow{font-family:var(--f-mono);font-weight:600;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--turf);margin-bottom:8px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-card);padding:20px;box-shadow:var(--sh-1)}
+/* the big team logo in the My Team header's empty corner - decoration, so it must never block
+   the select/buttons that share the top of the card */
+.myteam-card{position:relative}
+.myteam-hero{position:absolute;top:16px;right:16px;width:128px;height:128px;object-fit:cover;
+  border-radius:18px;border:1px solid var(--line);box-shadow:var(--sh-1);pointer-events:none}
+@media(max-width:640px){.myteam-hero{width:74px;height:74px;top:14px;right:14px}}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}   /* plain 1fr lets wide content blow the card out on narrow phones */
 .btn{
@@ -9126,7 +9132,8 @@ function renderMyTeam(){
   const irRows = irFilled.map(p=>playerRow(p,'IR')).join('')
     + Array(Math.max(0,(+S.roster.IR||0)-irFilled.length)).fill(emptyRow('IR')).join('');
   el.innerHTML = `
-    <div class="card" style="max-width:760px">
+    <div class="card myteam-card" style="max-width:760px">
+      ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,54)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
         <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · ${(teamNamesLocked()&&!isAdmin())?`<span title="Team names are locked during the season" style="color:var(--chalk-dim)">Rename 🔒</span>`:`<a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
