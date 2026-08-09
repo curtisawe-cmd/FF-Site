@@ -668,6 +668,13 @@ nav.tabs button{position:relative}
 /* waiver priority: one line that scrolls sideways on a phone rather than stacking twelve teams */
 .wv-order{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .wv-order::-webkit-scrollbar{display:none}
+/* The priority strip itself is a GRID: a hidden-scrollbar row cut off at chip seven with no
+   hint that five more exist. Four columns - three rows of twelve - and two on phones. Long
+   team names ellipsize inside their cell; the chip's title carries the full name. */
+.wv-order.wv-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:visible}
+@media(max-width:640px){.wv-order.wv-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.wv-grid .wv-ord{min-width:0}
+.wv-grid .wv-nm{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .wv-ord{display:inline-flex;align-items:center;gap:7px;flex:0 0 auto;white-space:nowrap;
   font-size:13px;color:var(--chalk-dim);background:var(--panel-2);border:1px solid var(--line);
   border-radius:20px;padding:4px 12px 4px 5px}
@@ -8964,8 +8971,8 @@ function renderWaivers(){
     return;
   }
 
-  const orderHTML=order.map((ti,k)=>`<span class="wv-ord${ti===mine?' me':''}">
-      <span class="wv-n">${k+1}</span>${esc(teamName(ti))}</span>`).join('');
+  const orderHTML=order.map((ti,k)=>`<span class="wv-ord${ti===mine?' me':''}" title="${esc(teamName(ti))}">
+      <span class="wv-n">${k+1}</span><span class="wv-nm">${esc(teamName(ti))}</span></span>`).join('');
 
   /* If the node was never granted in the rules, every claim is rejected and the only symptom is
      a toast at the moment you press the button. Say so up front instead. */
@@ -9020,7 +9027,7 @@ function renderWaivers(){
     ${blockedHTML}
     <div class="card">
       <h2>Waiver priority${you}</h2>
-      <div class="wv-order">${orderHTML}</div>
+      <div class="wv-order wv-grid">${orderHTML}</div>
       <p class="sub" style="margin:10px 0 0">Worst record picks first. Win a claim and you drop to the back.
         Dropped players sit here ${waiverHours()} hours before anyone can add them outright.</p>
     </div>
