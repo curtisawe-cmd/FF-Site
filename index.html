@@ -9219,7 +9219,18 @@ function renderCommishCard(){
      which at the time was the wrong one, stranding the real claim. */
   const claimChips = (S.teams||[]).map((t,ti)=>{
     const uid=(claimsMap||{})[ti];
-    if(!uid) return `<span class="wv-cl" style="opacity:.6" title="Nobody has claimed this team yet">${esc(t.name)} · open</span>`;
+    if(!uid){
+      /* An assignment lives in TWO places: managers/<uid>.teamIndex (what the account list
+         shows) and claims/<slot> (what the database RULES check when that manager writes their
+         lineup). A write-denied era left some accounts with only the first half - the card says
+         assigned, the claim is empty, and the manager's lineup writes silently bounce. Detect
+         it and offer the one-tap relink. */
+      const orphanUid=Object.keys(managersMap||{}).find(u=>(managersMap[u]||{}).teamIndex===ti);
+      if(orphanUid){ const a=managersMap[orphanUid]||{};
+        return `<span class="wv-cl" style="border-color:var(--gold,#e9b64a)" title="${esc(a.email||'')} is assigned this team but the claim half is missing — their lineup and logo saves are being refused until this is relinked">${esc(t.name)} · <b style="color:var(--gold,#e9b64a)">needs relink</b> · ${esc(a.name||a.email||'?')}${owner?` <button class="btn ghost" style="padding:0 7px;font-size:11px;margin-left:4px" onclick="relinkClaim(${ti},'${orphanUid}')">relink</button>`:''}</span>`;
+      }
+      return `<span class="wv-cl" style="opacity:.6" title="Nobody has claimed this team yet">${esc(t.name)} · open</span>`;
+    }
     const acc=(managersMap||{})[uid];
     if(acc) return `<span class="wv-cl lead" title="${esc(acc.email||'')}">${esc(t.name)} · ${esc(acc.name||acc.email||'claimed')}</span>`;
     return `<span class="wv-cl" style="border-color:var(--danger)" title="Held by a deleted account — nobody can claim this team until it is released">${esc(t.name)} · <b style="color:var(--danger)">ghost</b>${owner?` <button class="btn ghost" style="padding:0 7px;font-size:11px;margin-left:4px" onclick="releaseClaimSlot(${ti})">release</button>`:''}</span>`;
@@ -9227,6 +9238,18 @@ function renderCommishCard(){
   list.innerHTML += `<div class="eyebrow" style="margin:14px 0 6px">Team claims</div>
     <div class="wv-order" style="flex-wrap:wrap">${claimChips}</div>
     <p class="sub" style="margin:8px 0 0;font-size:12px">A <b style="color:var(--danger)">ghost</b> claim is held by an account that was removed — the team shows as taken but nobody can use it. Release it and the manager can claim normally.</p>`;
+}
+/* Restore the missing claim half of an assignment. Safe by construction: it only writes when
+   the slot's claim is EMPTY and the account's own record already points at this slot. */
+async function relinkClaim(ti, uid){
+  if(!isOwner() && !isAdmin()){ toast('Commissioner only.'); return; }
+  if((claimsMap||{})[ti]){ toast(`${teamName(ti)} already has a claim.`); renderCommishCard(); return; }
+  const rec=(managersMap||{})[uid];
+  if(!rec || rec.teamIndex!==ti){ toast('That account no longer points at this team.'); renderCommishCard(); return; }
+  try{
+    await window.FB.dbSet('claims/'+ti, uid);
+    toast(`${rec.name||rec.email||'Manager'} relinked to ${teamName(ti)} ✓`);
+  }catch(e){ toast('Could not relink — try again.'); }
 }
 async function releaseClaimSlot(ti){
   if(!isOwner()){ toast('Only the league owner can release a claim.'); return; }
