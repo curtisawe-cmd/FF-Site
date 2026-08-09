@@ -1162,7 +1162,7 @@ table.inj-tbl tr:last-child td{border-bottom:none}
 .gc-jbtn:disabled{opacity:.3;cursor:default}
 .gc-jnum{font-family:var(--f-mono);font-size:10px;color:var(--chalk-dim);font-variant-numeric:tabular-nums}
 /* land the card below the sticky header instead of under it */
-.gc-list .gc-card{scroll-margin-top:calc(var(--hdr-h,72px) + 12px)}
+.gc-list .gc-card{scroll-margin-top:var(--gcline, calc(var(--hdr-h,72px) + 12px))}
 @media (max-width:560px){ .gc-jump{right:8px;padding:6px 5px} .gc-jbtn{width:28px;height:28px;font-size:11px} }
 /* centre every page's content instead of letting it stretch across wide monitors */
 section.view{max-width:1100px;margin-left:auto;margin-right:auto}
@@ -7024,10 +7024,20 @@ function gcGoTo(i){
 }
 /* ---- "All matchups" vertical jump pad ---- */
 function gcCards(){ return [...document.querySelectorAll('#gcView .gc-list .gc-card')]; }
-/* the card you're currently reading = the last one whose top has passed under the header */
+/* Where "the top" actually is: below the top bar AND the sticky MATCHUPS title block. Only
+   counting the bar put the jump target underneath the sticky title, so a jumped-to card showed
+   mid-roster with its team-names header hidden - worse in the sidebar layout, where the bar
+   contributes zero and the title block is the whole overlap. Measured, because the title block's
+   height moves with typography settings and viewport width. */
+function gcTopLine(){
+  const hdr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h')) || 0;
+  const vh = document.querySelector('#view-matchups .viewhead');
+  return hdr + (vh ? vh.getBoundingClientRect().height : 0);
+}
+/* the card you're currently reading = the last one whose top has passed under that line */
 function gcCurrent(){
   const cards = gcCards(); if(!cards.length) return 0;
-  const line = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hdr-h')) || 72) + 14;
+  const line = gcTopLine() + 14;
   let idx = 0;
   cards.forEach((c,i)=>{ if(c.getBoundingClientRect().top <= line + 1) idx = i; });
   return idx;
@@ -7040,6 +7050,9 @@ function gcJump(dir){
   window._gcTarget = i;
   clearTimeout(window._gcTargetST);               /* hand back to live detection once the glide is over */
   window._gcTargetST = setTimeout(()=>{ window._gcTarget = null; gcSyncJump(); }, 900);
+  /* scroll-margin-top reads this; measured fresh per press so the card parks exactly below
+     the sticky title block in either layout */
+  document.documentElement.style.setProperty('--gcline', Math.round(gcTopLine()+12)+'px');
   cards[i].scrollIntoView({ behavior:'smooth', block:'start' });
   gcSyncJump(i);
 }
