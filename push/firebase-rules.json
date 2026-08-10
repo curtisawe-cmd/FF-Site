@@ -55,7 +55,7 @@
         "polls": {
           ".read": "auth != null",
           "$pid": {
-            ".write": "auth != null && (auth.token.email === 'curtisawe@gmail.com' || root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('createdByUid').val() === auth.uid) || (data.exists() && data.child('createdByUid').val() === auth.uid))"
+            ".write": "auth != null && (auth.token.email === 'curtisawe@gmail.com' || root.child('admins').child(auth.uid).val() === true)"
           }
         },
         "pollVotes": {

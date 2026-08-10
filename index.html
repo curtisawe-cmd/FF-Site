@@ -6431,6 +6431,7 @@ function addPollOption(){
 }
 function createPoll(){
   if(!fbOk() || !window.fbUser){ toast('Sign in to post a poll.'); openAuth(); return; }
+  if(!isAdmin()){ toast('Only commissioners post polls — everyone votes.'); return; }
   const q=(document.getElementById('pollQ').value||'').trim();
   const opts=[...document.querySelectorAll('.poll-opt-input')].map(i=>i.value.trim()).filter(Boolean);
   if(!q){ toast('Enter a poll question.'); return; }
@@ -6480,7 +6481,11 @@ function deletePoll(id){
 function renderPolls(){
   const el=document.getElementById('pollsView'); if(!el) return;
   const myUid=window.fbUser&&window.fbUser.uid;
-  const create = myUid ? `<div class="card" style="margin-bottom:18px">
+  /* Creation went commissioner-only by league decision (2026-08-08); everyone still votes.
+     Managers get a one-line note instead of a form that would only scold them on submit. */
+  const create = (myUid && !isAdmin())
+    ? `<div class="notice" style="margin-bottom:18px">Polls are posted by the commissioners — you vote, they ask. Want one asked? Say so in the chat.</div>`
+    : myUid ? `<div class="card" style="margin-bottom:18px">
     <h2 style="margin:0 0 4px">Create a poll</h2>
     <p class="sub" style="margin:0 0 12px">Ask the league anything. Everyone signed in gets one vote.</p>
     <input type="text" id="pollQ" placeholder="What's the poll about?" style="width:100%;margin-bottom:10px">
