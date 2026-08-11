@@ -3551,6 +3551,8 @@ function startLeagueSync(){
       reconcileMoves(); reconcileTeamData(); reRenderLive(); }catch(e){}
     applyingRemote = false;
     if(healed>0 && isAdmin()){ console.warn('[BBL] healed '+healed+' duplicate draft entr'+(healed>1?'ies':'y')); try{ saveDraft(); }catch(e){} }
+    /* the turn just advanced - the next manager's queued request may be ready to apply */
+    try{ maybeApplyPickRequests(); }catch(e){}
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamData`, (m)=>{
     if(slotSyncing()) return;   /* our own reorder writes echoing back; the mirror is already truth */
@@ -3607,6 +3609,8 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/pollVotes`, (m)=>{ pollVotesMap = m||{};
     updatePollBadge(); updateChatBadge();               /* your vote landing clears your badge */
     if(window.currentView==='polls') renderPolls(); });
+  window.FB.dbOn(`league/${LEAGUE_ID}/draftRequests`, (m)=>{ draftReqMap = m||{};
+    try{ maybeApplyPickRequests(); }catch(e){} });
   window.FB.dbOn(`league/${LEAGUE_ID}/waiverClaims`, (m)=>{ wClaims = m||{};
     if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
     /* claims show as pending rows above the log, so that list is stale the moment one lands */
@@ -4363,11 +4367,11 @@ function renderPlayerModal(id){
   let draftRow='';
   try{
     if(window.currentView==='draft' && D.started && !D.paused && !D.finished
-       && !draftedIds().has(id) && (draftMode==='mock' || isAdmin())){
+       && !draftedIds().has(id) && canPickNow()){
       const onClock=(S.teams||[])[ownerForPick(currentPickIndex())]||{};
       draftRow=`<div class="row" style="gap:10px;align-items:center;margin-top:12px">
-        <button class="btn" style="padding:8px 22px;font-size:15px" onclick="closePlayer();makePick('${id}')">Draft ${esc(m.name)}</button>
-        <span class="sub" style="margin:0">${esc(onClock.name||'')} is on the clock</span>
+        <button class="btn" style="padding:8px 22px;font-size:15px" onclick="closePlayer();draftTap('${id}')">Draft ${esc(m.name)}</button>
+        <span class="sub" style="margin:0">${myTurnNow()?'You are on the clock':esc(onClock.name||'')+' is on the clock'}</span>
       </div>`;
     }
   }catch(e){}
@@ -5015,6 +5019,67 @@ function requireAdmin(){ if(!isAdmin()){ toast("Commissioner only — you're in 
    touch a roster — so every manager gets full control of it. The commissioner gate exists to
    protect the REAL draft, and only that. */
 function requireDraftControl(){ return draftMode==='mock' ? true : requireAdmin(); }
+/* ===================== MANAGER SELF-PICKS =====================
+   Managers draft their own picks - the thing every phone tried to do at the first draft and
+   couldn't, because real-draft picking was commissioner-only. They still cannot write the
+   board (the rules are right about that), so a manager's tap files a REQUEST and the driver
+   device validates and applies it: the same single-writer model that ended the
+   multi-commissioner races, extended to twelve people. */
+function draftRequestsPath(){ return `league/${LEAGUE_ID}/draftRequests`; }
+let draftReqMap = {};
+function myTurnNow(){
+  if(draftMode!=='real' || !D.started || D.paused || D.finished) return false;
+  const mi = myTeamIndex(); if(!Number.isInteger(mi)) return false;
+  const idx = currentPickIndex();
+  if(KR() && roundForPick(idx)===0) return false;   /* keepers stay commissioner-entered */
+  return ownerForPick(idx)===mi;
+}
+/* who gets a live Draft button right now */
+function canPickNow(){ return draftMode==='mock' || isAdmin() || myTurnNow(); }
+function draftTap(pid){
+  if(draftMode==='mock' || isAdmin()){ makePick(pid); return; }
+  requestPick(pid);
+}
+function requestPick(pid){
+  if(!myTurnNow()){ toast("It's not your pick yet."); return; }
+  if(!fbOk() || !window.fbUser){ toast('Sign in to draft.'); return; }
+  pid=String(pid);
+  if(draftedIds().has(pid)){ toast('He was just taken — pick someone else.'); return; }
+  const p = POOL_MAP.get(pid) || {};
+  const mi = myTeamIndex();
+  const allow = pickAllowed(mi, p.pos||'');
+  if(!allow.ok){ const t=S.teams[mi]||{};
+    pickAlarm(allow.why, { team:t.name, mgr:t.manager, player:p.name, pos:p.pos }); return; }
+  window.FB.dbSet(`${draftRequestsPath()}/${window.fbUser.uid}`, { pid, name:p.name||'', team:mi, at:Date.now() })
+    .then(()=>toast(`Pick sent — ${p.name||'player'} ✔`))
+    .catch(e=>{ const code=String((e&&e.code)||'');
+      toast(/permission|denied/i.test(code)
+        ? 'Manager picks are not switched on yet — the database rules need league/main/draftRequests. Show the commissioner.'
+        : 'Could not send the pick — try again.'); });
+}
+/* Driver side: apply the on-the-clock manager's request, exactly one writer. Requests from
+   managers who are not on the clock age out - queueing ahead is not a feature, it is a way
+   to draft the wrong player when the board moves. */
+function maybeApplyPickRequests(){
+  if(draftMode!=='real' || !D.started || D.paused || D.finished) return;
+  if(!isAdmin() || !canDriveNow() || !poolReady) return;
+  const idx = currentPickIndex();
+  if(KR() && roundForPick(idx)===0) return;
+  const ti = ownerForPick(idx);
+  const uid = (claimsMap||{})[ti];
+  const req = uid ? draftReqMap[uid] : null;
+  if(req && req.pid){
+    const pid = String(req.pid), p = POOL_MAP.get(pid);
+    if(!draftedIds().has(pid) && p && pickAllowed(ti, p.pos).ok) makePick(pid);
+    try{ window.FB.dbRemove(`${draftRequestsPath()}/${uid}`).catch(()=>{}); }catch(e){}
+    delete draftReqMap[uid];
+  }
+  Object.keys(draftReqMap).forEach(u=>{ const r=draftReqMap[u];
+    if(r && Date.now()-(+r.at||0) > 90000){
+      try{ window.FB.dbRemove(`${draftRequestsPath()}/${u}`).catch(()=>{}); }catch(e){}
+      delete draftReqMap[u];
+    } });
+}
 function applyRole(){
   document.documentElement.setAttribute('data-role', isAdmin()?'admin':'user');
   /* the role class is re-applied here, so mock access has to be re-asserted after it */
@@ -6061,7 +6126,7 @@ function renderPool(){
       <span class="postag">${p.pos}</span>${playerFace(p,30)}
       <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
       <span class="pmeta">${p.team||''}</span>
-      ${isAdmin()?`<button class="pick" onclick="makePick('${p.id}')">Draft</button>`:''}
+      ${canPickNow()?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
 }
 
@@ -6097,7 +6162,9 @@ function refreshDraftUI(){
     document.getElementById('onClockTeam').textContent = 'Draft complete';
   } else if(D.started){
     document.getElementById('pickLabel').textContent = pickLabel(idx);
-    document.getElementById('onClockTeam').textContent = S.teams[ownerForPick(idx)].name + ((ownerForPick(idx)!==teamForPick(idx))?` (via ${S.teams[teamForPick(idx)].name})`:'') + (S.teams[ownerForPick(idx)].auto?' \u00B7 AUTO':'') + (D.paused?' (paused)':' is on the clock');
+    document.getElementById('onClockTeam').textContent = myTurnNow()
+      ? `YOUR PICK \u2014 ${S.teams[ownerForPick(idx)].name}`
+      : S.teams[ownerForPick(idx)].name + ((ownerForPick(idx)!==teamForPick(idx))?` (via ${S.teams[teamForPick(idx)].name})`:'') + (S.teams[ownerForPick(idx)].auto?' \u00B7 AUTO':'') + (D.paused?' (paused)':' is on the clock');
   } else {
     document.getElementById('pickLabel').textContent = 'Pre-draft';
     document.getElementById('onClockTeam').textContent = 'Ready when you are';
