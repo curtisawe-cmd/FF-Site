@@ -424,10 +424,18 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .board .rnd .cat.starter{color:var(--turf-bright)}
 .board .rnd .cat.bench{color:var(--chalk-dim);opacity:.85}
 @media(max-width:900px){.board .rnd .cat{display:none}}
+/* A cell can hold more than one sticker now - a team that acquired another team's pick in the
+   same round stacks both. min-height keeps empty cells at the classic size; a stacked cell
+   grows and the grid row grows with it. Each sticker lives in its own .stk-cell so the
+   absolute-positioned sticker artwork keeps working unchanged. */
 .slot{
-  height:clamp(42px,5.8vw,60px);border-radius:4px;background:var(--panel);border:1px dashed var(--line);
-  position:relative;overflow:hidden;min-width:0;
+  min-height:clamp(42px,5.8vw,60px);border-radius:4px;background:var(--panel);border:1px dashed var(--line);
+  position:relative;overflow:hidden;min-width:0;display:flex;flex-direction:column;gap:2px;justify-content:center;
 }
+.slot .stk-cell{position:relative;flex:1 1 auto;min-height:clamp(40px,5.4vw,56px);min-width:0}
+.slot .stk-cell.gone{flex:0 0 auto;min-height:18px;display:flex;align-items:center;justify-content:center}
+.gone-note{font-family:var(--f-mono);font-size:10px;color:var(--chalk-dim);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 3px}
 .slot.next{border:1px solid var(--turf-bright);box-shadow:0 0 0 1px var(--turf-bright)}
 /* A traded pick has to read from across the room: whose slot it WAS is the column it sits in,
    so the cell only needs to shout who it goes to now. Empty cells get a TRADE tag and the
@@ -5979,22 +5987,45 @@ function renderBoard(){
   const rowStarts = [];
   if(KR()) rowStarts.push({label:'KEEPER', straight:true, keeper:true});
   for(let r=0;r<rounds;r++) rowStarts.push({label:'R'+(r+1), straight:(r%2===0)});
+  /* A drafted player renders in the column of the team that OWNS him, not the column whose
+     slot produced him - "their pick goes in the other spot". Empty traded slots stay put with
+     their TRADE chip (that column is where the pick comes up in the draft order), and once
+     picked, the player crosses to his real team and the source cell keeps a dim "→ team" note.
+     A team can own two picks in one round (Jerry holds his own R1 AND Nut buster's), so cells
+     stack; the source cell of a displaced pick still counts as filled for layout. */
+  const stickerHTML = (p, srcIdx) => {
+    const displaced = ownerForPick(srcIdx)!==teamForPick(srcIdx);
+    const origin = displaced ? (S.teams[teamForPick(srcIdx)]||{}).name||'' : '';
+    return `<div class="stk-cell"><div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${displaced?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(teamForPick(srcIdx))}"></span>via ${esc(origin)}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div></div>`;
+  };
   for(let row=0;row<rowStarts.length;row++){
     const meta = rowStarts[row];
     const isStarter = row < starterSlots;   // each row = one pick per team, in order
     html += `<div class="rnd${meta.keeper?' keeper':''}"><span class="rlbl">${meta.label}</span><span class="cat ${isStarter?'starter':'bench'}">${isStarter?'STARTER':'BENCH'}</span></div>`;
+    /* first pass: bucket this row's FILLED picks by owning column */
+    const acquired = {};   // col -> [{p, idx}] for picks whose owner is col but slot is not
+    for(let w=0; w<n; w++){
+      const idx = row*n + w, p = byIndex[idx];
+      if(!p) continue;
+      const own = ownerForPick(idx);
+      if(own!==teamForPick(idx)) (acquired[own]=acquired[own]||[]).push({p, idx});
+    }
     for(let col=0;col<n;col++){
       const within = meta.straight? col : n-1-col;
       const idx = row*n + within;
       const p = byIndex[idx];
       const isNext = idx===nextIdx && !D.finished && D.started;
       const own = ownerForPick(idx);
-      const isKeep = KR() && row===0;
       const traded = own!==teamForPick(idx);
       const tradeTip = traded ? `${(S.teams[teamForPick(idx)]||{}).name||''}'s pick — traded to ${(S.teams[own]||{}).name||''}` : '';
-      html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` style="--tc:${teamColor(own)}" title="${esc(tradeTip)}"`:''}>` +
-        (p? `<div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${p.teamIndex!==teamForPick(idx)?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(p.teamIndex)}"></span>→ ${esc(S.teams[p.teamIndex]?.name||'')}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div>`:'') +
-        ((!p && traded)? `<div class="toTeam"><span class="tt-tag">TRADE</span><span class="tt-name">→ ${esc(S.teams[own].name)}</span></div>`:'') + `</div>`;
+      const parts = [];
+      /* picks this column ACQUIRED from elsewhere in the row, drafted already */
+      (acquired[col]||[]).forEach(a=>parts.push(stickerHTML(a.p, a.idx)));
+      /* this column's own slot */
+      if(p && !traded) parts.push(stickerHTML(p, idx));
+      else if(p && traded) parts.push(`<div class="stk-cell gone" title="${esc(tradeTip)}"><span class="gone-note">→ <span style="color:${teamColor(own)}">${esc(S.teams[own].name)}</span></span></div>`);
+      else parts.push(`<div class="stk-cell${isNext?' next':''}">${traded?`<div class="toTeam"><span class="tt-tag">TRADE</span><span class="tt-name">→ ${esc(S.teams[own].name)}</span></div>`:''}</div>`);
+      html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` style="--tc:${teamColor(own)}" title="${esc(tradeTip)}"`:''}>${parts.join('')}</div>`;
     }
   }
   board.innerHTML = html;
