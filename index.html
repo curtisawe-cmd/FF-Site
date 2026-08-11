@@ -3534,8 +3534,15 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/draft`, (remote)=>{
     if(remote==null || draftMode!=='real') return;
     applyingRemote = true;
-    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[]; reconcileMoves(); reconcileTeamData(); reRenderLive(); }catch(e){}
+    let healed = 0;
+    try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[];
+      /* two admin devices racing can land duplicate slots or duplicate players on the shared
+         board - scrub every snapshot, and if this device is an admin, push the healed board
+         back so the whole league converges on the clean copy */
+      healed = dedupeBoard(D);
+      reconcileMoves(); reconcileTeamData(); reRenderLive(); }catch(e){}
     applyingRemote = false;
+    if(healed>0 && isAdmin()){ console.warn('[BBL] healed '+healed+' duplicate draft entr'+(healed>1?'ies':'y')); try{ saveDraft(); }catch(e){} }
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/teamData`, (m)=>{
     if(slotSyncing()) return;   /* our own reorder writes echoing back; the mirror is already truth */
@@ -4342,6 +4349,20 @@ function renderPlayerModal(id){
       <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
+  /* Mid-draft, this popup is where a phone naturally lands - tapping a player in the pool
+     opens it. Without a draft button here it was a dead end: read the stats, close, hunt for
+     the little pick button in the list. Draft him from right here instead. */
+  let draftRow='';
+  try{
+    if(window.currentView==='draft' && D.started && !D.paused && !D.finished
+       && !draftedIds().has(id) && (draftMode==='mock' || isAdmin())){
+      const onClock=(S.teams||[])[ownerForPick(currentPickIndex())]||{};
+      draftRow=`<div class="row" style="gap:10px;align-items:center;margin-top:12px">
+        <button class="btn" style="padding:8px 22px;font-size:15px" onclick="closePlayer();makePick('${id}')">Draft ${esc(m.name)}</button>
+        <span class="sub" style="margin:0">${esc(onClock.name||'')} is on the clock</span>
+      </div>`;
+    }
+  }catch(e){}
   /* rostered on another team → offer a one-tap route into the Trade Center for this player */
   const own=(realDraft().picks||[]).find(x=>x.playerId===id && !x.cut);
   const tradeRow=(own && own.teamIndex!==myTeamIdx())
@@ -4365,7 +4386,7 @@ function renderPlayerModal(id){
         <span class="sub" style="margin:0">On the bench ·</span>${btns.join('')}</div>`;
     }
   }
-  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${tradeRow}${swapRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · career + 2026 projection</div>${body}</div>`;
+  ov.innerHTML=`<div class="pmodal"><button class="pmodal-x" onclick="closePlayer()" aria-label="Close">✕</button>${head}${draftRow}${tradeRow}${swapRow}${injuryBlock(m)}<div class="eyebrow" style="margin:16px 0 8px">Fantasy points · career + 2026 projection</div>${body}</div>`;
   if(statsLoaded) renderBreakdown(id);
 }
 function renderPlayers(){
@@ -4479,7 +4500,9 @@ function armClock(carry){
   timerId = setInterval(()=>{
     timeLeft--;
     paintClock();
-    if(timeLeft<=0){ clearInterval(timerId); autoPick(); }
+    /* expiry fires the auto-pick on the DRIVER's device only - with three commissioners
+       watching, three clocks all hit zero and three robots raced to pick */
+    if(timeLeft<=0){ clearInterval(timerId); if(canDriveNow()) autoPick(); }
   },1000);
   maybeAutoDraft();
   maybeAutoOthers();
@@ -4495,10 +4518,11 @@ function setAutoDraft(on){
 }
 function maybeAutoDraft(){
   if(!autoDraftOn || !D.started || D.paused || D.finished || !poolReady) return;
+  if(!canDriveNow()) return;                                 // only the driver's robot picks
   if(KR() && roundForPick(currentPickIndex())===0) return;   // keepers stay commissioner-entered
   clearInterval(timerId);
   setTimeout(()=>{
-    if(!autoDraftOn || !D.started || D.paused || D.finished) return;
+    if(!autoDraftOn || !D.started || D.paused || D.finished || !canDriveNow()) return;
     if(KR() && roundForPick(currentPickIndex())===0) return;
     autoPick();
   }, 450);
@@ -4506,13 +4530,14 @@ function maybeAutoDraft(){
 function maybeAutoFlagged(){
   if(autoDraftOn) return;   // auto-draft covers everyone
   if(draftMode!=='real' || !D.started || D.paused || D.finished || !poolReady) return;
+  if(!canDriveNow()) return;                // only the driver's device picks for auto teams
   const idx = currentPickIndex();
   if(KR() && roundForPick(idx)===0) return; // commissioner enters keepers by hand
   const own = ownerForPick(idx);
   if(S.teams[own] && S.teams[own].auto){
     clearInterval(timerId);
     setTimeout(()=>{
-      if(draftMode!=='real' || !D.started || D.paused || D.finished) return;
+      if(draftMode!=='real' || !D.started || D.paused || D.finished || !canDriveNow()) return;
       const i2 = currentPickIndex();
       if(S.teams[ownerForPick(i2)] && S.teams[ownerForPick(i2)].auto) autoPick();
     }, 600);
@@ -4536,9 +4561,47 @@ function paintClock(){
   el.textContent = `${m}:${String(s).padStart(2,'0')}`;
   el.className = 'clock' + (timeLeft<=10?' crit':(timeLeft<=30?' warn':''));
 }
-/* next draft slot = board picks made so far. Count only real board picks: FA pickups sit at
-   pickIndex -1, and cut picks still consumed their draft slot so they count. */
-function currentPickIndex(){ return D.picks.filter(p=>+p.pickIndex>=0).length; }
+/* Next draft slot = the SMALLEST unfilled index, not the count. Counting broke the moment two
+   commissioner devices raced: a duplicated index made the count overshoot and a whole slot -
+   a whole person - got skipped, permanently. Smallest-unfilled self-heals: if a slot ever gets
+   skipped, it simply becomes the next pick. FA pickups sit at pickIndex -1 and don't count;
+   cut picks consumed their slot, so they do. */
+function currentPickIndex(){
+  const used=new Set(D.picks.filter(p=>+p.pickIndex>=0).map(p=>+p.pickIndex));
+  let i=0; while(used.has(i)) i++;
+  return i;
+}
+/* Two devices pushing whole boards can land the same slot or the same player twice. First
+   entry wins on both counts; later duplicates are dropped. Returns how many were removed so
+   the caller can decide whether the healed board is worth re-saving. */
+function dedupeBoard(d){
+  const byIdx=new Set(), byPid=new Set(), out=[];
+  for(const p of (d.picks||[])){
+    if(!p){ continue; }
+    if(+p.pickIndex>=0){ if(byIdx.has(+p.pickIndex)) continue; byIdx.add(+p.pickIndex); }
+    const pid=String(p.playerId||'');
+    if(pid && !p.cut){ if(byPid.has(pid)) continue; byPid.add(pid); }
+    out.push(p);
+  }
+  const dropped=(d.picks||[]).length-out.length;
+  d.picks=out;
+  return dropped;
+}
+/* ---- single draft driver ----
+   Every admin device used to run its own clock and fire its own auto-picks; three
+   commissioners drafting meant three robots racing to move the draft and overwriting each
+   other's boards. The lease rides inside the draft record: whichever commissioner acted most
+   recently is the driver, and only the driver's device runs the clock's automatic actions.
+   Manual picks stay open to every commissioner - a human pick just takes the wheel. A lease
+   older than 45s counts as abandoned (driver closed the laptop) and the next automatic action
+   from any admin device claims it. */
+function stampDriver(){ try{ D.driverUid=myUid(); D.driverAt=Date.now(); }catch(e){} }
+function driverFresh(){ return (Date.now()-(+D.driverAt||0)) < 45000; }
+function canDriveNow(){
+  if(draftMode==='mock') return true;
+  if(!isAdmin()) return false;
+  return D.driverUid===myUid() || !driverFresh();
+}
 
 /* manual picks obey the same roster rules the auto-draft uses: starters before bench, respect position caps */
 function pickAllowed(teamIdx, pos){
@@ -4744,6 +4807,7 @@ function makePick(playerId){
     pickAlarm(allow.why, { team:t.name, mgr:t.manager, player:player.name, pos:player.pos });
     return;
   }
+  stampDriver();          /* a human pick takes the wheel - this device now runs the clock */
   D.picks.push({ pickIndex: idx, teamIndex: teamIdx, playerId, name:player.name, pos:player.pos, nfl:player.team, auto:false });
   /* keeper round only, and only when the SAME manager is keeping him a second year */
   if(KR() && roundForPick(idx)===0){
@@ -4759,6 +4823,7 @@ function autoPick(){
   const avail = bestAvailableForClockTeam();
   if(!avail){ toast("No players available to auto-pick."); return; }
   const idx = currentPickIndex();
+  stampDriver();
   D.picks.push({ pickIndex: idx, teamIndex: ownerForPick(idx), playerId: avail.id, name:avail.name, pos:avail.pos, nfl:avail.team, auto:true });
   toast(`Auto-pick: ${avail.name}`);
   afterPick();
