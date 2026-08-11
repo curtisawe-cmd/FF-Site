@@ -4489,21 +4489,29 @@ let timerId=null, timeLeft=0;
 function startDraft(){
   if(!requireDraftControl()) return;
   if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
-  D.started = true; D.paused = false; saveDraft();
-  armClock();
+  D.started = true; D.paused = false;
+  stampDriver();               /* starting the draft takes the wheel */
+  armClock();                  /* arm BEFORE saving so the shared record carries the deadline */
+  saveDraft();
   refreshDraftUI();
 }
 function togglePause(){
   if(!requireDraftControl()) return;
   if(!D.started||D.finished) return;
-  D.paused = !D.paused; saveDraft();
+  D.paused = !D.paused;
   document.getElementById('btnPause').textContent = D.paused ? 'Resume' : 'Pause';
-  if(D.paused){ clearInterval(timerId); timerId=null; } else armClock(timeLeft);
+  if(D.paused){ clearInterval(timerId); timerId=null; } else { stampDriver(); armClock(timeLeft); }
+  saveDraft();                 /* after the arm - a resume must ship the fresh deadline */
   refreshDraftUI();
 }
 function armClock(carry){
   clearInterval(timerId);
   timeLeft = (carry && carry>0) ? carry : (+S.timerSec||60);
+  /* The deadline rides in the shared draft record. The countdown used to be a purely local
+     timer on whichever device armed it - every phone in the league watched "--" all draft
+     while only the driver's screen counted. Saves that follow (afterPick, start, resume)
+     carry the stamp; viewer devices stamp too but never save, which is harmless. */
+  D.clockEnd = Date.now() + timeLeft*1000;
   paintClock();
   timerId = setInterval(()=>{
     timeLeft--;
@@ -4564,10 +4572,21 @@ function maybeAutoOthers(){
   }
 }
 function paintClock(){
-  const el = document.getElementById('clock');
+  const el = document.getElementById('clock'); if(!el) return;
   const m = Math.floor(Math.max(timeLeft,0)/60), s = Math.max(timeLeft,0)%60;
   el.textContent = `${m}:${String(s).padStart(2,'0')}`;
   el.className = 'clock' + (timeLeft<=10?' crit':(timeLeft<=30?' warn':''));
+}
+/* Every OTHER device derives its countdown from the shared deadline. Runs on each draft
+   render, so a viewer's phone starts ticking the moment the driver's board lands. Re-arms
+   only when meaningfully out of step, so the driver's own ticking is left alone; expiry on a
+   non-driver device does nothing anyway - autoPick is lease-gated. */
+function syncClockFromShared(){
+  if(draftMode!=='real' || !D.started || D.finished) return;
+  if(D.paused){ clearInterval(timerId); timerId=null; paintClock(); return; }
+  const end=+D.clockEnd||0; if(!end) return;
+  const left=Math.max(0, Math.ceil((end-Date.now())/1000));
+  if(!timerId || Math.abs(left-timeLeft)>2) armClock(left||1);
 }
 /* Next draft slot = the SMALLEST unfilled index, not the count. Counting broke the moment two
    commissioner devices raced: a duplicated index made the count overshoot and a whole slot -
@@ -6063,6 +6082,7 @@ function renderRosterMini(){
 }
 
 function refreshDraftUI(){
+  try{ syncClockFromShared(); }catch(e){}
   const cs = document.getElementById('clockSel'); if(cs) cs.value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
   const adt = document.getElementById('autoDraftToggle'); if(adt) adt.checked = autoDraftOn;
   const mt = document.getElementById('mockTeam');
