@@ -7355,9 +7355,9 @@ async function renderGameCenter(){
     const aWin=A.total>B.total, bWin=B.total>A.total;
     return `<section class="gc-card"><div class="card" style="padding:0;overflow:hidden">
       <div class="gc-head">
-        <span class="gc-side">${teamMarkHTML(tA,30)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span></span>
+        <span class="gc-side">${teamMarkHTML(tA,42)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span></span>
         <span class="gc-vs">VS</span>
-        <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,30)}</span>
+        <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
       </div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
     </div></section>`;
@@ -7587,7 +7587,7 @@ function toiletCrown(ti){
 }
 function standingsRowHTML(r, rank, leader){
   return `<tr${leader?' class="top"':''}><td style="font-family:var(--f-mono)">${rank}</td>`+
-    `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],22)}<span>${esc(r.name)}${toiletCrown(r.i)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
+    `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],32)}<span>${esc(r.name)}${toiletCrown(r.i)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
     `<td style="text-align:center;font-family:var(--f-mono)">${r.w}-${r.l}-${r.t}</td>`+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pf.toFixed(1)}</td>`+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pa.toFixed(1)}</td></tr>`;
@@ -7904,7 +7904,7 @@ function renderMatchups(){
           if(edit) return `<span class="mu-team${right?' r':''}"><select onchange="setMatchTeam('${wk}',${m},${other},+this.value)">${teamOpts(ti)}</select></span>`;
           const t = S.teams[ti];
           const nm = `<span class="mu-name"${win?' style="font-weight:700"':''}>${win?'\uD83C\uDFC8 ':''}${esc(t?.name||'?')}${t&&t.manager?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(t.manager)}</span>`:''}</span>`;
-          return `<span class="mu-team${right?' r':''}${win?' win':''}">${teamMarkHTML(t,28)}${nm}</span>`;
+          return `<span class="mu-team${right?' r':''}${win?' win':''}">${teamMarkHTML(t,40)}${nm}</span>`;
         };
         return `<div class="row mu-row" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px">
           ${side(g[0],aWin,0,false)}
@@ -8474,7 +8474,7 @@ function renderTradeCenter(){
     if(T.b===mineIdx){ const alt=(mineIdx+1)%N(); T.b=alt; T.pb=new Set(); T.rb=new Set(); }
   }
   const teamSel = side => (side==='a' && lockLeft)
-    ? `<span class="row" style="gap:8px;align-items:center;min-width:0">${teamMarkHTML(S.teams[T.a],26)}<b style="font-size:15px">${esc(S.teams[T.a].name)}</b><span class="divtag">your team</span></span>`
+    ? `<span class="row" style="gap:8px;align-items:center;min-width:0">${teamMarkHTML(S.teams[T.a],36)}<b style="font-size:15px">${esc(S.teams[T.a].name)}</b><span class="divtag">your team</span></span>`
     : `<select onchange="tradeSetTeam('${side}', this.value)">${S.teams.map((t,i)=>{
          const other = (side==='a') ? T.b : T.a;
          return `<option value="${i}"${i===T[side]?' selected':''}${i===other?' disabled':''}>${esc(t.name)}${i===other?' — already picked':''}</option>`;
@@ -9343,7 +9343,7 @@ function renderMyTeam(){
     <div class="card myteam-card" style="max-width:760px">
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
-        <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,54)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
+        <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,72)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
         <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · ${(teamNamesLocked()&&!isAdmin())?`<span title="Team names are locked during the season" style="color:var(--chalk-dim)">Rename 🔒</span>`:`<a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
         ${sel}
       </div>
@@ -9375,7 +9375,7 @@ function renderTeams(){
   el.innerHTML = S.teams.map((t,i)=>{
     const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
     return `<div class="card team-card">
-      <div class="team-head">${teamMarkHTML(t,46)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
+      <div class="team-head">${teamMarkHTML(t,72)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
       (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
         : `<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p>`) + `</div>`;
   }).join('');
