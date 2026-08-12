@@ -4870,17 +4870,20 @@ function starterState(teamIdx){
   const complete = ['QB','RB','WR','TE','K','DEF'].every(P=>counts[P]>=req[P]) && flexFilled >= req.FLEX;
   return {open, complete};
 }
-function bestAvailableForClockTeam(){
-  // auto strategy: fill the starting lineup first, then take best available
+/* Every legal auto-pick for the team on the clock, best first. Same strategy as before -
+   fill the starting lineup, then best available with positional discipline - but returned as
+   a LIST so the caller can vary the choice. */
+function autoCandidates(){
   const tIdx = ownerForPick(currentPickIndex());
   const taken = draftedIds();
   const counts = {}; POS_LIST.forEach(p=>counts[p]=0);
   D.picks.filter(p=>p.teamIndex===tIdx && !p.cut).forEach(p=>counts[p.pos]++);
   const caps = positionCaps();
   const st = starterState(tIdx);
+  const free = p => !taken.has(p.id) && counts[p.pos] < caps[p.pos];
   if(!st.complete){
-    const fit = POOL.find(p=>!taken.has(p.id) && st.open(p.pos) && counts[p.pos] < caps[p.pos]);
-    if(fit) return fit;
+    const fits = POOL.filter(p=>free(p) && st.open(p.pos));
+    if(fits.length) return fits;
   }
   // starters done: best available with positional discipline —
   // no 2nd QB before Round 10, and never a 2nd K or DEF on auto
@@ -4888,8 +4891,22 @@ function bestAvailableForClockTeam(){
   const allowed = p =>
     !((p.pos==='QB') && counts.QB>=1 && rd<10) &&
     !((p.pos==='K'||p.pos==='DEF') && counts[p.pos]>=1);
-  return POOL.find(p=>!taken.has(p.id) && counts[p.pos] < caps[p.pos] && allowed(p))
-      || POOL.find(p=>!taken.has(p.id) && counts[p.pos] < caps[p.pos]);
+  const disciplined = POOL.filter(p=>free(p) && allowed(p));
+  return disciplined.length ? disciplined : POOL.filter(free);
+}
+/* An auto team rolls the dice among the top ten it would legally consider, instead of always
+   taking the single best - twelve auto teams used to draft one predictable board, and every
+   mock came out identical. POOL is rank-sorted, so "top ten" means the ten best it can take.
+   Randomness is SAFE here only because one device drives: autoPick is lease-gated, so the dice
+   are rolled once. If every device rolled its own, they would each pick a different player and
+   fight over the slot. Position discipline is unchanged - the ranking keeps kickers out of
+   round two on its own, since a K never sits in anyone's top ten until the skill slots fill. */
+const AUTO_POOL_N = 10;
+function bestAvailableForClockTeam(){
+  const list = autoCandidates();
+  if(!list.length) return null;
+  const top = list.slice(0, AUTO_POOL_N);
+  return top[Math.floor(Math.random()*top.length)];
 }
 function positionCaps(){
   // hard cap per position = dedicated slots + FLEX (RB/WR/TE) + all bench
