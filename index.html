@@ -9375,7 +9375,7 @@ function renderTeams(){
   el.innerHTML = S.teams.map((t,i)=>{
     const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
     return `<div class="card team-card">
-      <div class="team-head">${teamMarkHTML(t,72)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
+      <div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
       (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
         : `<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p>`) + `</div>`;
   }).join('');
