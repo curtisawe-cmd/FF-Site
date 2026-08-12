@@ -4894,14 +4894,14 @@ function autoCandidates(){
   const disciplined = POOL.filter(p=>free(p) && allowed(p));
   return disciplined.length ? disciplined : POOL.filter(free);
 }
-/* An auto team rolls the dice among the top ten it would legally consider, instead of always
+/* An auto team rolls the dice among the top twenty it would legally consider, instead of always
    taking the single best - twelve auto teams used to draft one predictable board, and every
-   mock came out identical. POOL is rank-sorted, so "top ten" means the ten best it can take.
-   Randomness is SAFE here only because one device drives: autoPick is lease-gated, so the dice
-   are rolled once. If every device rolled its own, they would each pick a different player and
-   fight over the slot. Position discipline is unchanged - the ranking keeps kickers out of
-   round two on its own, since a K never sits in anyone's top ten until the skill slots fill. */
-const AUTO_POOL_N = 10;
+   mock came out identical. POOL is rank-sorted, so "top twenty" means the twenty best it can
+   take. Randomness is SAFE here only because one device drives: autoPick is lease-gated, so the
+   dice are rolled once. If every device rolled its own, they would each pick a different player
+   and fight over the slot. Position discipline is unchanged - the ranking keeps kickers out of
+   the early rounds on its own, since a K never sits this high until the skill slots fill. */
+const AUTO_POOL_N = 20;
 function bestAvailableForClockTeam(){
   const list = autoCandidates();
   if(!list.length) return null;
