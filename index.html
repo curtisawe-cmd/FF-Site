@@ -1521,6 +1521,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <!-- ============ POLLS ============ -->
 <style>
 .poll-opts{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+/* commissioner-only ballot breakdown under a poll */
+.poll-who{margin-top:10px;padding:10px 12px;border:1px dashed var(--line);border-radius:9px;background:var(--panel-2)}
+.pw-row{display:flex;gap:10px;align-items:baseline;padding:3px 0;font-size:13px;min-width:0}
+.pw-opt{flex:0 0 34%;max-width:34%;font-weight:700;color:var(--chalk);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pw-names{flex:1 1 auto;min-width:0;color:var(--chalk-dim);font-family:var(--f-mono);font-size:12px;line-height:1.5}
+@media(max-width:520px){ .pw-row{flex-direction:column;gap:1px} .pw-opt{flex:none;max-width:100%} }
 .poll-opt{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2,#0e1f3d);color:var(--chalk,#e8eefc);cursor:pointer;overflow:hidden;font-size:15px}
 .poll-opt:hover:not(:disabled){border-color:var(--turf)}
 .poll-opt:disabled{cursor:default}
@@ -6722,6 +6729,29 @@ function renderPolls(){
         <span class="poll-opt-label">${esc(opts[oid])}${mine?' ✓':''}</span>
         <span class="poll-opt-count">${pct}% · ${c}</span></button>`;
     }).join('');
+    /* Commissioners see WHO voted for what, plus who still owes a vote. Nothing new is exposed:
+       pollVotes is readable by every signed-in account, so the ballot was never secret - this
+       just says out loud what the database already tells anyone who looks. Managers keep
+       seeing counts only. */
+    const whoBlock = canManage ? (()=>{
+      const nameOf = u => managerNameFor(u, 'Manager');
+      const rowsFor = Object.keys(opts).map(oid=>({
+        label: opts[oid],
+        names: Object.keys(votes).filter(u=>votes[u]===oid).map(nameOf).sort((a,b)=>a.localeCompare(b))
+      }));
+      const voted = new Set(Object.keys(votes));
+      const missing = Object.keys(managersMap||{})
+        .filter(u=>Number.isInteger((managersMap[u]||{}).teamIndex) && !voted.has(u))
+        .map(nameOf).sort((a,b)=>a.localeCompare(b));
+      return `<div class="poll-who">
+        <div class="eyebrow" style="margin:0 0 6px">Who voted · commissioner only</div>
+        ${rowsFor.map(o=>`<div class="pw-row"><span class="pw-opt">${esc(o.label)}</span>
+          <span class="pw-names">${o.names.length?o.names.map(esc).join(' · '):'<i style="opacity:.6">nobody yet</i>'}</span></div>`).join('')}
+        ${missing.length?`<div class="pw-row"><span class="pw-opt" style="color:var(--charge)">Not voted</span>
+          <span class="pw-names">${missing.map(esc).join(' · ')}</span></div>`:
+          `<div class="pw-row"><span class="pw-opt" style="color:var(--rb)">Everyone voted</span><span class="pw-names"></span></div>`}
+      </div>`;
+    })() : '';
     const controls = canManage ? `<div class="row" style="gap:6px;flex:0 0 auto">
       ${closed
         ? `<button class="btn ghost" style="padding:3px 9px" title="Reopen voting, with or without a new time limit" onclick="reopenPollTimed('${poll.id}')">Reopen</button>`
@@ -6733,6 +6763,7 @@ function renderPolls(){
         ${controls}
       </div>
       <div class="poll-opts">${rows}</div>
+      ${whoBlock}
       <p class="sub" style="margin:8px 0 0">${total} vote${total===1?'':'s'}${closed?' · voting closed':(ticking?` · closes in ${esc(waiverClearLabel(poll.closesAt))}`:'')}${!closed?(myVote?' · you voted':(myUid?' · tap an option to vote':'')):''}${(poll.createdByUid||poll.createdBy)?` · by ${esc(managerNameFor(poll.createdByUid, String(poll.createdBy||'').split('@')[0]))}`:''}</p>
     </div>`;
   }).join('') : `<div class="card"><p class="sub" style="margin:0">No polls yet.${myUid?' Post one above.':''}</p></div>`;
