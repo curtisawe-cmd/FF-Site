@@ -1221,10 +1221,11 @@ section.view[data-ghost] > *{position:relative;z-index:1}
    itself every time a phone rotates is worse than the extra markup. */
 .gc-h2h{display:none}
 @media(max-width:720px){ .gc-grid{display:none} .gc-h2h{display:block} .gc-head{display:none} }
-/* each team's identity sits directly above its own column, and stays put while rows scroll */
+/* Each team's identity sits directly above its own column. NOT sticky: pinning it under the
+   header left it parked mid-card, covering two player rows - the site header and the sticky
+   MATCHUPS title already own that space. It rides at the top of its card instead. */
 .h2h-head{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start;
-  gap:6px;padding:10px 8px;background:var(--panel-2);border-bottom:1px solid var(--line);
-  position:sticky;top:var(--hdr-h,0);z-index:4}
+  gap:6px;padding:10px 8px;background:var(--panel-2);border-bottom:1px solid var(--line)}
 .h2h-ht{min-width:0;display:flex;flex-direction:column;gap:2px}
 .h2h-ht.r{align-items:flex-end;text-align:right}
 .h2h-htop{display:flex;align-items:center;gap:8px}
