@@ -8120,12 +8120,13 @@ function renderMatchups(){
           ${side(g[1],bWin,1,true)}
           ${projTag}
           ${edit ? '' : (()=>{
-            /* a final game states the result; before that the bar rides on whatever numbers
-               exist - live/partial scores if any, else the projected totals - and says which */
+            /* Always shown, with the label naming what it is based on. Skipping the bar when
+               there is nothing to go on just makes the feature look missing - an even bar that
+               says WHY it is even is more honest than a blank space. */
             if(done) return `<div class="mu-wp">${winBarHTML(pa, pb, true, 'Final')}</div>`;
             if(prA!=null && prB!=null && (prA||prB))
               return `<div class="mu-wp">${winBarHTML(prA, prB, false, 'Win probability · from projections')}</div>`;
-            return '';
+            return `<div class="mu-wp">${winBarHTML(0, 0, false, statsLoaded?'Even · no projections yet':'Win probability · loading projections')}</div>`;
           })()}
         </div>`;
       }).join('')}
