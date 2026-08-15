@@ -1238,6 +1238,24 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .h2h-hmgr{font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .h2h-hvs{align-self:center;font-family:var(--f-ui);font-size:11px;letter-spacing:.1em;color:var(--chalk-dim)}
+/* ---- trade offer: two teams side by side, like a matchup ---- */
+.tr-grid{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:start}
+.tr-col{min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.tr-head{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:6px}
+.tr-name{font-family:var(--f-ui);font-weight:700;font-size:14px;line-height:1.15;color:var(--chalk);
+  overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tr-eyebrow{font-family:var(--f-ui);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--chalk-dim);margin-bottom:4px}
+.tr-item{font-size:13px;color:var(--chalk);padding:3px 0;border-bottom:1px solid var(--line);min-width:0;
+  overflow-wrap:anywhere}
+.tr-item:last-child{border-bottom:none}
+.tr-item.none{color:var(--chalk-dim);font-style:italic}
+.tr-swap{align-self:center;font-size:17px;color:var(--chalk-dim)}
+/* on a phone the columns stack, so the arrow has to point down instead of across */
+@media(max-width:560px){
+  .tr-grid{grid-template-columns:minmax(0,1fr);gap:6px}
+  .tr-swap{justify-self:center;transform:rotate(90deg)}
+}
 /* ---- win probability bar ---- */
 .wp{padding:8px 10px;background:var(--panel-2);border-bottom:1px solid var(--line)}
 .wp-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px}
@@ -8802,14 +8820,30 @@ function renderOffers(){
     }
     if(reviewing && over && isAdmin()) acts.push(`<button class="btn" onclick="finalizeOffer('${o.id}')">Process now</button>`);
     if(isAdmin()) acts.push(`<button class="btn danger" style="padding:3px 10px" title="Delete this trade (commissioner)" onclick="deleteOffer('${o.id}')">Delete</button>`);
+    /* Read as a matchup: the two teams side by side, each column listing what that team GIVES
+       UP. Sentences ("A sends: X, Y. B sends: Z.") made you parse a paragraph to see a swap;
+       columns show it at a glance, the way Game Center shows a game. Columns stack on a phone,
+       with the arrow between them turning downward so the direction still reads. */
+    const tA = S.teams[o.a], tB = S.teams[o.b];
+    const sideCol = (team, name, gave) => `
+      <div class="tr-col">
+        <div class="tr-head">${teamMarkHTML(team, 34)}<span class="tr-name">${esc(name||'?')}</span></div>
+        <div class="tr-eyebrow">gives up</div>
+        ${gave.length
+          ? gave.map(x=>`<div class="tr-item">${esc(x)}</div>`).join('')
+          : `<div class="tr-item none">nothing</div>`}
+      </div>`;
     return `<div class="card" style="margin-bottom:10px">
-      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
-        <h2 style="margin:0;font-size:19px">${esc(o.aName)} <span style="color:var(--chalk-dim)">\u21C4</span> ${esc(o.bName)}${o.counterOf?' <span class="divtag">counter</span>':''}</h2>${status}
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px">
+        <h2 style="margin:0;font-size:17px">Trade offer${o.counterOf?' <span class="divtag">counter</span>':''}</h2>${status}
       </div>
-      <p class="sub" style="margin:8px 0 2px"><b>${esc(o.aName)}</b> sends: ${t.aGave.map(esc).join(', ')||'nothing'}</p>
-      <p class="sub" style="margin:0 0 8px"><b>${esc(o.bName)}</b> sends: ${t.bGave.map(esc).join(', ')||'nothing'}</p>
-      ${reviewing?`<p class="sub" style="margin:0 0 8px">Vetoes: <b style="color:${vc>=need?'var(--danger)':'var(--chalk)'}">${vc}</b> / ${need} needed to block${iVetoed?' \u00B7 you voted to veto':''}</p>`:''}
-      <div class="row" style="gap:6px">${acts.join('')||'<span class="sub" style="margin:0">Waiting\u2026</span>'}</div>
+      <div class="tr-grid">
+        ${sideCol(tA, o.aName, t.aGave)}
+        <div class="tr-swap" aria-hidden="true">\u21C4</div>
+        ${sideCol(tB, o.bName, t.bGave)}
+      </div>
+      ${reviewing?`<p class="sub" style="margin:10px 0 8px">Vetoes: <b style="color:${vc>=need?'var(--danger)':'var(--chalk)'}">${vc}</b> / ${need} needed to block${iVetoed?' \u00B7 you voted to veto':''}</p>`:''}
+      <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${acts.join('')||'<span class="sub" style="margin:0">Waiting\u2026</span>'}</div>
     </div>`;
   }).join('');
 }
