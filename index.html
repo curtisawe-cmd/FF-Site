@@ -1335,6 +1335,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light or dark mode"><span class="dot"></span><span id="themeLabel">Lights out</span></button>
     <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
     <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
+    <button class="theme-toggle" id="muteBtn" onclick="toggleMute()" aria-label="Toggle sounds"><span class="dot"></span><span>Sound on</span></button>
   </div>
 </header>
 
@@ -1748,6 +1749,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow admin-only"><label title="Zero everyone's dues from this moment. The transaction log is untouched; earlier adds and drops just stop counting.">Dues ledger</label><button class="btn danger" style="max-width:200px" onclick="resetDuesLedger()">Reset dues to $0</button></div>
     </div>
     <p class="sub" id="feesResetNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
+    <div class="eyebrow" style="margin:18px 0 6px">Sounds</div>
+    <p class="sub" style="margin:0 0 10px;font-size:12px">Type a built-in name (<b>tick · buzzer · chime · click · horn · ding · none</b>), paste a link to an audio file, or upload a clip. ▶ tests it. Sounds are per-league; each person can silence their own device with the Sound button up top.</p>
+    <div id="soundRows"></div>
     <div id="rulesInputs"></div>
   </div>
 
@@ -2044,6 +2048,7 @@ const DEFAULTS = {
   txFeeAdd: 0.5,         /* league dues: charged per player added */
   txFeeDrop: 0.5,        /* and per player dropped — so a full add/drop is a dollar */
   buyInPaid: {},         /* $ each team has paid toward the buy-in, keyed by slot */
+  sounds: {},            /* per-event sound: a built-in name, a URL, or an uploaded data URI */
   waiverHours: 24,       /* how long a dropped player sits on waivers; 0 = waivers off */
   waiverOrder: [],       /* rolling priority, worst first; empty = seed from the standings */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
@@ -3606,6 +3611,7 @@ function startLeagueSync(){
     if(remote==null || draftMode!=='real') return;
     applyingRemote = true;
     let healed = 0;
+    const picksBefore = (D.picks||[]).filter(p=>+p.pickIndex>=0).length;
     try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[];
       /* two admin devices racing can land duplicate slots or duplicate players on the shared
          board - scrub every snapshot, and if this device is an admin, push the healed board
@@ -3614,6 +3620,12 @@ function startLeagueSync(){
       reconcileMoves(); reconcileTeamData(); reRenderLive(); }catch(e){}
     applyingRemote = false;
     if(healed>0 && isAdmin()){ console.warn('[BBL] healed '+healed+' duplicate draft entr'+(healed>1?'ies':'y')); try{ saveDraft(); }catch(e){} }
+    /* somebody else's pick landed: sound it here, since afterPick only runs on the device that
+       made it. The first sync is skipped - loading a board mid-draft is not twenty picks. */
+    try{ const now=(D.picks||[]).filter(p=>+p.pickIndex>=0).length;
+      if(window._draftSynced && now>picksBefore && D.started && !D.finished) playSound('pick');
+      window._draftSynced = true;
+    }catch(e){}
     /* the turn just advanced - the next manager's queued request may be ready to apply */
     try{ maybeApplyPickRequests(); }catch(e){}
   });
@@ -4583,9 +4595,11 @@ function armClock(carry){
   timerId = setInterval(()=>{
     timeLeft--;
     paintClock();
+    /* the tick is a countdown cue, so it belongs on EVERY device, not just the driver's */
+    if(timeLeft>0 && timeLeft<=10) playSound('tick');
     /* expiry fires the auto-pick on the DRIVER's device only - with three commissioners
        watching, three clocks all hit zero and three robots raced to pick */
-    if(timeLeft<=0){ clearInterval(timerId); if(canDriveNow()) autoPick(); }
+    if(timeLeft<=0){ clearInterval(timerId); playSound('buzzer'); if(canDriveNow()) autoPick(); }
   },1000);
   maybeAutoDraft();
   maybeAutoOthers();
@@ -4775,7 +4789,94 @@ document.querySelectorAll('.wordmark').forEach(el=>{
 function saveInsults(val){ S.alarmInsults = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
 /* the full-screen shout. `kind` picks which word pool and icon it uses. */
+/* ===================== SOUND =====================
+   Two kinds of sound, chosen per event in Settings:
+   - a BUILT-IN name ('buzzer', 'horn', ...) synthesised through Web Audio, so it needs no
+     files, no cache entries and no network - it just works offline;
+   - anything else is treated as a source: a URL you paste, or a clip you upload, which is
+     stored as a data URI. Uploads are capped hard because settings sync to every device in
+     the league on every save - a fat clip would make everyone's page load crawl.
+
+   Browsers refuse to make noise until the user has interacted with the page (strictest on
+   iPhone), so the first tap anywhere unlocks the audio context. Nothing can play before that,
+   which is a browser rule, not a choice. */
+const SOUND_EVENTS = [
+  ['tick',   'Clock ticking (last 10s)', 'tick'],
+  ['buzzer', 'Pick clock expired',       'buzzer'],
+  ['turn',   "You're on the clock",      'chime'],
+  ['pick',   'A pick is made',           'click'],
+  ['alarm',  'Draft alarm (illegal pick, early kicker)', 'horn'],
+  ['trade',  'Trade offer arrives',      'ding'],
+  ['waiver', 'Waiver claim settles',     'ding'],
+  ['poll',   'New poll posted',          'ding']
+];
+const BUILT_IN_SOUNDS = ['tick','buzzer','chime','click','horn','ding','none'];
+const SOUND_MAX_BYTES = 150000;         /* ~150KB: a second or two of speech at a sane bitrate */
+let _ac = null, _soundUnlocked = false, _audioCache = {};
+function soundsMuted(){ return store.get('ffl_mute')==='1'; }
+function audioCtx(){
+  if(!_ac){ const C = window.AudioContext || window.webkitAudioContext; if(!C) return null; _ac = new C(); }
+  if(_ac.state==='suspended') _ac.resume().catch(()=>{});
+  return _ac;
+}
+/* the first real gesture on the page is what earns us permission to make noise */
+['pointerdown','keydown','touchstart'].forEach(ev=>
+  window.addEventListener(ev, ()=>{ if(_soundUnlocked) return; _soundUnlocked = true;
+    try{ audioCtx(); }catch(e){} }, { once:true, passive:true }));
+/* one oscillator + one gain envelope is enough for every built-in we need */
+function blip(freq, ms, type, vol, slideTo){
+  const ac = audioCtx(); if(!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type||'sine';
+  o.frequency.setValueAtTime(freq, ac.currentTime);
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ac.currentTime + ms/1000);
+  g.gain.setValueAtTime(0.0001, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol||0.25, ac.currentTime + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + ms/1000);
+  o.connect(g); g.connect(ac.destination);
+  o.start(); o.stop(ac.currentTime + ms/1000 + 0.02);
+}
+function playBuiltIn(name){
+  switch(name){
+    case 'tick':   blip(1650, 45, 'square', 0.12); break;
+    case 'buzzer': blip(150, 700, 'sawtooth', 0.30); setTimeout(()=>blip(120, 700, 'sawtooth', 0.30), 120); break;
+    case 'chime':  blip(880, 260, 'sine', 0.28); setTimeout(()=>blip(1320, 420, 'sine', 0.22), 130); break;
+    case 'click':  blip(1200, 35, 'triangle', 0.16); break;
+    case 'horn':   blip(320, 900, 'sawtooth', 0.32); setTimeout(()=>blip(240, 900, 'sawtooth', 0.28), 60); break;
+    case 'ding':   blip(1046, 380, 'sine', 0.25); break;
+    default: break;                                  /* 'none' and anything unknown stay silent */
+  }
+}
+/* Play whatever this event is set to. Never throws and never blocks: a dead URL, a browser
+   that refuses, a missing context - all just mean silence, which is the right failure. */
+function playSound(key){
+  try{
+    if(soundsMuted()) return;
+    const src = ((S.sounds||{})[key] !== undefined) ? S.sounds[key] : (SOUND_EVENTS.find(e=>e[0]===key)||[])[2];
+    if(!src || src==='none') return;
+    if(BUILT_IN_SOUNDS.includes(src)){ playBuiltIn(src); return; }
+    let a = _audioCache[src];
+    if(!a){ a = new Audio(src); a.preload='auto'; _audioCache[src] = a; }
+    a.currentTime = 0;
+    const p = a.play(); if(p && p.catch) p.catch(()=>{});
+  }catch(e){}
+}
+function toggleMute(){
+  const now = !soundsMuted();
+  store.set('ffl_mute', now ? '1' : '');
+  syncMuteBtn();
+  if(!now) playSound('pick');            /* unmuting says hello so you know it works */
+  toast(now ? 'Sound off' : 'Sound on');
+}
+function syncMuteBtn(){
+  const b = document.getElementById('muteBtn'); if(!b) return;
+  const off = soundsMuted();
+  b.querySelector('span:last-child').textContent = off ? 'Sound off' : 'Sound on';
+  b.title = off ? 'Sounds are off on this device. Tap to turn them on.' : 'Sounds are on for this device. Tap to silence.';
+  b.classList.toggle('previewing', !off);
+}
 function bigAlarm(pool, fallback, icon, sub){
+  try{ playSound('alarm'); }catch(e){}
   const lines=(pool && pool.length) ? pool : fallback;
   const big=lines[Math.floor(Math.random()*lines.length)];
   const el=document.createElement('div'); el.className='alarm-overlay';
@@ -4982,6 +5083,7 @@ function afterPick(){
     document.getElementById('clock').textContent = 'END';
     toast("That's a wrap — draft complete! 🏈");
   } else { armClock(); }
+  playSound('pick');           /* local pick; remote devices sound it from the draft feed */
   saveDraft();
   refreshDraftUI();
 }
@@ -5555,7 +5657,7 @@ const SETTING_LABELS={
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
-  buyInPaid:'buy-ins',
+  buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
@@ -6230,6 +6332,11 @@ function renderRosterMini(){
 
 function refreshDraftUI(){
   try{ syncClockFromShared(); }catch(e){}
+  /* "you're up" fires on the EDGE, not on every redraw - refreshDraftUI runs constantly */
+  try{ const mine = myTurnNow();
+    if(mine && window._wasMyTurn === false) playSound('turn');
+    window._wasMyTurn = mine;
+  }catch(e){}
   const cs = document.getElementById('clockSel'); if(cs) cs.value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
   const adt = document.getElementById('autoDraftToggle'); if(adt) adt.checked = autoDraftOn;
   const mt = document.getElementById('mockTeam');
@@ -6358,7 +6465,7 @@ function noticeNewPolls(){
   fresh.forEach(id=>pollSeenIds.add(id));
   fresh.map(id=>pollsMap[id])
     .filter(p=>p && !pollClosed(p) && !(window.fbUser && p.createdByUid===window.fbUser.uid))
-    .forEach(p=>toast(`🗳️ New poll: ${p.q||'go vote'}`));
+    .forEach(p=>{ toast(`🗳️ New poll: ${p.q||'go vote'}`); playSound('poll'); });
 }
 function updateChatBadge(){
   /* the Chat tab carries chat unreads PLUS unvoted polls - polls live inside Chat, and a badge
@@ -8589,7 +8696,7 @@ function noticeNewOffers(){
     if(seenOfferIds.has(id)) return;
     seenOfferIds.add(id);
     const o = offersMap[id]; if(!o || o.status!=='pending' || !window.fbUser) return;
-    if(Number.isInteger(mine) && o.b===mine) toast(`📨 ${o.aName} sent you a trade offer`);
+    if(Number.isInteger(mine) && o.b===mine){ toast(`📨 ${o.aName} sent you a trade offer`); playSound('trade'); }
     const target = uidForTeam(o.b);                 /* alert the manager being offered to */
     /* An offer is private to its recipient. If their uid can't be resolved (unclaimed team, or
        the managers feed hasn't landed yet), send NOTHING — an untargeted push falls through to
@@ -9282,6 +9389,7 @@ function maybeProcessWaivers(){
     });
     const win=claims[0], ok=awardClaim(win);
     settleClaim(win.id, ok?'won':'failed', ok?'':'Roster was full and the named drop was gone');
+    if(ok && win.team===addTargetTeam()) playSound('waiver');   /* your claim came in */
     claims.slice(1).forEach(c=>settleClaim(c.id,'lost',`${win.teamName||teamName(win.team)} had waiver priority`));
     if(ok){ moveToBackOfWaiverOrder(win.team); awarded=true; }
   });
@@ -9779,6 +9887,7 @@ function renderSettings(){
   { const fa=document.getElementById('setFeeAdd'); if(fa) fa.value=String(S.txFeeAdd??0.5);
     const fd=document.getElementById('setFeeDrop'); if(fd) fd.value=String(S.txFeeDrop??0.5); }
   renderFeesReset();
+  renderSoundRows();
   renderWaiverSetting();
   lockSettingsForViewers();          /* must run last — the sections above rebuild themselves */
 }
@@ -9813,6 +9922,56 @@ function setTradeDeadline(v){
   S.tradeDeadlineWk=w; saveState(); renderTradeReview();
   if(window.currentView==='trades') renderTradeCenter();
   toast(w ? `Trade deadline set: ${tradeDeadlineLabel()}` : 'Trade deadline removed — trades all season');
+}
+function renderSoundRows(){
+  const el = document.getElementById('soundRows'); if(!el) return;
+  const S_ = S.sounds = S.sounds || {};
+  el.innerHTML = SOUND_EVENTS.map(([key,label,dflt])=>{
+    const v = (S_[key]!==undefined) ? S_[key] : dflt;
+    const isFile = v && !BUILT_IN_SOUNDS.includes(v);
+    const shown = isFile ? (v.startsWith('data:') ? 'uploaded clip' : v) : v;
+    return `<div class="setrow" style="gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="flex:1 1 190px;min-width:0">${esc(label)}</label>
+      <input type="text" id="snd_${key}" value="${esc(shown)}" placeholder="${esc(dflt)}"
+        style="flex:1 1 170px;min-width:130px" ${v.startsWith('data:')?'readonly title="An uploaded clip. Clear it to type a name or link instead."':''}
+        onchange="setSound('${key}', this.value)">
+      <button class="btn ghost" style="padding:3px 10px" title="Play it" onclick="playSound('${key}')">▶</button>
+      <label class="btn ghost" style="padding:3px 10px;cursor:pointer" title="Upload a short clip (max 150KB)">↑<input type="file" accept="audio/*" style="display:none" onchange="uploadSound('${key}', event)"></label>
+      <button class="btn ghost" style="padding:3px 10px" title="Silence this event" onclick="setSound('${key}','none');renderSoundRows()">✕</button>
+    </div>`;
+  }).join('');
+}
+function setSound(key, val){
+  if(!requireAdmin()){ renderSoundRows(); return; }
+  const v = String(val||'').trim();
+  S.sounds = S.sounds || {};
+  /* "uploaded clip" is the label we SHOW for a data URI - typing over it must not become the
+     literal text, and leaving it alone must not wipe the clip */
+  if(v === 'uploaded clip') return;
+  S.sounds[key] = v || 'none';
+  delete _audioCache[v];                     /* re-fetch if the link changed */
+  saveState(); renderSoundRows();
+}
+function uploadSound(key, ev){
+  if(!requireAdmin()) return;
+  const input = ev && ev.target;
+  const f = input && input.files && input.files[0];
+  if(f) {
+    if(!/^audio\//.test(f.type)){ toast('Pick an audio file (MP3, WAV, M4A).'); input.value=''; return; }
+    if(f.size > SOUND_MAX_BYTES){
+      toast(`That clip is ${Math.round(f.size/1024)}KB. Keep it under ${Math.round(SOUND_MAX_BYTES/1024)}KB — it syncs to every device in the league.`);
+      input.value=''; return;
+    }
+    const rd = new FileReader();
+    rd.onload = () => {
+      S.sounds = S.sounds || {};
+      S.sounds[key] = String(rd.result||'');
+      saveState(); renderSoundRows();
+      toast(`${f.name} set — press ▶ to hear it`);
+    };
+    rd.readAsDataURL(f);
+  }
+  if(input) input.value = '';        /* let the same file be picked again after a rejection */
 }
 function renderWaiverSetting(){
   const inp=document.getElementById('setWaiverHours'); if(inp) inp.value=String(waiverHours());
@@ -11277,6 +11436,7 @@ function uidForTeam(ti){
   return Object.keys(m).find(u=>m[u] && m[u].teamIndex===ti) || null;
 }
 try{ initPush(); syncPushBtn(); }catch(e){}
+try{ syncMuteBtn(); }catch(e){}
 /* Settings rendered before this block existed, so the cross-block guard skipped its push
    fields. Fill them in now that the helpers are real. */
 try{ if(typeof renderSettings==='function') renderSettings(); }catch(e){}
