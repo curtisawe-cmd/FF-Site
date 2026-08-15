@@ -737,7 +737,17 @@ nav.tabs button{position:relative}
 .wv-verdict{font-weight:700;letter-spacing:.02em}
 .wv-verdict.win{color:var(--turf-bright)}
 .wv-verdict.lose{color:var(--chalk-dim)}
-@media(max-width:640px){ .wv-claimants{padding-left:4px} }
+/* your own running order for your own claims: the rank badge and the two arrows that set it */
+.wv-rank{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;
+  min-width:22px;height:22px;border-radius:50%;background:var(--turf);color:#fff;
+  font-family:var(--f-mono);font-size:11px;font-weight:700}
+.wv-move{display:inline-flex;gap:3px;flex:0 0 auto}
+.wv-move .btn{padding:1px 7px;font-size:11px;line-height:1.5;min-width:26px}
+@media(max-width:640px){
+  .wv-claimants{padding-left:4px}
+  .wv-rank{min-width:19px;height:19px;font-size:10px}
+  .wv-move .btn{padding:1px 5px;min-width:23px}
+}
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .pick:disabled{opacity:.4;cursor:not-allowed}
@@ -9443,6 +9453,43 @@ function waiverBlockedBy(){
 function pendingClaimsFor(pid){ return claimList().filter(c=>c.status==='pending' && c.pid===String(pid)); }
 function myClaimFor(pid){ const ti=addTargetTeam(); return ti===null?null:(pendingClaimsFor(pid).find(c=>c.team===ti)||null); }
 
+/* A manager's own running order for their own pending claims. This is separate from, and does
+   not touch, the league waiver order - that still decides who beats whom on a given player.
+   This decides which of YOUR claims lands when they cannot all land: roster space runs out, and
+   the priority that won the first one is spent. Until now that was whatever order the claims
+   came out of the map in, which is to say nobody's choice at all. A claim with no order sorts
+   last, which is where one made before this existed belongs. */
+function claimOrderOf(c){ const n = +(c && c.order); return Number.isFinite(n) ? n : 1e9; }
+function myPendingClaims(){
+  const ti = addTargetTeam(); if(ti===null) return [];
+  return claimList().filter(c=>c.team===ti && c.status==='pending')
+    .sort((a,b)=> claimOrderOf(a)-claimOrderOf(b) || (+a.at||0)-(+b.at||0));
+}
+/* Arrows, not a typed rank: the draft order learned this the hard way. A number you type has to
+   be validated, rejected and bounced back, and the bounce reads as the app ignoring you. */
+function moveClaim(id, dir){
+  const list = myPendingClaims();
+  const i = list.findIndex(c=>c.id===id);
+  if(i<0){ toast('Not your claim.'); return; }
+  const j = i + (dir<0 ? -1 : 1);
+  if(j<0 || j>=list.length) return;                      /* already top or bottom */
+  list.splice(j, 0, list.splice(i,1)[0]);
+  /* Renumber 1..n, writing only the rows whose number actually changed, one child at a time.
+     A write to the waiverClaims node itself is denied by the rules and would disappear into the
+     catch; each claim is its own child and its owner may write it. */
+  let wrote = 0;
+  list.forEach((c,k)=>{
+    const o = k+1;
+    if(claimOrderOf(c) === o) return;
+    if(wClaims[c.id]) wClaims[c.id] = {...wClaims[c.id], order:o};   /* mirror first so the list
+                                                                        redraws before the round trip */
+    wrote++;
+    try{ window.FB.dbUpdate(`${waiverPath()}/${c.id}`, {order:o}).catch(e=>toast(waiverWriteError(e))); }
+    catch(e){}
+  });
+  if(wrote) renderWaivers();
+}
+
 /* claimWaiver, NOT submitClaim: that name already belongs to the claim-your-team overlay, and
    both being function declarations in one script meant the later one silently replaced the
    earlier - this function ate the overlay's button and broke team claiming for new accounts. */
@@ -9462,7 +9509,8 @@ function claimWaiver(pid, dropPid){
   const id='w'+Date.now()+Math.random().toString(36).slice(2,6);
   const rec={ team:ti, teamName:teamName(ti), pid:String(pid), name:w.name, pos:w.pos, nfl:w.nfl,
               dropPid: dp?String(dp.playerId):'', dropName: dp?(dp.name||''):'',
-              at:Date.now(), by:window.fbUser.uid, status:'pending', clearsAt:w.until };
+              at:Date.now(), by:window.fbUser.uid, status:'pending', clearsAt:w.until,
+              order: myPendingClaims().length + 1 };   /* newest claim joins the bottom of your order */
   window.FB.dbSet(`${waiverPath()}/${id}`, rec).then(()=>{
     wClaims[id]=rec; closeClaimModal(); renderWaivers();
     toast(`Claim in on ${w.name}`);
@@ -9510,6 +9558,7 @@ function maybeProcessWaivers(){
   if(!byPid.size) return;
   const order=waiverOrder();
   let awarded=false;
+  const contests=[];
   byPid.forEach((claims, pid)=>{
     if(rosteredIds().has(pid)){                                  /* picked up some other way */
       claims.forEach(c=>settleClaim(c.id,'lost','He was already rostered'));
@@ -9520,8 +9569,22 @@ function maybeProcessWaivers(){
       const ia=order.indexOf(a.team), ib=order.indexOf(b.team);
       return (ia<0?999:ia)-(ib<0?999:ib) || (+a.at||0)-(+b.at||0);
     });
+    contests.push(claims);
+  });
+  /* Who wins each player is settled above and unchanged. What is decided here is the ORDER the
+     wins are applied in, which is the only thing that matters once a manager wins more than they
+     have room for: whoever is awarded first spends the roster spot. That call belongs to the
+     manager, so their own ranking drives it instead of the order the map handed the claims over.
+     Managers never contend with each other here - each player already has exactly one winner and
+     each roster is its own - so mixing their rankings in one sort is safe. */
+  contests.sort((A,B)=> claimOrderOf(A[0])-claimOrderOf(B[0]) || (+A[0].at||0)-(+B[0].at||0));
+  contests.forEach(claims=>{
     const win=claims[0], ok=awardClaim(win);
-    settleClaim(win.id, ok?'won':'failed', ok?'':'Roster was full and the named drop was gone');
+    /* the old text named two specific causes and guessed at which; with ranking there is a third
+       - you spent the room on a claim you ranked higher */
+    settleClaim(win.id, ok?'won':'failed', ok ? '' : (rosterCount(win.team) >= rosterLimit()
+      ? 'No roster room left by the time this claim came up'
+      : 'Could not be awarded'));
     if(ok && win.team===addTargetTeam()) playSound('waiver');   /* your claim came in */
     claims.slice(1).forEach(c=>settleClaim(c.id,'lost',`${win.teamName||teamName(win.team)} had waiver priority`));
     if(ok){ moveToBackOfWaiverOrder(win.team); awarded=true; }
@@ -9665,12 +9728,22 @@ function renderWaivers(){
         </div>${claimantsHTML(w.pid)}</div>`;
       }).join('');
 
-  const mineClaims = mine===null ? [] : all.filter(c=>c.team===mine && c.status==='pending').sort((a,b)=>(+a.clearsAt||0)-(+b.clearsAt||0));
-  const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>${
-    mineClaims.map(c=>`<div class="wv-item"><div class="faRow">
+  const mineClaims = myPendingClaims();
+  /* One claim has no order to set, so the ranking only appears once there is a choice to make */
+  const rank = mineClaims.length > 1;
+  const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>
+    ${rank?`<p class="sub" style="margin:0 0 10px">Your order, top first. They cannot all land — a
+      won claim sends you to the back of the league order, and your roster only has so much room —
+      so put the one you actually want at the top.</p>`:''}${
+    mineClaims.map((c,k)=>`<div class="wv-item"><div class="faRow">
+      ${rank?`<span class="wv-rank">${k+1}</span>`:''}
       <span class="faName">${esc(c.name)}</span>
       <span class="pmeta">${esc(c.pos||'')} ${esc(c.nfl||'')}${c.dropName?` · dropping ${esc(c.dropName)}`:''}</span>
       <span class="statpill">${esc(waiverClearLabel(c.clearsAt))}</span>
+      ${rank?`<span class="wv-move">
+        <button class="btn ghost" ${k===0?'disabled':''} title="Move up" onclick="moveClaim('${c.id}',-1)">▲</button>
+        <button class="btn ghost" ${k===mineClaims.length-1?'disabled':''} title="Move down" onclick="moveClaim('${c.id}',1)">▼</button>
+      </span>`:''}
       <button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${c.id}')">Withdraw</button>
     </div>${claimantsHTML(c.pid)}</div>`).join('')}</div>`;
 
