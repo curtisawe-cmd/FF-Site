@@ -423,11 +423,9 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .board .rnd .cat{font-size:clamp(8px,0.72vw,10px);font-weight:800;letter-spacing:.02em;white-space:nowrap;line-height:1}
 .board .rnd .cat.starter{color:var(--turf-bright)}
 .board .rnd .cat.bench{color:var(--chalk-dim);opacity:.85}
-/* STARTER/BENCH is a desktop-only flourish. The old 900px cutoff still showed it on a phone
-   held sideways (a Pro Max is 932 across) and on a tablet in portrait, which is where the
-   commissioner hit it. 1024 covers every landscape handset and portrait tablet; a real desktop
-   keeps the label. */
-@media(max-width:1024px){.board .rnd .cat{display:none}}
+/* STARTER/BENCH shows at every width. It used to be hidden below 900px because the rail was
+   too narrow and the word - nowrap inside an overflow:hidden cell - simply clipped. The rail
+   is wider on phones now (see renderBoard), so the label fits instead of being dropped. */
 /* A cell can hold more than one sticker now - a team that acquired another team's pick in the
    same round stacks both. min-height keeps empty cells at the classic size; a stacked cell
    grows and the grid row grows with it. Each sticker lives in its own .stk-cell so the
@@ -6140,10 +6138,12 @@ function renderBoard(){
   const board = document.getElementById('board');
   const n = N(), rounds = snakeRounds();
   /* rail is wider than it looks like it needs — the round labels are set bigger now and
-     "STARTER" is nowrap inside an overflow:hidden cell, so a narrow rail clips it.
-     Team columns floor at 56px: on desktop 1fr is bigger anyway, on phones the board
-     overflows into .boardscroll's horizontal swipe instead of crushing names to 2 letters. */
-  board.style.gridTemplateColumns = `clamp(40px,4.3vw,66px) repeat(${n}, minmax(56px,1fr))`;
+     "STARTER" is nowrap inside an overflow:hidden cell, so a narrow rail clips it. The 40px
+     floor was what forced the label to be hidden on phones; 58px fits the word at its 8px
+     size, so the rail carries it at every width instead. Team columns floor at 56px: on
+     desktop 1fr is bigger anyway, on phones the board overflows into .boardscroll's
+     horizontal swipe instead of crushing names to 2 letters. */
+  board.style.gridTemplateColumns = `clamp(58px,4.3vw,66px) repeat(${n}, minmax(56px,1fr))`;
   let html = `<div class="bcorner"></div>`;   /* sticks with the names, else R1 slides in under them */
   S.teams.forEach((t,i)=>html+=`<div class="bhead" style="--tc:${teamColor(i)}">${esc(t.name)}</div>`);
   const byIndex = {}; D.picks.forEach(p=>byIndex[p.pickIndex]=p);
