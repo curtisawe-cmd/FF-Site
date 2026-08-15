@@ -8907,12 +8907,15 @@ function renderTradeCenter(){
          const other = (side==='a') ? T.b : T.a;
          return `<option value="${i}"${i===T[side]?' selected':''}${i===other?' disabled':''}>${esc(t.name)}${i===other?' — already picked':''}</option>`;
        }).join('')}</select>`;
-  /* "Jayden Daniels" -> "J. Daniels", for the narrow phone columns. Defences keep their full
-     name; initialising them produces nonsense like "C. Bengals D/ST". */
+  /* "Jayden Daniels" -> "J. Daniels", for the narrow phone columns. Defences are named
+     "<City> <Nickname> D/ST", so they lose the city instead of the first initial: "C. Bengals
+     D/ST" is nonsense, and "Cincinnati Bengals D/ST" is too long to fit either way. No two
+     nicknames collide, so "Bengals D/ST" still names exactly one defence. */
   const abbrevName = p => { if(!p) return '';
-    if(p.pos==='DEF') return p.name||'';
     const w=String(p.name||'').trim().split(/\s+/);
-    return w.length<2 ? (p.name||'') : `${w[0][0]}. ${w.slice(1).join(' ')}`; };
+    if(w.length<2) return p.name||'';
+    if(p.pos==='DEF') return w.slice(-2).join(' ');
+    return `${w[0][0]}. ${w.slice(1).join(' ')}`; };
   const rosterList = (ti, side, selSet) => {
     const roster = d.picks.filter(p=>p.teamIndex===ti && !p.cut);
     if(!roster.length) return `<p style="color:var(--chalk-dim)">No players \u2014 roster fills in from the draft.</p>`;
