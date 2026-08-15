@@ -760,7 +760,11 @@ nav.tabs button{position:relative}
   .faRow.wv-mine{flex-wrap:wrap;gap:5px 8px}
   .faRow.wv-mine .wv-rank{order:1}
   .faRow.wv-mine .faName{order:2;flex:1 1 calc(100% - 32px)}
-  .faRow.wv-mine .pmeta{order:3;flex:1 1 auto;min-width:0;font-size:12px}
+  /* pmeta takes a full line of its own. Sharing one with the pill and the buttons made the wrap
+     depend on how long "dropping <name>" happened to be, so Withdraw fell to a fourth line on
+     some rows and not others and the card came out ragged. Giving it the line means the control
+     band below always has room for all three: 46 + 94 + 81 + gaps, against 355. */
+  .faRow.wv-mine .pmeta{order:3;flex:1 1 100%;min-width:0;font-size:12px}
   .faRow.wv-mine .statpill{order:4;white-space:nowrap}
   .faRow.wv-mine .wv-move{order:5}
   /* Withdraw sits on the same line as the arrows, so it matches their height rather than being
