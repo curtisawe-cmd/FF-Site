@@ -1805,7 +1805,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <p class="sub" id="feesResetNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="eyebrow" style="margin:18px 0 6px">Sounds</div>
-    <p class="sub" style="margin:0 0 10px;font-size:12px">Type a built-in name (<b>fanfare · tick · buzzer · chime · click · horn · ding · none</b>), paste a link to an audio file, or upload a clip. ▶ tests it. Sounds are per-league; each person can silence their own device with the Sound button up top. <b>App opened</b> plays on the first tap after launching, because browsers refuse to play audio to a page nobody has touched yet.</p>
+    <p class="sub" style="margin:0 0 10px;font-size:12px">Pick a sound from the list, and it plays as you choose it. Under <b>Your own</b> you can paste a link to an audio file, and ↑ uploads a clip from this device (max 150KB). <b>Silent</b> switches an event off. ▶ replays whatever is set. Sounds are per-league; each person can silence their own device with the Sound button up top. <b>App opened</b> plays on the first tap after launching, because browsers refuse to play audio to a page nobody has touched yet.</p>
     <div id="soundRows"></div>
     <div id="rulesInputs"></div>
   </div>
@@ -4867,6 +4867,10 @@ const SOUND_EVENTS = [
   ['poll',   'New poll posted',          'ding']
 ];
 const BUILT_IN_SOUNDS = ['tick','buzzer','chime','click','horn','ding','fanfare','none'];
+/* What the picker calls each one. The row used to be a free-text box, which meant knowing the
+   names by heart and getting silence with no explanation if you mistyped one. */
+const SOUND_LABELS = { tick:'Tick', buzzer:'Buzzer', chime:'Chime', click:'Click',
+                       horn:'Horn', ding:'Ding', fanfare:'Fanfare', none:'Silent' };
 const SOUND_MAX_BYTES = 150000;         /* ~150KB: a second or two of speech at a sane bitrate */
 let _ac = null, _soundUnlocked = false, _audioCache = {};
 function soundsMuted(){ return store.get('ffl_mute')==='1'; }
@@ -10055,28 +10059,53 @@ function setTradeDeadline(v){
 function renderSoundRows(){
   const el = document.getElementById('soundRows'); if(!el) return;
   const S_ = S.sounds = S.sounds || {};
+  const admin = isAdmin();
   el.innerHTML = SOUND_EVENTS.map(([key,label,dflt])=>{
     const v = (S_[key]!==undefined) ? S_[key] : dflt;
     const isFile = v && !BUILT_IN_SOUNDS.includes(v);
-    const shown = isFile ? (v.startsWith('data:') ? 'uploaded clip' : v) : v;
+    /* a whole data URI or a long link would stretch the row off the screen */
+    const shown = !isFile ? v
+      : (v.startsWith('data:') ? 'Uploaded clip'
+        : 'Link: ' + (s => s.length>26 ? s.slice(0,26)+'…' : s)(v.replace(/^https?:\/\//,'')));
+    const opts = BUILT_IN_SOUNDS.map(n =>
+      `<option value="${n}"${!isFile && v===n?' selected':''}>${esc(SOUND_LABELS[n]||n)}</option>`).join('');
     return `<div class="setrow" style="gap:8px;align-items:center;flex-wrap:wrap">
       <label style="flex:1 1 190px;min-width:0">${esc(label)}</label>
-      <input type="text" id="snd_${key}" value="${esc(shown)}" placeholder="${esc(dflt)}"
-        style="flex:1 1 170px;min-width:130px" ${v.startsWith('data:')?'readonly title="An uploaded clip. Clear it to type a name or link instead."':''}
-        onchange="setSound('${key}', this.value)">
-      <button class="btn ghost" style="padding:3px 10px" title="Play it" onclick="playSound('${key}')">▶</button>
-      <label class="btn ghost" style="padding:3px 10px;cursor:pointer" title="Upload a short clip (max 150KB)">↑<input type="file" accept="audio/*" style="display:none" onchange="uploadSound('${key}', event)"></label>
-      <button class="btn ghost" style="padding:3px 10px" title="Silence this event" onclick="setSound('${key}','none');renderSoundRows()">✕</button>
+      <select id="snd_${key}" style="flex:1 1 170px;min-width:145px" onchange="pickSound('${key}', this.value)"
+        ${admin?'':'disabled title="Commissioners set the league sounds."'}>
+        <optgroup label="Built in">${opts}</optgroup>
+        <optgroup label="Your own">
+          ${isFile?`<option value="__keep" selected>${esc(shown)}</option>`:''}
+          <option value="__link">Paste a link…</option>
+        </optgroup>
+      </select>
+      <button class="btn ghost" style="padding:3px 10px" title="Hear it" onclick="playSound('${key}')">▶</button>
+      <label class="btn ghost" style="padding:3px 10px;cursor:${admin?'pointer':'not-allowed'}${admin?'':';opacity:.4'}" title="Upload a short clip (max 150KB)">↑<input type="file" accept="audio/*" style="display:none" ${admin?'':'disabled'} onchange="uploadSound('${key}', event)"></label>
     </div>`;
   }).join('');
+}
+/* Two rows of the picker are not sounds: __keep is the custom clip already set, re-listed so it
+   has something to be selected on, and __link asks for a URL. Picking a built-in plays it - the
+   whole point of a list is hearing what you chose, and the change event is the gesture browsers
+   demand before they will make any noise at all. */
+function pickSound(key, val){
+  if(val === '__keep') return;
+  if(val === '__link'){
+    const url = prompt('Paste a link to an audio file (MP3, WAV or M4A):', '');
+    if(url && url.trim()) setSound(key, url.trim());
+    else renderSoundRows();                   /* snap the box back to what is actually set */
+    return;
+  }
+  setSound(key, val);
+  if(val !== 'none') playSound(key);
 }
 function setSound(key, val){
   if(!requireAdmin()){ renderSoundRows(); return; }
   const v = String(val||'').trim();
   S.sounds = S.sounds || {};
-  /* "uploaded clip" is the label we SHOW for a data URI - typing over it must not become the
-     literal text, and leaving it alone must not wipe the clip */
-  if(v === 'uploaded clip') return;
+  /* the picker shows a data URI as "Uploaded clip"; if that label ever reaches here as a value
+     it is the label, not a sound, and storing it would silently wipe the real clip */
+  if(/^uploaded clip$/i.test(v)) return;
   S.sounds[key] = v || 'none';
   delete _audioCache[v];                     /* re-fetch if the link changed */
   saveState(); renderSoundRows();
