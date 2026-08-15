@@ -745,8 +745,12 @@ nav.tabs button{position:relative}
 .wv-move .btn{padding:1px 7px;font-size:11px;line-height:1.5;min-width:26px}
 @media(max-width:640px){
   .wv-claimants{padding-left:4px}
-  .wv-rank{min-width:19px;height:19px;font-size:10px}
-  .wv-move .btn{padding:1px 5px;min-width:23px}
+  .wv-rank{min-width:22px;height:22px;font-size:11px}
+  /* Thumb-sized, not mouse-sized. At 23x21 these were a coin flip to hit, and missing one
+     reorders the wrong claim - a silent wrong answer rather than a visible miss. */
+  .wv-move{gap:6px}
+  .wv-move .btn{padding:0;min-width:44px;height:38px;font-size:14px;display:inline-flex;
+    align-items:center;justify-content:center}
   /* The rank badge and two arrows are three more things competing for a 375px line, and flex
      paid for them out of .faName until the player name was literally 0px wide. Break the line
      after the name: rank and name on top, everything you can press underneath.
@@ -759,7 +763,9 @@ nav.tabs button{position:relative}
   .faRow.wv-mine .pmeta{order:3;flex:1 1 auto;min-width:0;font-size:12px}
   .faRow.wv-mine .statpill{order:4;white-space:nowrap}
   .faRow.wv-mine .wv-move{order:5}
-  .faRow.wv-mine > .btn{order:6;margin-left:auto}
+  /* Withdraw sits on the same line as the arrows, so it matches their height rather than being
+     a 24px sliver next to two 38px buttons */
+  .faRow.wv-mine > .btn{order:6;margin-left:auto;min-height:38px;padding:3px 14px}
 }
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
