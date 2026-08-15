@@ -747,6 +747,16 @@ nav.tabs button{position:relative}
   .wv-claimants{padding-left:4px}
   .wv-rank{min-width:19px;height:19px;font-size:10px}
   .wv-move .btn{padding:1px 5px;min-width:23px}
+  /* The rank badge and two arrows are three more things competing for a 375px line, and flex
+     paid for them out of .faName until the player name was literally 0px wide. Break the line
+     after the name: rank and name on top, everything you can press underneath. */
+  .wv-mine{flex-wrap:wrap;gap:5px 8px}
+  .wv-mine .wv-rank{order:1}
+  .wv-mine .faName{order:2;flex:1 1 calc(100% - 32px)}
+  .wv-mine .pmeta{order:3;flex:1 1 auto;min-width:0;font-size:12px}
+  .wv-mine .statpill{order:4;white-space:nowrap}
+  .wv-mine .wv-move{order:5}
+  .wv-mine > .btn{order:6;margin-left:auto}
 }
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
@@ -9735,7 +9745,7 @@ function renderWaivers(){
     ${rank?`<p class="sub" style="margin:0 0 10px">Your order, top first. They cannot all land — a
       won claim sends you to the back of the league order, and your roster only has so much room —
       so put the one you actually want at the top.</p>`:''}${
-    mineClaims.map((c,k)=>`<div class="wv-item"><div class="faRow">
+    mineClaims.map((c,k)=>`<div class="wv-item"><div class="faRow wv-mine">
       ${rank?`<span class="wv-rank">${k+1}</span>`:''}
       <span class="faName">${esc(c.name)}</span>
       <span class="pmeta">${esc(c.pos||'')} ${esc(c.nfl||'')}${c.dropName?` · dropping ${esc(c.dropName)}`:''}</span>
