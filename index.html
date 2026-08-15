@@ -1251,10 +1251,20 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .tr-item:last-child{border-bottom:none}
 .tr-item.none{color:var(--chalk-dim);font-style:italic}
 .tr-swap{align-self:center;font-size:17px;color:var(--chalk-dim)}
-/* on a phone the columns stack, so the arrow has to point down instead of across */
+/* Phones keep the two columns SIDE BY SIDE - stacking them turned a swap back into a list you
+   read top to bottom, which is the thing columns were meant to fix, and Game Center keeps its
+   two sides facing each other at this width too. Everything shrinks instead: tighter gap and
+   padding, smaller type, and a smaller logo (the size is set inline by teamMarkHTML, so it
+   needs !important to override). Long names wrap inside their own column. */
 @media(max-width:560px){
-  .tr-grid{grid-template-columns:minmax(0,1fr);gap:6px}
-  .tr-swap{justify-self:center;transform:rotate(90deg)}
+  .tr-grid{gap:5px}
+  .tr-col{padding:7px 7px;border-radius:8px}
+  .tr-head{gap:6px;margin-bottom:5px}
+  .tr-head .team-logo,.tr-head .avatar{width:24px !important;height:24px !important}
+  .tr-name{font-size:12px}
+  .tr-eyebrow{font-size:8px;letter-spacing:.09em}
+  .tr-item{font-size:12px;padding:2px 0}
+  .tr-swap{font-size:14px}
 }
 /* ---- win probability bar ---- */
 .wp{padding:8px 10px;background:var(--panel-2);border-bottom:1px solid var(--line)}
