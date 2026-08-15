@@ -8348,6 +8348,13 @@ function saveRealDraft(d){
 }
 window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set(), ra:new Set(), rb:new Set(), pickYear:null};
 function tradeSetPickYear(y){ window.tradeSel.pickYear = +y; window.tradeSel.ra = new Set(); window.tradeSel.rb = new Set(); renderTradeCenter(); }
+/* Is there anything on the table at all? Send refuses an empty offer with a toast, and a
+   button whose only answer is "no" is a trap - so it greys out instead of arguing. Sending
+   clears all four sets, which is what leaves it greyed the moment an offer goes out. */
+function tradeHasSelection(){
+  const T = window.tradeSel || {};
+  return !!((T.pa && T.pa.size) || (T.pb && T.pb.size) || (T.ra && T.ra.size) || (T.rb && T.rb.size));
+}
 function tradeToggle(side, pid){
   const s2 = window.tradeSel[side];
   if(s2.has(pid)) s2.delete(pid); else s2.add(pid);
@@ -8543,6 +8550,7 @@ function executeTrade(){
 }
 /* propose: goes to the other manager for acceptance, then league review */
 function sendTradeOffer(){
+  if(window.__tradeSending) return;               /* a second tap while the first is in flight sent it twice */
   if(!window.fbUser){ toast('Sign in to propose a trade.'); openAuth(); return; }
   if(tradesClosed()){ toast(`Trade deadline has passed — trades closed at ${tradeDeadlineLabel()}.`); return; }
   if(!fbOk()) return;
@@ -8559,11 +8567,20 @@ function sendTradeOffer(){
             fromEmail:window.fbUser.email||'', pa:[...T.pa], pb:[...T.pb], ra:raS, rb:rbS, py,
             status:'pending', createdAt:Date.now() };
   if(prior) o.counterOf=prior;
+  /* grey it out now rather than after the round trip - on a phone the wait is exactly when a
+     second tap lands, and two taps used to mean two identical offers */
+  window.__tradeSending = true;
+  const sendBtn = document.getElementById('sendOfferBtn');
+  if(sendBtn){ sendBtn.disabled = true; sendBtn.textContent = 'Sending\u2026'; }
   window.FB.dbSet(`${offersPath()}/${id}`, o).then(()=>{
     if(prior) window.FB.dbUpdate(`${offersPath()}/${prior}`, {status:'countered', closedAt:Date.now()}).catch(()=>{});
     T.pa=new Set(); T.pb=new Set(); T.ra=new Set(); T.rb=new Set(); window.counterOf=null;
+    window.__tradeSending = false;
     toast(prior?'Counter sent \uD83D\uDCE8':'Offer sent \uD83D\uDCE8'); renderTradeCenter();
-  }).catch(()=>toast('Could not send the offer.'));
+  }).catch(()=>{
+    window.__tradeSending = false;                /* the offer never landed, so let them try again */
+    toast('Could not send the offer.'); renderTradeCenter();
+  });
 }
 function offerCanAccept(o){
   if(o.status!=='pending') return false;
@@ -8970,6 +8987,9 @@ function renderTradeCenter(){
   }
   const deadlineNote = tradeDeadlineWk()
     ? `<div class="notice" style="margin:0 0 14px">Trade deadline: <b>${esc(tradeDeadlineLabel())}</b>. Offers still pending at the deadline die unaccepted.</div>` : '';
+  /* Send is live only while something is actually on the table. Because a successful send
+     clears the selection, this is also what greys the button out the moment an offer goes. */
+  const armed = tradeHasSelection() && !window.__tradeSending;
   el.innerHTML = deadlineNote + `
     <div class="grid2 tb-grid" style="margin-bottom:14px">
       <div class="card">
@@ -9005,9 +9025,12 @@ function renderTradeCenter(){
     </div>
     ${window.counterOf?`<div class="notice" style="margin-bottom:10px">Countering <b>${esc((offersMap[window.counterOf]||{}).aName||'an offer')}</b>'s offer — adjust the terms below, then send. <a href="#" onclick="clearCounter();return false" style="color:var(--charge)">cancel</a></div>`:''}
     <div class="row" style="margin-bottom:8px;gap:8px">
-      <button class="btn" onclick="sendTradeOffer()">${window.counterOf?'Send Counter':'Send Offer'}</button>
-      ${isAdmin()?`<button class="btn ghost" onclick="executeTrade()">Execute now (commish)</button>`:''}
+      <button class="btn" id="sendOfferBtn" onclick="sendTradeOffer()" ${armed?'':'disabled'}
+        title="${armed?'':'Check a player or add a draft pick first'}">${window.counterOf?'Send Counter':'Send Offer'}</button>
+      ${isAdmin()?`<button class="btn ghost" onclick="executeTrade()" ${armed?'':'disabled'}
+        title="${armed?'':'Check a player or add a draft pick first'}">Execute now (commish)</button>`:''}
     </div>
+    ${armed?'':`<p class="sub" style="margin:0 0 10px">Nothing on the table yet ${window.counterOf?'— adjust the terms above to send a counter.':'— tick a player or add a draft pick to send an offer.'}</p>`}
     <p class="sub" style="margin:0 0 18px">Offers go to the other manager to accept, then ${tradeReviewMs()===0
       ? `they go through <b>immediately</b> \u2014 no league review, no veto`
       : `a <b>${tradeReviewLabel()} league review</b> \u2014 it takes <b>${vetoNeeded()} vetoes</b> to block a trade. The two managers in the deal don't get a vote on it`}. Traded players land on their new team's bench; traded picks reassign on the draft board.</p>
