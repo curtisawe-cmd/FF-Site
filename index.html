@@ -7380,7 +7380,12 @@ async function renderGameCenter(){
   if(!S.season || !S.season.schedule){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No schedule yet.</p></div>`; return; }
   const wk = +(window.muWeek||1);
   const season = +(window.gcSeason || (S.season&&S.season.year) || 2026);
-  const layout = window.gcLayout || (window.gcLayout = 'all');   /* show every matchup unless you pick swipe */
+  /* Phones swipe, full stop. The stacked "all matchups" list is a desktop shape - on a phone it
+     is one endless scroll with a jump pad bolted on, while a swipe with snap points is what the
+     hardware is for. The choice is not offered at this width, so the toggle is not rendered
+     either; the desktop preference is remembered untouched for when the window is wide again. */
+  const narrow = !!(window.matchMedia && window.matchMedia('(max-width:720px)').matches);
+  const layout = narrow ? 'swipe' : (window.gcLayout || (window.gcLayout = 'all'));
   /* Your own matchup reads first — that's the one everyone opens Game Center for. Per manager:
      myTeamIdx() is their claimed team (or their device pick when signed out), so each person
      gets a different order. Copy before reordering: S.season.schedule is live league state
@@ -7399,8 +7404,8 @@ async function renderGameCenter(){
       <label class="sub" style="margin:0">stats from</label>
       <select onchange="window.gcSeason=+this.value;renderGameCenter()">${[2026,2025,2024,2023].map(y=>`<option value="${y}"${y===season?' selected':''}>${y}</option>`).join('')}</select>
       <span style="flex:1"></span>
-      <button class="btn ${layout==='all'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='all';renderGameCenter()">All matchups</button>
-      <button class="btn ${layout==='swipe'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='swipe';renderGameCenter()">One at a time</button>
+      ${narrow ? '' : `<button class="btn ${layout==='all'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='all';renderGameCenter()">All matchups</button>
+      <button class="btn ${layout==='swipe'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='swipe';renderGameCenter()">One at a time</button>`}
       <a href="#" class="poolrefresh" onclick="refreshGameCenter();return false">refresh now</a>
     </div>`;
   if(!games.length){ el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">No matchups in week ${wk}.</p></div>`; return; }
@@ -10813,7 +10818,19 @@ function setLayout(v){
   syncHeaderH();
   toast(side ? 'Sidebar layout on' : 'Top bar layout');
 }
-window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncBoardMax(); }catch(e){} try{ syncRolePreviewBtn(); }catch(e){} });
+window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncBoardMax(); }catch(e){} try{ syncRolePreviewBtn(); }catch(e){}
+  /* Game Center picks its layout at render time, so crossing the phone breakpoint - rotating a
+     handset, mostly - has to redraw it or you keep the other width's shape. Only on an actual
+     crossing; redrawing on every resize tick would fight a live board. */
+  try{
+    const n = !!(window.matchMedia && window.matchMedia('(max-width:720px)').matches);
+    if(window._gcNarrow===undefined) window._gcNarrow = n;
+    else if(n !== window._gcNarrow){
+      window._gcNarrow = n;
+      if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
+    }
+  }catch(e){}
+});
 window.addEventListener('load', syncHeaderH);
 /* The ribbon's Alerts and View-as-manager buttons appear only after push starts and the role
    resolves, and either can wrap the ribbon to a new line. Resize and load both fire before
