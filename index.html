@@ -1750,7 +1750,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <p class="sub" id="feesResetNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="eyebrow" style="margin:18px 0 6px">Sounds</div>
-    <p class="sub" style="margin:0 0 10px;font-size:12px">Type a built-in name (<b>tick · buzzer · chime · click · horn · ding · none</b>), paste a link to an audio file, or upload a clip. ▶ tests it. Sounds are per-league; each person can silence their own device with the Sound button up top.</p>
+    <p class="sub" style="margin:0 0 10px;font-size:12px">Type a built-in name (<b>fanfare · tick · buzzer · chime · click · horn · ding · none</b>), paste a link to an audio file, or upload a clip. ▶ tests it. Sounds are per-league; each person can silence their own device with the Sound button up top. <b>App opened</b> plays on the first tap after launching, because browsers refuse to play audio to a page nobody has touched yet.</p>
     <div id="soundRows"></div>
     <div id="rulesInputs"></div>
   </div>
@@ -4801,6 +4801,7 @@ function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').ma
    iPhone), so the first tap anywhere unlocks the audio context. Nothing can play before that,
    which is a browser rule, not a choice. */
 const SOUND_EVENTS = [
+  ['open',   'App opened (intro)',       'fanfare'],
   ['tick',   'Clock ticking (last 10s)', 'tick'],
   ['buzzer', 'Pick clock expired',       'buzzer'],
   ['turn',   "You're on the clock",      'chime'],
@@ -4810,7 +4811,7 @@ const SOUND_EVENTS = [
   ['waiver', 'Waiver claim settles',     'ding'],
   ['poll',   'New poll posted',          'ding']
 ];
-const BUILT_IN_SOUNDS = ['tick','buzzer','chime','click','horn','ding','none'];
+const BUILT_IN_SOUNDS = ['tick','buzzer','chime','click','horn','ding','fanfare','none'];
 const SOUND_MAX_BYTES = 150000;         /* ~150KB: a second or two of speech at a sane bitrate */
 let _ac = null, _soundUnlocked = false, _audioCache = {};
 function soundsMuted(){ return store.get('ffl_mute')==='1'; }
@@ -4819,10 +4820,30 @@ function audioCtx(){
   if(_ac.state==='suspended') _ac.resume().catch(()=>{});
   return _ac;
 }
-/* the first real gesture on the page is what earns us permission to make noise */
+/* The first real gesture on the page is what earns us permission to make noise - and it is
+   also when the intro can play. It CANNOT play during load: every browser refuses audio to a
+   page the user has not touched, so an on-load intro would simply be silence. Firing it on
+   that first tap is as close to "when you open the app" as the web allows. */
+let _openPlayed = false;
+function soundAppOpened(){
+  if(_openPlayed) return;
+  _openPlayed = true;
+  try{ playSound('open'); }catch(e){}
+}
 ['pointerdown','keydown','touchstart'].forEach(ev=>
-  window.addEventListener(ev, ()=>{ if(_soundUnlocked) return; _soundUnlocked = true;
-    try{ audioCtx(); }catch(e){} }, { once:true, passive:true }));
+  window.addEventListener(ev, ()=>{
+    if(!_soundUnlocked){ _soundUnlocked = true; try{ audioCtx(); }catch(e){} }
+    soundAppOpened();
+  }, { once:true, passive:true }));
+/* An installed app usually RESUMES rather than reloads, so a cold-start-only intro would play
+   about once a week. Coming back after five minutes away counts as opening it again; flicking
+   to another tab and straight back does not. */
+let _hiddenAt = 0;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden){ _hiddenAt = Date.now(); return; }
+  if(_hiddenAt && Date.now()-_hiddenAt > 5*60000){ _openPlayed = false; soundAppOpened(); }
+  _hiddenAt = 0;
+});
 /* one oscillator + one gain envelope is enough for every built-in we need */
 function blip(freq, ms, type, vol, slideTo){
   const ac = audioCtx(); if(!ac) return;
@@ -4844,6 +4865,11 @@ function playBuiltIn(name){
     case 'click':  blip(1200, 35, 'triangle', 0.16); break;
     case 'horn':   blip(320, 900, 'sawtooth', 0.32); setTimeout(()=>blip(240, 900, 'sawtooth', 0.28), 60); break;
     case 'ding':   blip(1046, 380, 'sine', 0.25); break;
+    /* a rising three-note arpeggio - enough of an intro to feel like the app starting up
+       without being a jingle anyone has to sit through */
+    case 'fanfare': blip(523, 220, 'triangle', 0.22);
+                    setTimeout(()=>blip(659, 220, 'triangle', 0.22), 130);
+                    setTimeout(()=>blip(880, 520, 'triangle', 0.26), 260); break;
     default: break;                                  /* 'none' and anything unknown stay silent */
   }
 }
