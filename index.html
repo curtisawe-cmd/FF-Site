@@ -911,6 +911,13 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 :root[data-role="admin"] .role-btn{color:var(--on-turf);background:var(--turf);border-color:var(--turf)}
 :root[data-role="admin"] .role-btn .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.2)}
 :root[data-role="user"] .admin-only{display:none !important}
+/* an unlocked description: it has to look like something you can type in, or nobody will */
+.note-edit{
+  display:block;background:var(--panel-2);border:1px dashed var(--turf);border-radius:8px;
+  padding:7px 10px;margin:6px 0;color:var(--chalk);cursor:text;outline:none;white-space:pre-wrap;
+}
+.note-edit:focus{border-style:solid;box-shadow:0 0 0 3px var(--turf-wash)}
+.note-edit:empty::before{content:'Empty — the original wording comes back';color:var(--chalk-dim);font-style:italic}
 /* managers get Settings read-only, so the tab stays visible */
 :root[data-role="user"] #view-settings button{display:none}
 :root[data-role="user"] #view-settings input:disabled,
@@ -1424,6 +1431,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
     <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
     <button class="theme-toggle" id="muteBtn" onclick="toggleMute()" aria-label="Toggle sounds"><span class="dot"></span><span>Sound on</span></button>
+    <button class="theme-toggle admin-only" id="notesBtn" onclick="toggleNotesEdit()" title="Unlock the little descriptions around the site so you can type over them. Nobody else can edit them."><span class="dot"></span><span id="notesLabel">Text locked</span></button>
   </div>
 </header>
 
@@ -1451,7 +1459,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="hero">
     <div class="eyebrow">Your league. Your rules.</div>
     <div class="big" id="homeLeagueName">Bitch Boy League</div>
-    <p class="sub" style="margin-top:8px">The league's own turf — off NFL.com, fully customizable.</p>
+    <p class="sub" data-note="home-tagline" style="margin-top:8px">The league's own turf — off NFL.com, fully customizable.</p>
     <div class="row">
       <button class="btn" onclick="showView('draft')">Enter Draft Room</button>
       <button class="btn ghost" onclick="showView('settings')">League Settings</button>
@@ -1755,13 +1763,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="During a live NFL week, any member's open app refreshes the live scoreboard from the stat feed (about every 5 minutes). Commissioner scores stay official.">Live auto-scoring</label><input type="checkbox" id="setAutoScore" style="width:auto" onchange="S.autoScoreOff=!this.checked;saveState();maybeAutoScore()"></div>
     </div>
     <div class="eyebrow" style="margin:18px 0 4px">Extra snapshot rows</div>
-    <p class="sub" style="margin:0 0 10px">Three of your own lines on the Home page's League Snapshot — buy-in, trade deadline, punishment for last place, whatever. Leave a row blank to hide it.</p>
+    <p class="sub" data-note="set-snapshot" style="margin:0 0 10px">Three of your own lines on the Home page's League Snapshot — buy-in, trade deadline, punishment for last place, whatever. Leave a row blank to hide it.</p>
     <div id="snapExtras"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
     <h2>Prize Money</h2>
-    <p class="sub" style="margin-bottom:12px">Buy-in per manager sets the pot. Division winners get their buy-in back; the podium payouts below are placeholders — edit them to match your league.</p>
+    <p class="sub" data-note="set-buyin" style="margin-bottom:12px">Buy-in per manager sets the pot. Division winners get their buy-in back; the podium payouts below are placeholders — edit them to match your league.</p>
     <div id="prizesView"></div>
   </div>
 
@@ -1771,7 +1779,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <h2 style="margin:0">Commissioners</h2>
       <span id="commishHint" class="eyebrow" style="margin:0"></span>
     </div>
-    <p class="sub" style="margin:6px 0 14px">Commissioners can edit league settings, run the draft, and manage every team. Only the league owner can add or remove commissioners.</p>
+    <p class="sub" data-note="set-roles" style="margin:6px 0 14px">Commissioners can edit league settings, run the draft, and manage every team. Only the league owner can add or remove commissioners.</p>
     <div id="commishList"></div>
   </div>
 
@@ -1780,7 +1788,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <h2 style="margin:0">League Managers</h2>
       <span id="mgrCount" class="eyebrow" style="margin:0"></span>
     </div>
-    <p class="sub" style="margin:6px 0 14px">The master roster of everyone who manages a team. Edit a name to fix it everywhere; remove someone to free them up. This list fills the manager dropdown on each team below.</p>
+    <p class="sub" data-note="set-managers" style="margin:6px 0 14px">The master roster of everyone who manages a team. Edit a name to fix it everywhere; remove someone to free them up. This list fills the manager dropdown on each team below.</p>
     <div class="mgr-list" id="managerList"></div>
     <div class="mgr-add">
       <input type="text" id="mgrNew" placeholder="Add a manager…" onkeydown="if(event.key==='Enter')addManager()">
@@ -1790,7 +1798,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <div class="card" style="margin-bottom:18px">
     <h2>Teams &amp; Draft Order</h2>
-    <p class="sub" style="margin-bottom:10px">Order below = round 1 pick order (snakes every round). Check <b>auto</b> for any manager who can’t attend — auto teams draft themselves: starters first (QB, 2 RB, 2 WR, TE, flex, K, DEF), then best available. The commissioner still makes auto teams’ keeper-round picks.</p>
+    <p class="sub" data-note="set-draftorder" style="margin-bottom:10px">Order below = round 1 pick order (snakes every round). Check <b>auto</b> for any manager who can’t attend — auto teams draft themselves: starters first (QB, 2 RB, 2 WR, TE, flex, K, DEF), then best available. The commissioner still makes auto teams’ keeper-round picks.</p>
     <div class="row" style="margin:0 0 14px;gap:10px;align-items:center;flex-wrap:wrap">
       <label style="font-weight:600">Number of teams</label>
       <select id="teamCount" onchange="setTeamCount(+this.value)">
@@ -1813,14 +1821,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <div class="card">
       <h2>Custom Scoring</h2>
-      <p class="sub" style="margin-bottom:10px">Set any value — decimals and negatives allowed.</p>
+      <p class="sub" data-note="set-scoring" style="margin-bottom:10px">Set any value — decimals and negatives allowed.</p>
       <div class="setgrid" id="scoringInputs"></div>
     </div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
     <h2>League Rules</h2>
-    <p class="sub" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
+    <p class="sub" data-note="set-rules" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
     <div class="setgrid" style="margin-bottom:12px">
       <div class="setrow"><label title="How long the league gets to veto a trade after the other manager accepts it. Instant means accepted trades process straight away with no veto window.">Trade review window</label><select id="setTradeReview" style="max-width:200px" onchange="setTradeReview(this.value)"></select></div>
       <div class="setrow"><label title="Trades close for everyone, commissioner included, the moment this week's games kick off. Offers still pending at the deadline die unaccepted. Off = trade all season.">Trade deadline</label><select id="setTradeDeadline" style="max-width:200px" onchange="setTradeDeadline(this.value)"></select></div>
@@ -1838,14 +1846,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <p class="sub" id="feesResetNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="eyebrow" style="margin:18px 0 6px">Sounds</div>
-    <p class="sub" style="margin:0 0 10px;font-size:12px">Pick a sound from the list, and it plays as you choose it. Under <b>Your own</b> you can paste a link to an audio file, and ↑ uploads a clip from this device (max 150KB). <b>Silent</b> switches an event off. ▶ replays whatever is set. Sounds are per-league; each person can silence their own device with the Sound button up top. <b>App opened</b> plays on the first tap after launching, because browsers refuse to play audio to a page nobody has touched yet.</p>
+    <p class="sub" data-note="set-sounds" style="margin:0 0 10px;font-size:12px">Pick a sound from the list, and it plays as you choose it. Under <b>Your own</b> you can paste a link to an audio file, and ↑ uploads a clip from this device (max 150KB). <b>Silent</b> switches an event off. ▶ replays whatever is set. Sounds are per-league; each person can silence their own device with the Sound button up top. <b>App opened</b> plays on the first tap after launching, because browsers refuse to play audio to a page nobody has touched yet.</p>
     <div id="soundRows"></div>
     <div id="rulesInputs"></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
     <h2>Traded Draft Picks</h2>
-    <p class="sub" style="margin-bottom:10px">Picks that changed hands before the draft. The draft room honors these automatically — the 2026 deadline deals are preloaded. (Trades are matched by team name, so finish renaming teams before adding trades.)</p>
+    <p class="sub" data-note="set-pickstrades" style="margin-bottom:10px">Picks that changed hands before the draft. The draft room honors these automatically — the 2026 deadline deals are preloaded. (Trades are matched by team name, so finish renaming teams before adding trades.)</p>
     <div id="tradeList"></div>
     <div class="row" style="margin-top:10px;flex-wrap:wrap">
       <select id="trYear"></select>
@@ -1865,7 +1873,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <div class="card admin-only">
     <h2>Save / Share League File</h2>
-    <p class="sub" style="margin-bottom:10px">Your settings save automatically in this browser. Export a league file as a backup or to move to another computer — it also captures draft results.</p>
+    <p class="sub" data-note="set-backup" style="margin-bottom:10px">Your settings save automatically in this browser. Export a league file as a backup or to move to another computer — it also captures draft results.</p>
     <div class="row">
       <button class="btn" onclick="exportLeague()">Export League File</button>
       <button class="btn ghost" onclick="document.getElementById('importFile').click()">Import League File</button>
@@ -1878,7 +1886,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <h2 style="margin:0">Typography</h2>
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="resetTypography()">Reset to default</button>
     </div>
-    <p class="sub" style="margin:6px 0 12px">Four roles cover the whole site. Change the font, weight, spacing, case, slant or colour of any of them — everything updates as you pick.</p>
+    <p class="sub" data-note="set-type" style="margin:6px 0 12px">Four roles cover the whole site. Change the font, weight, spacing, case, slant or colour of any of them — everything updates as you pick.</p>
     <div id="typeInputs"></div>
   </div>
 
@@ -1888,7 +1896,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="grid2 admin-only" style="margin-bottom:18px">
     <div class="card">
       <h2>Draft Alarm Insults</h2>
-      <p class="sub" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Write <b>{mgr}</b> for the manager on the clock, <b>{team}</b> for their team, <b>{player}</b> for whoever they tried to draft and <b>{pos}</b> for the position; each alarm fills in the real ones, and a line with no tokens shows as-is. <b>{mgr}</b> falls back to the team name for anyone without a manager set. Leave it blank to use the built-in set.</p>
+      <p class="sub" data-note="set-alarms" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Write <b>{mgr}</b> for the manager on the clock, <b>{team}</b> for their team, <b>{player}</b> for whoever they tried to draft and <b>{pos}</b> for the position; each alarm fills in the real ones, and a line with no tokens shows as-is. <b>{mgr}</b> falls back to the team name for anyone without a manager set. Leave it blank to use the built-in set.</p>
       <textarea id="setInsults" rows="6" placeholder="Sit down, {mgr}&#10;{team} can't count to nine&#10;{player} is a {pos}, genius" onchange="saveInsults(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="testPickAlarm()">Test alarm</button>
@@ -1897,7 +1905,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
     <div class="card">
       <h2>Trade Alarm Lines</h2>
-      <p class="sub" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set. Write <b>{a}</b> and <b>{b}</b> where the two teams' names should go (or <b>{teams}</b> for both at once) and each alarm fills in the actual teams — a line with no tokens shows as-is.</p>
+      <p class="sub" data-note="set-tradehype" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set. Write <b>{a}</b> and <b>{b}</b> where the two teams' names should go (or <b>{teams}</b> for both at once) and each alarm fills in the actual teams — a line with no tokens shows as-is.</p>
       <textarea id="setTradeLines" rows="6" placeholder="{a} just fleeced {b}&#10;{teams} — papers signed&#10;Somebody call the cops, {a} robbed {b}" onchange="saveTradeLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="tradeAlarm('Nut buster ↔ Prater\'s Leg — test alarm','Nut buster',&quot;Prater's Leg&quot;)">Test alarm</button>
@@ -1906,7 +1914,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
     <div class="card">
       <h2>Keeper Alarm Lines</h2>
-      <p class="sub" style="margin-bottom:10px">A manager can only keep the same player one year. If a keeper-round pick lands on somebody <b>that same manager</b> already kept last season, this screams across the screen — a different manager keeping him is fine and stays quiet. <b>The pick still goes through</b>: a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for whoever kept him and <b>{y}</b> for the year. Leave blank for the built-in set.</p>
+      <p class="sub" data-note="set-keepers" style="margin-bottom:10px">A manager can only keep the same player one year. If a keeper-round pick lands on somebody <b>that same manager</b> already kept last season, this screams across the screen — a different manager keeping him is fine and stays quiet. <b>The pick still goes through</b>: a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for whoever kept him and <b>{y}</b> for the year. Leave blank for the built-in set.</p>
       <textarea id="setKeeperLines" rows="6" placeholder="{p} was kept last year, you thief&#10;{team} already had {p} in {y}&#10;One year means one year" onchange="saveKeeperLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="keeperAlarm('Christian McCaffrey','2025','WiFi is Down','WiFi is Down')">Test alarm</button>
@@ -1915,7 +1923,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
     <div class="card">
       <h2>Mock Draft Trash Talk</h2>
-      <p class="sub" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
+      <p class="sub" data-note="set-mockslam" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
       <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="trashTalk()">Test animation</button>
@@ -1929,7 +1937,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <button class="btn ghost" style="padding:2px 10px;font-size:12px" id="tfLockBtn" onclick="toggleTabFlashLock()">Unlock</button>
     </div>
     <div id="tabFlashPanel" style="display:none;margin-top:10px">
-      <p class="sub" style="margin:0 0 8px;font-size:12px">Full-screen message for 1.7s on every Nth tab click. One per line; blank = off.</p>
+      <p class="sub" data-note="set-easter" style="margin:0 0 8px;font-size:12px">Full-screen message for 1.7s on every Nth tab click. One per line; blank = off.</p>
       <textarea id="setTabFlash" rows="3" placeholder="One message per line…" style="font-size:13px" onchange="saveTabFlash(this.value)"></textarea>
       <div class="row" style="margin-top:8px;gap:6px;align-items:center">
         <label class="sub" style="margin:0;font-size:12px">Every</label>
@@ -1943,7 +1951,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <div class="card" style="margin-top:18px">
     <h2>Push notifications</h2>
-    <p class="sub" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
+    <p class="sub" data-note="set-push" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
     <div class="setgrid">
       <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
       <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
@@ -3627,6 +3635,108 @@ function loadState(){
    to catch. Outside the settings view it is a no-op and saving behaves exactly as before. */
 function saveState(){ markSettingsDirty(); store.set('ffl_state', JSON.stringify(S)); pushSettings(); }
 
+/* =====================================================
+   Editable descriptions
+   Any explanatory blurb carrying data-note="key" can be typed over by the owner. The text
+   already in the markup IS the default - there is no separate defaults table to drift out of
+   sync with it, and emptying a box puts the shipped wording back.
+   Numbers that move live are written as {tokens} rather than interpolated, so an edited blurb
+   keeps them: a commissioner who rewrites the waiver line still gets the real waiver period,
+   and "1 hours" cannot happen because {waitTime} carries its own plural.
+   Overrides live in S.notes, which rides along in the settings blob already synced to the
+   league, so no database rule has to change.
+   ===================================================== */
+let _noteDflt = {}, _notePainting = false, _notePaintST = null;
+function notesEditing(){ return isAdmin() && store.get('ffl_notes_edit')==='1'; }
+function noteVars(){
+  const h = (typeof waiverHours==='function') ? waiverHours() : 0;
+  return {
+    waitTime: h===1 ? '1 hour' : `${h} hours`,
+    hours: h,
+    teams: (S.teams||[]).length,
+    roster: (typeof rosterLimit==='function') ? rosterLimit() : '',
+    year: (typeof curDraftYear==='function') ? curDraftYear() : ''
+  };
+}
+function fillNote(s){
+  const v = noteVars();
+  return String(s||'').replace(/\{(\w+)\}/g, (m,k)=> (k in v) ? String(v[k]) : m);
+}
+function noteDefault(el, key){
+  if(_noteDflt[key] === undefined) _noteDflt[key] = (el.textContent||'').trim();
+  return _noteDflt[key];
+}
+/* Called after any render. Writes only when the text actually differs, because this runs off a
+   MutationObserver and an unconditional write would retrigger it forever. */
+function paintNotes(){
+  if(_notePainting) return;
+  _notePainting = true;
+  try{
+    const edit = notesEditing();
+    document.querySelectorAll('[data-note]').forEach(el=>{
+      const key = el.getAttribute('data-note'); if(!key) return;
+      if(el === document.activeElement) return;            /* being typed in: hands off */
+      const dflt = noteDefault(el, key);
+      const raw  = ((S.notes||{})[key] || dflt);
+      /* editing shows the raw text so the {tokens} are visible and can be kept */
+      const want = edit ? raw : fillNote(raw);
+      if(el.textContent !== want) el.textContent = want;
+      if(el.classList.contains('note-edit') !== edit) el.classList.toggle('note-edit', edit);
+      if(edit){
+        if(el.getAttribute('contenteditable')!=='true'){
+          el.setAttribute('contenteditable','true');
+          el.setAttribute('title','Type over this. Empty it to put the original back. {tokens} fill themselves in.');
+        }
+      } else if(el.hasAttribute('contenteditable')){
+        el.removeAttribute('contenteditable'); el.removeAttribute('title');
+      }
+    });
+  } finally { _notePainting = false; }
+}
+function saveNote(key, text){
+  if(!isAdmin()) return;
+  const v = String(text||'').replace(/\s+/g,' ').trim();
+  S.notes = S.notes || {};
+  if(!v || v === (_noteDflt[key]||'')) delete S.notes[key];   /* emptied, or typed back to the original */
+  else S.notes[key] = v;
+  saveState(); paintNotes();
+}
+function toggleNotesEdit(){
+  if(!isAdmin()){ toast('Commissioners only.'); return; }
+  const on = !notesEditing();
+  store.set('ffl_notes_edit', on ? '1' : '');
+  paintNotes(); syncNotesBtn();
+  toast(on ? 'Descriptions unlocked — type over any of them' : 'Descriptions locked');
+}
+function syncNotesBtn(){
+  const b=document.getElementById('notesBtn'); if(!b) return;
+  const on=notesEditing();
+  b.classList.toggle('on', on);
+  const l=document.getElementById('notesLabel'); if(l) l.textContent = on ? 'Text unlocked' : 'Text locked';
+}
+/* Focus/blur through the document, because the blurbs are created and destroyed by re-renders
+   and a listener bound to one of them would not survive the next paint. */
+document.addEventListener('focusin', e=>{
+  const el=e.target; if(el && el.matches && el.matches('[data-note][contenteditable]')) window.__noteFocus = true;
+});
+document.addEventListener('focusout', e=>{
+  const el=e.target; if(!el || !el.matches || !el.matches('[data-note][contenteditable]')) return;
+  window.__noteFocus = false;
+  saveNote(el.getAttribute('data-note'), el.textContent);
+});
+/* Enter commits rather than dropping a newline into a one-line blurb */
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Enter' || e.shiftKey) return;
+  const el=e.target; if(el && el.matches && el.matches('[data-note][contenteditable]')){ e.preventDefault(); el.blur(); }
+});
+/* Repaint after every render without having to find and edit every render function */
+try{
+  new MutationObserver(()=>{
+    if(_notePainting || window.__noteFocus) return;
+    clearTimeout(_notePaintST); _notePaintST = setTimeout(paintNotes, 0);
+  }).observe(document.body, {childList:true, subtree:true});
+}catch(e){}
+
 /* Draft state kept separate so settings changes don't clobber a draft.
    Two boards: the real draft and a mock sandbox. */
 let draftMode = 'real';
@@ -3913,7 +4023,11 @@ function refreshPool(){ loadPool(true); }
 /* auto-refresh the pool + players feed every 4 hours; manual refresh still works anytime */
 setInterval(()=>{ if(poolReady) loadPool(true); if(typeof playersReady!=='undefined' && playersReady) loadPlayers(true); }, POOL_REFRESH_MS);
 /* tick trade reviews: refresh countdowns and process any that cleared the window */
-setInterval(()=>{ try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
+setInterval(()=>{
+  /* Hands off while a description is being typed into: these renders replace the very element
+     holding the cursor, which would eat the edit mid-sentence. */
+  if(window.__noteFocus) return;
+  try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
   try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
@@ -4234,7 +4348,7 @@ async function renderInjuries(){
       </tr>`;
     }).join('')}
   </table></div></div>
-  <p class="sub" style="margin:10px 0 0;max-width:820px">Status and diagnosis come from the NFL feed; the news line is ESPN's latest beat report, which usually says how long he'll be out. Both refresh automatically — <b>once a player is cleared he drops off this list on his own</b>.</p>`;
+  <p class="sub" data-note="inj-source" style="margin:10px 0 0;max-width:820px">Status and diagnosis come from the NFL feed; the news line is ESPN's latest beat report, which usually says how long he'll be out. Both refresh automatically — <b>once a player is cleared he drops off this list on his own</b>.</p>`;
 }
 
 /* ---- player detail: career fantasy points (league scoring) + projection ---- */
@@ -6977,7 +7091,7 @@ function renderPolls(){
     ? `<div class="notice" style="margin-bottom:18px">Polls are posted by the commissioners — you vote, they ask. Want one asked? Say so in the chat.</div>`
     : myUid ? `<div class="card" style="margin-bottom:18px">
     <h2 style="margin:0 0 4px">Create a poll</h2>
-    <p class="sub" style="margin:0 0 12px">Ask the league anything. Everyone signed in gets one vote.</p>
+    <p class="sub" data-note="polls-intro" style="margin:0 0 12px">Ask the league anything. Everyone signed in gets one vote.</p>
     <input type="text" id="pollQ" placeholder="What's the poll about?" style="width:100%;margin-bottom:10px">
     <div id="pollOpts">
       <input type="text" class="poll-opt-input" placeholder="Option 1" style="width:100%;margin-bottom:8px">
@@ -7324,7 +7438,7 @@ function renderHistory(){
 
     <div class="card">
       <h2>Best Single Week — Player</h2>
-      <p class="sub" style="margin-bottom:10px">All fourteen belong to quarterbacks — no RB or WR has ever taken a season's crown.</p>
+      <p class="sub" data-note="stats-mvp" style="margin-bottom:10px">All fourteen belong to quarterbacks — no RB or WR has ever taken a season's crown.</p>
       <div style="overflow-x:auto"><table class="plain" style="min-width:520px">
         <tr><th style="width:70px">Year</th><th style="width:50px">Wk</th><th>Player</th><th>Rostered By</th><th style="text-align:right">Pts</th></tr>
         ${pw.map(r=>`<tr><td style="font-family:var(--f-mono)">${r.year}</td><td style="font-family:var(--f-mono)">${r.week}</td><td><span class="postag pos-${r.pos}" style="margin-right:6px">${r.pos}</span>${esc(r.player)} <span style="color:var(--chalk-dim);font-size:12px">${r.nfl}</span>${r.pts===bestPW.pts?' \uD83D\uDC51':''}</td><td>${esc(r.team)}</td><td style="text-align:right;font-family:var(--f-mono)">${fmt(r.pts)}</td></tr>`).join('')}
@@ -8088,7 +8202,7 @@ function renderMatchupsHistory(yr){
         </div>
         <span class="eyebrow" style="margin:0">${yr} season · league archive</span>
       </div>
-      <p class="sub" style="margin:0 0 10px">Final scores from the NFL.com league history. Only the saved weeks are here — more appear as they're imported.</p>
+      <p class="sub" data-note="recaps-source" style="margin:0 0 10px">Final scores from the NFL.com league history. Only the saved weeks are here — more appear as they're imported.</p>
       ${games.map((g,gi)=>{
         const aWin=g.pa>g.pb, bWin=g.pb>g.pa;
         const key=`${yr}-${wk}-${gi}`, open=window.muHistBox===key;
@@ -8282,7 +8396,7 @@ function recapCardHTML(ctx){
       </div>
     </div>
     <div class="recap-body">${esc(window.muRecap)}</div>
-    <p class="sub" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>
+    <p class="sub" data-note="recap-rewrite" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>
   </div>`;
 }
 function renderMatchups(){
@@ -9736,7 +9850,7 @@ function renderWaivers(){
     The rules to paste are in <code>push/firebase-rules.json</code> in the repo.</div>`;
 
   const wireHTML = !wire.length
-    ? `<p class="sub" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for ${waiverHours()} hours before anyone can just pick them up.</p>`
+    ? `<p class="sub" data-note="wv-empty" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for {waitTime} before anyone can just pick them up.</p>`
     : wire.map(w=>{
         const claims=pendingClaimsFor(w.pid), mineIn=mine===null?null:claims.find(c=>c.team===mine);
         const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : 'dropped';
@@ -9755,9 +9869,7 @@ function renderWaivers(){
   /* One claim has no order to set, so the ranking only appears once there is a choice to make */
   const rank = mineClaims.length > 1;
   const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>
-    ${rank?`<p class="sub" style="margin:0 0 10px">Your order, top first. They cannot all land — a
-      won claim sends you to the back of the league order, and your roster only has so much room —
-      so put the one you actually want at the top.</p>`:''}${
+    ${rank?`<p class="sub" data-note="wv-mine" style="margin:0 0 10px">Your order, top first. They cannot all land — a won claim sends you to the back of the league order, and your roster only has so much room — so put the one you actually want at the top.</p>`:''}${
     mineClaims.map((c,k)=>`<div class="wv-item"><div class="faRow wv-mine">
       ${rank?`<span class="wv-rank">${k+1}</span>`:''}
       <span class="faName">${esc(c.name)}</span>
@@ -9790,8 +9902,7 @@ function renderWaivers(){
     <div class="card">
       <h2>Waiver priority${you}</h2>
       <div class="wv-order wv-grid">${orderHTML}</div>
-      <p class="sub" style="margin:10px 0 0">Worst record picks first. Win a claim and you drop to the back.
-        Dropped players sit here ${waiverHours()} hours before anyone can add them outright.</p>
+      <p class="sub" data-note="wv-priority" style="margin:10px 0 0">Worst record picks first. Win a claim and you drop to the back. Dropped players sit here {waitTime} before anyone can add them outright.</p>
     </div>
     <div class="card"><h2>On waivers</h2>${wireHTML}</div>
     ${mineHTML}${settledHTML}`;
@@ -10013,7 +10124,7 @@ function renderCommishCard(){
   }).join('');
   list.innerHTML += `<div class="eyebrow" style="margin:14px 0 6px">Team claims</div>
     <div class="wv-order" style="flex-wrap:wrap">${claimChips}</div>
-    <p class="sub" style="margin:8px 0 0;font-size:12px">A <b style="color:var(--danger)">ghost</b> claim is held by an account that was removed — the team shows as taken but nobody can use it. Release it and the manager can claim normally.</p>`;
+    <p class="sub" data-note="ghost-claim" style="margin:8px 0 0;font-size:12px">A <b style="color:var(--danger)">ghost</b> claim is held by an account that was removed — the team shows as taken but nobody can use it. Release it and the manager can claim normally.</p>`;
 }
 /* Restore the missing claim half of an assignment. Safe by construction: it only writes when
    the slot's claim is EMPTY and the account's own record already points at this slot. */
