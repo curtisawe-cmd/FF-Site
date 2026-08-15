@@ -749,14 +749,17 @@ nav.tabs button{position:relative}
   .wv-move .btn{padding:1px 5px;min-width:23px}
   /* The rank badge and two arrows are three more things competing for a 375px line, and flex
      paid for them out of .faName until the player name was literally 0px wide. Break the line
-     after the name: rank and name on top, everything you can press underneath. */
-  .wv-mine{flex-wrap:wrap;gap:5px 8px}
-  .wv-mine .wv-rank{order:1}
-  .wv-mine .faName{order:2;flex:1 1 calc(100% - 32px)}
-  .wv-mine .pmeta{order:3;flex:1 1 auto;min-width:0;font-size:12px}
-  .wv-mine .statpill{order:4;white-space:nowrap}
-  .wv-mine .wv-move{order:5}
-  .wv-mine > .btn{order:6;margin-left:auto}
+     after the name: rank and name on top, everything you can press underneath.
+     Written .faRow.wv-mine, not .wv-mine: `.faRow .faName{flex:1}` sits further down the sheet
+     at the same specificity, so a one-class selector loses to it on source order and the name
+     stays collapsed. */
+  .faRow.wv-mine{flex-wrap:wrap;gap:5px 8px}
+  .faRow.wv-mine .wv-rank{order:1}
+  .faRow.wv-mine .faName{order:2;flex:1 1 calc(100% - 32px)}
+  .faRow.wv-mine .pmeta{order:3;flex:1 1 auto;min-width:0;font-size:12px}
+  .faRow.wv-mine .statpill{order:4;white-space:nowrap}
+  .faRow.wv-mine .wv-move{order:5}
+  .faRow.wv-mine > .btn{order:6;margin-left:auto}
 }
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
