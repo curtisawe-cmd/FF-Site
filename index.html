@@ -301,6 +301,33 @@ h2{font-family:var(--f-ui);font-weight:700;font-size:22px;letter-spacing:.04em;t
 @media(max-width:640px){.myteam-hero{width:74px;height:74px;top:14px;right:14px}}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}   /* plain 1fr lets wide content blow the card out on narrow phones */
+/* The trade builder keeps its two teams side by side on a phone. Stacked, a swap becomes two
+   separate lists you scroll between, and you cannot compare what you are giving with what you
+   are getting without losing your place. The columns stay; the rows shed everything that is
+   not the pick - the headshot, the NFL team, the divider tag, and the back half of the first
+   name - so the part you are actually reading gets the width. */
+.tb-grid{gap:14px}
+@media(max-width:860px){.tb-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}}
+.tb-short{display:none}
+@media(max-width:560px){
+  .tb-grid{gap:7px}
+  .tb-grid > .card{padding:9px 8px}
+  .tb-grid select{font-size:12px;padding:4px 6px}
+  .tb-head{flex-direction:column;align-items:flex-start !important;gap:4px !important}
+  .tb-head .sub{font-size:10px}
+  .tb-head b{font-size:12px !important}
+  .tb-head .team-logo,.tb-head .avatar{width:22px !important;height:22px !important}
+  .tb-head .divtag{display:none}
+  .tb-row{gap:5px !important;padding:3px 0 !important}
+  .tb-row input[type=checkbox]{width:15px !important;height:15px;flex:0 0 auto;margin:0}
+  .tb-row .postag{min-width:0;font-size:10px;padding:1px 3px;letter-spacing:.02em}
+  .tb-face,.tb-nfl,.tb-full{display:none}
+  .tb-short{display:inline}
+  .tb-nm{font-size:11.5px}
+  .tb-eyebrow{font-size:9px;letter-spacing:.06em}
+  .tb-grid .pickchip{font-size:11px;padding:2px 7px;gap:5px}
+  .tb-grid .sub{font-size:11px}
+}
 .btn{
   font-family:var(--f-ui);font-weight:700;font-size:16px;letter-spacing:.06em;text-transform:uppercase;
   background:var(--turf);color:var(--on-turf);padding:10px 20px;border-radius:var(--r-ctrl);
@@ -8880,15 +8907,21 @@ function renderTradeCenter(){
          const other = (side==='a') ? T.b : T.a;
          return `<option value="${i}"${i===T[side]?' selected':''}${i===other?' disabled':''}>${esc(t.name)}${i===other?' — already picked':''}</option>`;
        }).join('')}</select>`;
+  /* "Jayden Daniels" -> "J. Daniels", for the narrow phone columns. Defences keep their full
+     name; initialising them produces nonsense like "C. Bengals D/ST". */
+  const abbrevName = p => { if(!p) return '';
+    if(p.pos==='DEF') return p.name||'';
+    const w=String(p.name||'').trim().split(/\s+/);
+    return w.length<2 ? (p.name||'') : `${w[0][0]}. ${w.slice(1).join(' ')}`; };
   const rosterList = (ti, side, selSet) => {
     const roster = d.picks.filter(p=>p.teamIndex===ti && !p.cut);
     if(!roster.length) return `<p style="color:var(--chalk-dim)">No players \u2014 roster fills in from the draft.</p>`;
     return roster.map(p=>`
-      <label class="row" style="padding:4px 0;gap:8px;cursor:pointer">
+      <label class="row tb-row" style="padding:4px 0;gap:8px;cursor:pointer">
         <input type="checkbox" ${selSet.has(p.playerId)?'checked':''} onchange="tradeToggle('${side==='a'?'pa':'pb'}','${p.playerId}')" style="width:auto">
         <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
-        ${playerFace(p,26)}
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</span><span style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span>
+        <span class="tb-face">${playerFace(p,26)}</span>
+        <span class="tb-nm" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="tb-full">${esc(p.name)}</span><span class="tb-short">${esc(abbrevName(p))}</span></span><span class="tb-nfl" style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span>
       </label>`).join('');
   };
   const cnt = ti => d.picks.filter(p=>p.teamIndex===ti && !p.cut).length;
@@ -8935,13 +8968,13 @@ function renderTradeCenter(){
   const deadlineNote = tradeDeadlineWk()
     ? `<div class="notice" style="margin:0 0 14px">Trade deadline: <b>${esc(tradeDeadlineLabel())}</b>. Offers still pending at the deadline die unaccepted.</div>` : '';
   el.innerHTML = deadlineNote + `
-    <div class="grid2" style="margin-bottom:14px">
+    <div class="grid2 tb-grid" style="margin-bottom:14px">
       <div class="card">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
+        <div class="row tb-head" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
         ${rosterList(T.a,'a',T.pa)}
       </div>
       <div class="card">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">${teamSel('b')}<span class="sub" style="margin:0">${cnt(T.b)} \u2192 ${after('b')} players</span></div>
+        <div class="row tb-head" style="justify-content:space-between;margin-bottom:8px">${teamSel('b')}<span class="sub" style="margin:0">${cnt(T.b)} \u2192 ${after('b')} players</span></div>
         ${rosterList(T.b,'b',T.pb)}
       </div>
     </div>
@@ -8956,13 +8989,13 @@ function renderTradeCenter(){
           <select onchange="tradeSetPickYear(this.value)">${yearOpts}</select>
         </div>
       </div>
-      <div class="grid2">
+      <div class="grid2 tb-grid">
         <div style="min-width:0">
-          <div class="eyebrow" style="margin:0 0 6px">${esc(S.teams[T.a].name)}</div>
+          <div class="eyebrow tb-eyebrow" style="margin:0 0 6px">${esc(S.teams[T.a].name)}</div>
           ${pickList(T.a,'a',T.ra)}
         </div>
         <div style="min-width:0">
-          <div class="eyebrow" style="margin:0 0 6px">${esc(S.teams[T.b].name)}</div>
+          <div class="eyebrow tb-eyebrow" style="margin:0 0 6px">${esc(S.teams[T.b].name)}</div>
           ${pickList(T.b,'b',T.rb)}
         </div>
       </div>
