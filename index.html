@@ -1215,6 +1215,30 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .gc-tot.win{color:var(--turf-bright)}
 .gc-vs{font-family:var(--f-display);color:var(--chalk-dim);font-size:11px;letter-spacing:.1em;flex:0 0 auto}
 .gc-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}   /* two teams, always two columns */
+/* ---- phone head-to-head: the two rosters interleaved, slot in the middle ----
+   Desktop keeps the side-by-side columns; below 720px they are swapped for this. Both are in
+   the DOM and CSS picks one, rather than re-rendering on resize - a live Game Center redrawing
+   itself every time a phone rotates is worse than the extra markup. */
+.gc-h2h{display:none}
+@media(max-width:720px){ .gc-grid{display:none} .gc-h2h{display:block} }
+.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) 46px 40px 46px minmax(0,1fr);
+  align-items:center;gap:4px;padding:7px 8px;border-bottom:1px solid var(--line)}
+.h2h-row:last-child{border-bottom:none}
+.h2h-side{display:flex;flex-direction:column;min-width:0;gap:1px}
+.h2h-side.r{align-items:flex-end;text-align:right}
+.h2h-side.empty{color:var(--chalk-dim);font-family:var(--f-mono);font-size:12px}
+.h2h-nm{font-weight:700;font-size:13px;color:var(--chalk);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;cursor:pointer}
+.h2h-meta{font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.h2h-pts{font-family:var(--f-mono);font-weight:700;font-size:13px;text-align:center;
+  font-variant-numeric:tabular-nums;color:var(--chalk-dim)}
+.h2h-pts.win{color:var(--turf-bright)}
+.h2h-slot{display:flex;align-items:center;justify-content:center}
+@media(max-width:360px){
+  .h2h-row{grid-template-columns:minmax(0,1fr) 38px 34px 38px minmax(0,1fr);gap:3px;padding:6px 5px}
+  .h2h-nm{font-size:12px} .h2h-pts{font-size:12px}
+}
 .gc-col{min-width:0;padding:2px 0}
 .gc-col + .gc-col{border-left:1px solid var(--line)}
 .gc-band{font-family:var(--f-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
@@ -7369,6 +7393,59 @@ async function renderGameCenter(){
   const notice = note ? `<div class="card" style="margin-bottom:12px"><p class="sub" style="margin:0">${note}</p></div>` : '';
   const lu = ti => ensureLineup(ti);
   const slotOrder = ['QB','RB','WR','TE','FLEX','K','DEF'];
+  /* the canonical starter slots, in order - QB, RB, RB, WR, WR, TE, FLEX, K, DEF. Both the
+     column layout and the head-to-head layout below fill from this same sequence, which is
+     what lets row i on the left face row i on the right. */
+  const starterSlotSeq = [];
+  slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; for(let k=0;k<cap;k++) starterSlotSeq.push(s); });
+  /* one source of truth for a team's three lists, shared by both layouts */
+  const teamLists = (ti) => {
+    const l = lu(ti), roster = teamRoster(ti);
+    const starters = [];
+    slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; let n=0;
+      roster.forEach(p=>{ if(l[p.playerId]===s && n<cap){ starters.push(p); n++; } }); });
+    return { starters,
+      bench: roster.filter(p=>l[p.playerId]==='BN'),
+      ir:    roster.filter(p=>l[p.playerId]==='IR') };
+  };
+  const ptsOf = p => { if(!p) return null; const st=stats[p.playerId];
+    return st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null); };
+  /* "Jayden Daniels" -> "J. Daniels". Team defences keep their full name; initialising them
+     produces nonsense like "C. Bengals D/ST". */
+  const shortName = p => { if(!p) return '';
+    if(p.pos==='DEF') return p.name||'';
+    const w=String(p.name||'').trim().split(/\s+/);
+    return w.length<2 ? (p.name||'') : `${w[0][0]}. ${w.slice(1).join(' ')}`; };
+  /* Phone layout: the two rosters interleaved, left player vs right player with the slot
+     between them - the head-to-head shape every fantasy app uses on a narrow screen. The
+     column layout above stays for desktop; CSS picks one. Rows are padded so an empty slot on
+     one side still faces its opposite number instead of shifting everything below it. */
+  const h2hRow = (slot, a, b) => {
+    const pa = ptsOf(a), pb = ptsOf(b);
+    const lead = (pa!=null && pb!=null) ? (pa>pb ? 'l' : (pb>pa ? 'r' : '')) : '';
+    const side = (p, s) => p
+      ? `<span class="h2h-side ${s}"><span class="h2h-nm pstat" onclick="openPlayer('${p.playerId}')">${esc(shortName(p))}</span><span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}</span></span>`
+      : `<span class="h2h-side ${s} empty">—</span>`;
+    return `<div class="h2h-row">
+      ${side(a,'l')}
+      <span class="h2h-pts${lead==='l'?' win':''}">${pa==null?'—':pa.toFixed(1)}</span>
+      <span class="h2h-slot">${slotTag(slot, slot)}</span>
+      <span class="h2h-pts${lead==='r'?' win':''}">${pb==null?'—':pb.toFixed(1)}</span>
+      ${side(b,'r')}
+    </div>`;
+  };
+  const h2hBlock = (ax, bx) => {
+    const A = teamLists(ax), B = teamLists(bx);
+    let out = `<div class="gc-band">Starters</div>`;
+    starterSlotSeq.forEach((s,i)=>{ out += h2hRow(s, A.starters[i], B.starters[i]); });
+    const bn = Math.max(A.bench.length, B.bench.length);
+    if(bn){ out += `<div class="gc-band">Bench</div>`;
+      for(let i=0;i<bn;i++) out += h2hRow('BN', A.bench[i], B.bench[i]); }
+    const irn = Math.max(A.ir.length, B.ir.length);
+    if(irn){ out += `<div class="gc-band">Reserve (IR)</div>`;
+      for(let i=0;i<irn;i++) out += h2hRow('IR', A.ir[i], B.ir[i]); }
+    return `<div class="gc-h2h">${out}</div>`;
+  };
   const col = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
     const rowsFor = list => list.map(p=>{
@@ -7385,11 +7462,7 @@ async function renderGameCenter(){
             </div></div></td>
         <td class="gc-pts">${pts==null?'—':pts.toFixed(1)}</td></tr>`;
     }).join('');
-    const starters = [];
-    slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; let n=0;
-      roster.forEach(p=>{ if(l[p.playerId]===s && n<cap){ starters.push(p); n++; } }); });
-    const bench = roster.filter(p=>l[p.playerId]==='BN');
-    const ir    = roster.filter(p=>l[p.playerId]==='IR');
+    const { starters, bench, ir } = teamLists(ti);   /* shared with the head-to-head layout */
     return `<div class="gc-col">
       <div class="gc-band">Starters</div>
       ${starters.length?`<table class="gc-tbl">${rowsFor(starters)}</table>`:`<div class="gc-none">No starters set.</div>`}
@@ -7408,6 +7481,7 @@ async function renderGameCenter(){
         <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
       </div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
+      ${h2hBlock(g[0], g[1])}
     </div></section>`;
   }).join('');
   if(layout==='all'){
