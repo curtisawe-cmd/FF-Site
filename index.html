@@ -139,9 +139,12 @@ body{
      gives an exact, tunable faintness - background-image has no opacity of its own.
      Set by applyTeamWatermark; absent until a team is picked. */
   background-repeat:no-repeat;
-  background-position:center center;
+  /* Per layer: the wash fills the viewport, the crest sits in the top right corner. Out of the
+     reading column it can be carried a good deal stronger than it could behind body text, which
+     is the point of moving it there. */
+  background-position:center, right 2vmin top 2vmin;
   background-attachment:fixed;      /* it stays put while the page scrolls under it */
-  background-size:auto, min(74vw, 74vh);
+  background-size:auto, min(42vw, 46vh);
   color:var(--chalk);
   font-family:var(--f-body);
   font-size:15px;
@@ -11615,7 +11618,9 @@ function applyTeamWatermark(code){
   if(!team || !watermarkOn()){ b.style.removeProperty('background-image'); return; }
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
           || getComputedStyle(b).backgroundColor;
-  const wash = hexWash(bg, 0.955) || 'rgba(4,18,43,0.955)';
+  /* 0.88, not the 0.955 it wore in the centre: in the corner it is no longer sitting under
+     paragraphs, so it can be seen properly without costing anything in readability */
+  const wash = hexWash(bg, 0.88) || 'rgba(4,18,43,0.88)';
   const url = `https://sleepercdn.com/images/team_logos/nfl/${String(code).trim().toLowerCase()}.png`;
   /* wash first so it paints ON TOP of the logo - background layers stack front to back */
   b.style.backgroundImage = `linear-gradient(${wash}, ${wash}), url("${url}")`;
