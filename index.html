@@ -1191,6 +1191,10 @@ table.standings col.c-rk{width:44px}
 table.standings col.c-wlt{width:100px}
 table.standings col.c-pf{width:96px}
 table.standings col.c-ap{width:96px}
+.h2h-tag{display:inline-block;font-family:var(--f-ui);font-weight:700;font-size:9px;letter-spacing:.08em;
+  text-transform:uppercase;border-radius:4px;padding:1px 6px;vertical-align:middle;margin-left:6px}
+.h2h-tag.good{background:var(--turf);color:var(--on-turf)}
+.h2h-tag.bad{background:transparent;border:1px solid var(--charge);color:var(--charge)}
 .ap-luck{font-size:11px;font-weight:700}
 .ap-luck.up{color:var(--turf-bright)}
 .ap-luck.down{color:var(--charge)}
@@ -7302,6 +7306,60 @@ function franchiseData(from, to){
   return {MGR, mgrOf, fr, multiMgr, b2bMgr};
 }
 
+/* ---- head to head, manager against manager ----
+   Keyed on the MANAGER, never the team name. Fourteen years of costume changes mean a name-keyed
+   record would show one man as four different rivals and lose the whole point of asking. The
+   archive maps a season's team names to managers; the live season has them on the team itself.
+   Every meeting counts once: the archive stores a game as one row with both sides on it, so the
+   two records are filled from that single row rather than by scanning twice. */
+function h2hAll(from, to){
+  const H = S.history || {};
+  const MGR = H.managers || {};
+  const lo = +from || -Infinity, hi = +to || Infinity;
+  const rec = {};
+  /* NOT +v: the archive is sparse and a missing score comes through as null, which +null turns
+     into a real, countable 0 - recording a game nobody played as a blowout. A genuine 0.0 still
+     passes, because only null/undefined/blank are rejected. */
+  const num = v => (v===null || v===undefined || v==='') ? null : (Number.isFinite(+v) ? +v : null);
+  const pair = (mA, mB, sA, sB, year) => {
+    if(!mA || !mB || mA===mB) return;
+    if(sA===null || sB===null) return;
+    [[mA,mB,sA,sB],[mB,mA,sB,sA]].forEach(([x,y,px,py])=>{
+      const r = (rec[x] = rec[x] || {});
+      const v = (r[y] = r[y] || { w:0, l:0, t:0, pf:0, pa:0, games:0, last:null });
+      v.games++; v.pf += px; v.pa += py;
+      if(px>py) v.w++; else if(py>px) v.l++; else v.t++;
+      if(!v.last || year >= v.last.year) v.last = { year, pf:px, pa:py };
+    });
+  };
+  /* the archive */
+  Object.entries(H.resultsByWeek || {}).forEach(([yr, byWk])=>{
+    if(+yr<lo || +yr>hi) return;
+    const m = MGR[String(yr)] || {};
+    Object.values(byWk||{}).forEach(games=>{
+      (games||[]).forEach(g=>{
+        if(!g) return;
+        pair(m[g.ta], m[g.tb], num(g.pa), num(g.pb), +yr);
+      });
+    });
+  });
+  /* the season being played, which is not in the archive until it is over */
+  const liveYear = (typeof curDraftYear==='function') ? curDraftYear() : null;
+  if(liveYear!=null && liveYear>=lo && liveYear<=hi && S.season && S.season.schedule){
+    const mgrOfIdx = i => String(((S.teams||[])[i]||{}).manager || '').trim() || null;
+    Object.entries(S.season.schedule).forEach(([wk, games])=>{
+      (games||[]).forEach((g,m)=>{
+        const [pa,pb] = mScore(wk,m);
+        pair(mgrOfIdx(g[0]), mgrOfIdx(g[1]), num(pa), num(pb), liveYear);
+      });
+    });
+  }
+  return rec;
+}
+/* Every manager who has ever played, for the picker */
+function h2hManagers(rec){
+  return Object.keys(rec).sort((a,b)=>a.localeCompare(b));
+}
 function renderRecaps(){
   const H = S.history;
   const years = Object.keys(H.recaps||{}).sort((a,b)=>b-a);
@@ -7415,7 +7473,53 @@ function renderStats(){
           return `<tr class="${i===0?'top':''}"><td>${v.titles.length?'\uD83C\uDFC6'.repeat(v.titles.length)+' ':''}${esc(mg)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length}</td><td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}-${v.t}</td><td style="text-align:right;font-family:var(--f-mono)">${(v.w+v.l+v.t)?pct(v).toFixed(3).slice(1):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${fmt(v.pf)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length?fmt(v.pf/v.seasons.length):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.last||'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.titles.join(', ')||'\u2014'}</td><td style="color:var(--chalk-dim);font-size:12px">${esc(nm)}</td></tr>`;
         }).join('')}
       </table></div>
-    </div>`;
+    </div>
+    ${h2hCardHTML(R.from, R.to, isAll)}`;
+}
+/* Who owns who. Defaults to your own manager, because the first question anybody has of this
+   table is their own record. */
+function h2hCardHTML(from, to, isAll){
+  const rec = h2hAll(from, to);
+  const names = h2hManagers(rec);
+  if(names.length < 2) return '';
+  const mine = (()=>{ const i = (typeof myTeamIdx==='function') ? myTeamIdx() : null;
+    const m = Number.isInteger(i) ? String(((S.teams||[])[i]||{}).manager||'').trim() : '';
+    return names.includes(m) ? m : null; })();
+  let who = window.h2hWho;
+  if(!who || !names.includes(who)) who = window.h2hWho = (mine || names[0]);
+  const vs = rec[who] || {};
+  const rows = Object.entries(vs).sort((a,b)=>{
+    const pa = a[1].games ? a[1].w/a[1].games : 0, pb = b[1].games ? b[1].w/b[1].games : 0;
+    return pb-pa || b[1].games-a[1].games || a[0].localeCompare(b[0]);
+  });
+  const tot = rows.reduce((t,[,v])=>({w:t.w+v.w, l:t.l+v.l, t:t.t+v.t, g:t.g+v.games}), {w:0,l:0,t:0,g:0});
+  const fmt1 = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
+  return `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0">Head to head</h2>
+      <select style="max-width:230px" onchange="window.h2hWho=this.value;renderStats()">${
+        names.map(n=>`<option value="${esc(n)}"${n===who?' selected':''}>${esc(n)}${n===mine?' (you)':''}</option>`).join('')}</select>
+    </div>
+    <p class="sub" data-note="h2h-intro" style="margin:0 0 10px">Every meeting between these two managers, whatever either team was called at the time. ${
+      isAll ? 'All time.' : `${from}–${to} only.`} <b>${esc(who)}</b> is <b>${tot.w}-${tot.l}${tot.t?'-'+tot.t:''}</b> across ${tot.g} game${tot.g===1?'':'s'}.</p>
+    <div style="overflow-x:auto"><table class="plain" style="min-width:520px">
+      <tr><th>Opponent</th><th style="text-align:right">W-L-T</th><th style="text-align:right">Pct</th>
+          <th style="text-align:right">PF</th><th style="text-align:right">PA</th><th style="text-align:right">Last</th></tr>
+      ${rows.map(([opp,v])=>{
+        const pct = v.games ? (v.w + v.t/2)/v.games : 0;
+        const owns = v.games>=3 && pct>=0.75, owned = v.games>=3 && pct<=0.25;
+        return `<tr${owns?' class="top"':''}>
+          <td>${esc(opp)}${owns?' <span class="h2h-tag good">owns</span>':''}${owned?' <span class="h2h-tag bad">owned</span>':''}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}${v.t?'-'+v.t:''}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${v.games?pct.toFixed(3).slice(1):'—'}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pf)}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pa)}</td>
+          <td style="text-align:right;font-family:var(--f-mono);color:var(--chalk-dim);font-size:12px">${
+            v.last?`${v.last.year} ${v.last.pf>v.last.pa?'W':(v.last.pf<v.last.pa?'L':'T')} ${fmt1(v.last.pf)}-${fmt1(v.last.pa)}`:'—'}</td>
+        </tr>`;
+      }).join('')}
+    </table></div>
+  </div>`;
 }
 window.statsSort = window.statsSort || {key:'titles', dir:-1};
 function setStatsSort(key){
