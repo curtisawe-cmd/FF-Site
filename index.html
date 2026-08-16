@@ -1176,26 +1176,31 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
    click - it is decoration sitting over the buttons. */
 #wmark{
   position:fixed; pointer-events:none; z-index:5;
-  top:var(--wm-top, 12px); right:2vmin;
-  width:min(42vw, 46vh); height:min(42vw, 46vh);
+  /* Bleeding off the right edge, and big. Sized to fit inside the viewport it read as a sticker
+     someone had dropped on the page: a hard-edged logo floating half over the hero panel and
+     half over the background, with the hero's red accent line slicing straight through it.
+     Cropped by the viewport and large, the same overlap reads as a deliberate corner flourish -
+     it is the difference between a mark on the page and a mark ON the page. */
+  top:var(--wm-top, 12px); right:-10vmin;
+  width:min(52vw, 66vh); height:min(52vw, 66vh);
   background:no-repeat center/contain var(--wm-img, none);
-  /* 0.22, measured rather than eyeballed. The background sits at luminance 16.8; at the 0.10 this
+  /* Measured rather than eyeballed. The background sits at luminance 16.8; at the 0.10 this
      started on, the Raiders crest landed 8.0 above it and the Bills 10.3 - under the threshold
      where anything reads on a dark screen, which is why it looked like nothing was there at all.
-     At 0.22 the dimmest crest in the league clears 17 and the brightest 33: visible for every
-     team without drowning the text underneath.
+     0.17 at this size clears that comfortably for every team without drowning the text under it;
+     the same value serves the phone, where the crest is smaller but sits on a plainer field.
      Deliberately no brightness filter. It would clamp the already-light crests while barely
      moving the dark ones, and it would invert the effect in the light theme, where the crest has
      to DARKEN the page to show up. Plain opacity works in both. */
-  opacity:.22;
+  opacity:.17;
   transition:opacity .2s ease;
 }
 #wmark[hidden]{display:none}
-/* On a phone 42vw is only about 157px - a badge rather than a crest - and the space below the
-   header is mostly height, so lean on vw and let it run bigger. Slightly fainter, because a
-   phone has no gutters: it is always over content. */
+/* The phone keeps what it had, unchanged: it reads well there. A narrow screen has no panel
+   edges running down the middle of the crest, which is the whole reason the desktop needed a
+   different treatment. */
 @media(max-width:720px){
-  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; opacity:.16; }
+  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; }
 }
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
