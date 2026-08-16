@@ -7586,6 +7586,8 @@ function renderHistory(){
         <h2 style="margin:0">Playoff Bracket</h2>
         <span class="row">
           ${poYears.length?`<select onchange="window.histPOYear=this.value;renderHistory()">${poYears.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Playoffs</option>`).join('')}</select>`:''}
+          ${(yr && isCurYear && games.length)?`<button class="btn ghost" title="Put the top teams on their seed lines, straight from the standings. Later rounds are cleared \u2014 they are decided on the field." onclick="poSeedBracket()">Seed from standings</button>`:''}
+          ${(yr && isCurYear && games.length)?`<button class="btn ghost" title="Move the winners of any scored round into the next round's empty slots. Never overwrites a name you set yourself." onclick="poAdvance()">Advance winners</button>`:''}
           ${(yr && isCurYear)?`<button class="btn ghost" onclick="window.poEdit=!window.poEdit;renderHistory()">${edit?'Done':'Edit'}</button>`:''}
           <button class="btn ghost" onclick="poNewBracket()">New bracket\u2026</button>
         </span>
@@ -7673,6 +7675,88 @@ function poGames(){ // editable copy for the selected year (seeded years are cop
 function poSet(i,f,v){ const g=poGames(); if(g[i]){ g[i][f]=v; saveState(); if(f==='week') renderHistory(); } }
 function poDelGame(i){ const g=poGames(); g.splice(i,1); saveState(); renderHistory(); }
 function poAddGame(){ const g=poGames(); const wk=g.length?Math.max(...g.map(x=>x.week)):15; g.push({week:wk,label:"Game",sa:0,ta:"",pa:0,sb:0,tb:"",pb:0,bracket:"championship"}); saveState(); renderHistory(); }
+/* ---- seed the bracket from the standings ----
+   The bracket was a table you typed names into, which is a spreadsheet with a nicer border: it
+   could disagree with the standings sitting directly above it, and did the moment anyone
+   mistyped a team. Seeding reads seasonStandings() - the same order, the same tiebreak - so the
+   two cannot part company.
+   Only the CURRENT season can be seeded. Past years are results, and a bracket that rewrote
+   1-seeds from today's standings would be falsifying the record. */
+function poSeedable(){
+  const yr = String(window.histPOYear||'');
+  if(yr !== String(curDraftYear())) return 'Only this season can be seeded — earlier years are results, not predictions.';
+  if(!(S.season && S.season.schedule)) return 'Generate the season schedule first.';
+  const rows = seasonStandings();
+  if(!rows.some(r=>r.w+r.l+r.t > 0)) return 'No games have been played yet, so there is nothing to seed from.';
+  return null;
+}
+/* Which seeds the first round pairs. Read off the bracket itself rather than assumed, so a
+   commissioner who rewrote the matchups keeps their format. */
+function poSeedBracket(){
+  const why = poSeedable();
+  if(why){ toast(why); return; }
+  if(!requireAdmin()) return;
+  const games = poGames();
+  if(!games.length){ toast('No bracket to seed — hit New bracket first.'); return; }
+  const rows = seasonStandings();                     /* already wins, then points for */
+  const bySeed = {}; rows.forEach((r,i)=>bySeed[i+1] = r.name);
+  const firstWk = Math.min(...games.map(g=>+g.week||0));
+  const seeded = games.filter(g=>+g.week===firstWk && (+g.sa>0 || +g.sb>0));
+  if(!seeded.length){ toast('The first round has no seed numbers on it, so there is nothing to place.'); return; }
+  const missing = [];
+  seeded.forEach(g=>{
+    const a = bySeed[+g.sa], b = bySeed[+g.sb];
+    if(+g.sa>0){ if(a) g.ta = a; else missing.push(+g.sa); }
+    if(+g.sb>0){ if(b) g.tb = b; else missing.push(+g.sb); }
+  });
+  /* later rounds are decided on the field, not by the standings - clear them so a stale name
+     from a previous seeding cannot sit there looking like a result */
+  games.filter(g=>+g.week!==firstWk).forEach(g=>{ g.ta=''; g.tb=''; g.pa=0; g.pb=0; });
+  saveState(); poAdvance(true); renderHistory();
+  toast(missing.length
+    ? `Seeded round one. No team for seed${missing.length>1?'s':''} ${[...new Set(missing)].join(', ')} — the league is only ${rows.length} deep.`
+    : `Seeded from the standings: ${bySeed[1]} on the 1 line.`);
+}
+/* Winners fall through. A round whose games are both scored decides the next round's empty
+   slots, so the bracket fills itself in as the weeks are entered instead of being retyped.
+   Never overwrites a slot somebody has already filled by hand - the commissioner has the last
+   word, which is the whole point of the Edit button. */
+function poAdvance(quiet){
+  const games = poGames();
+  if(!games.length) return 0;
+  const weeks = [...new Set(games.map(g=>+g.week||0))].sort((a,b)=>a-b);
+  let filled = 0;
+  weeks.forEach((wk, wi)=>{
+    const next = weeks[wi+1]; if(!next) return;
+    ['championship','consolation'].forEach(br=>{
+      const done = games.filter(g=>+g.week===wk && (g.bracket||'championship')===br)
+                        .filter(g=>g.ta && g.tb && (+g.pa>0 || +g.pb>0));
+      if(!done.length) return;
+      const winners = done.map(g=> (+g.pa) >= (+g.pb) ? g.ta : g.tb);
+      const losers  = done.map(g=> (+g.pa) >= (+g.pb) ? g.tb : g.ta);
+      /* the championship side advances winners; the consolation side takes the losers of the
+         round above it, which is what a consolation bracket IS */
+      const pool = br==='championship' ? winners : winners;
+      const slots = games.filter(g=>+g.week===next && (g.bracket||'championship')===br);
+      let k = 0;
+      slots.forEach(g=>{
+        if(!g.ta && pool[k]!==undefined){ g.ta = pool[k++]; filled++; }
+        if(!g.tb && pool[k]!==undefined){ g.tb = pool[k++]; filled++; }
+      });
+      if(br==='championship'){
+        const cons = games.filter(g=>+g.week===next && (g.bracket||'championship')==='consolation');
+        let j = 0;
+        cons.forEach(g=>{
+          if(!g.ta && losers[j]!==undefined){ g.ta = losers[j++]; filled++; }
+          if(!g.tb && losers[j]!==undefined){ g.tb = losers[j++]; filled++; }
+        });
+      }
+    });
+  });
+  if(filled){ saveState(); if(!quiet){ renderHistory(); toast(`${filled} slot${filled===1?'':'s'} filled from the results`); } }
+  else if(!quiet) toast('Nothing to advance yet — a round has to be scored first.');
+  return filled;
+}
 function poNewBracket(){
   const yr = prompt("Season year for the new bracket:", String(new Date().getFullYear()));
   if(!yr || !/^20\d\d$/.test(yr.trim())) return;
