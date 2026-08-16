@@ -7588,6 +7588,7 @@ function renderHistory(){
           ${poYears.length?`<select onchange="window.histPOYear=this.value;renderHistory()">${poYears.map(y=>`<option value="${y}" ${y===yr?'selected':''}>${y} Playoffs</option>`).join('')}</select>`:''}
           ${(yr && isCurYear && games.length)?`<button class="btn ghost" title="Put the top teams on their seed lines, straight from the standings. Later rounds are cleared \u2014 they are decided on the field." onclick="poSeedBracket()">Seed from standings</button>`:''}
           ${(yr && isCurYear && games.length)?`<button class="btn ghost" title="Move the winners of any scored round into the next round's empty slots. Never overwrites a name you set yourself." onclick="poAdvance()">Advance winners</button>`:''}
+          ${games.length?`<button class="btn ghost" title="Build next season's draft order from this bracket: consolation winner picks first, champion picks last." onclick="poApplyDraftOrder()">Set draft order</button>`:''}
           ${(yr && isCurYear)?`<button class="btn ghost" onclick="window.poEdit=!window.poEdit;renderHistory()">${edit?'Done':'Edit'}</button>`:''}
           <button class="btn ghost" onclick="poNewBracket()">New bracket\u2026</button>
         </span>
@@ -7682,6 +7683,20 @@ function poAddGame(){ const g=poGames(); const wk=g.length?Math.max(...g.map(x=>
    two cannot part company.
    Only the CURRENT season can be seeded. Past years are results, and a bracket that rewrote
    1-seeds from today's standings would be falsifying the record. */
+/* Two different things get called a consolation bracket, and they need telling apart.
+   In the archived seasons (2012-2025, imported from NFL.com) it is the losers' side of the
+   playoffs: the teams knocked out in round one, playing for 5th through 8th.
+   In this league it is its own tournament between the teams that never made the playoffs,
+   played for the first pick of the next draft.
+   The tell is WHEN it starts. Alongside round one means the non-playoff teams were already
+   playing, so it is a separate tournament. Starting a week later means it is being fed by
+   round-one losers. Nothing has to be migrated and no archived bracket changes meaning. */
+function poConsolationIsOwnBracket(games){
+  const cons = (games||[]).filter(g=>(g.bracket||'championship')==='consolation');
+  if(!cons.length) return false;
+  const firstWk = Math.min(...games.map(g=>+g.week||0));
+  return cons.some(g=>+g.week===firstWk);
+}
 function poSeedable(){
   const yr = String(window.histPOYear||'');
   if(yr !== String(curDraftYear())) return 'Only this season can be seeded — earlier years are results, not predictions.';
@@ -7701,6 +7716,8 @@ function poSeedBracket(){
   const rows = seasonStandings();                     /* already wins, then points for */
   const bySeed = {}; rows.forEach((r,i)=>bySeed[i+1] = r.name);
   const firstWk = Math.min(...games.map(g=>+g.week||0));
+  /* When consolation is its own tournament its seed numbers are league-wide - 9 through 12 are
+     the teams that missed - so the same bySeed table places both sides with no special casing. */
   const seeded = games.filter(g=>+g.week===firstWk && (+g.sa>0 || +g.sb>0));
   if(!seeded.length){ toast('The first round has no seed numbers on it, so there is nothing to place.'); return; }
   const missing = [];
@@ -7724,6 +7741,7 @@ function poSeedBracket(){
 function poAdvance(quiet){
   const games = poGames();
   if(!games.length) return 0;
+  const ownBracket = poConsolationIsOwnBracket(games);
   const weeks = [...new Set(games.map(g=>+g.week||0))].sort((a,b)=>a-b);
   let filled = 0;
   weeks.forEach((wk, wi)=>{
@@ -7734,16 +7752,17 @@ function poAdvance(quiet){
       if(!done.length) return;
       const winners = done.map(g=> (+g.pa) >= (+g.pb) ? g.ta : g.tb);
       const losers  = done.map(g=> (+g.pa) >= (+g.pb) ? g.tb : g.ta);
-      /* the championship side advances winners; the consolation side takes the losers of the
-         round above it, which is what a consolation bracket IS */
-      const pool = br==='championship' ? winners : winners;
       const slots = games.filter(g=>+g.week===next && (g.bracket||'championship')===br);
       let k = 0;
       slots.forEach(g=>{
-        if(!g.ta && pool[k]!==undefined){ g.ta = pool[k++]; filled++; }
-        if(!g.tb && pool[k]!==undefined){ g.tb = pool[k++]; filled++; }
+        if(!g.ta && winners[k]!==undefined){ g.ta = winners[k++]; filled++; }
+        if(!g.tb && winners[k]!==undefined){ g.tb = winners[k++]; filled++; }
       });
-      if(br==='championship'){
+      /* Knocked-out teams only fall into the consolation side when that side IS the losers'
+         bracket. Where consolation is its own tournament for the teams that missed the playoffs,
+         dropping a beaten playoff team into it would put someone in a competition they were
+         never in - and hand them a shot at the first pick they had not earned. */
+      if(br==='championship' && !ownBracket){
         const cons = games.filter(g=>+g.week===next && (g.bracket||'championship')==='consolation');
         let j = 0;
         cons.forEach(g=>{
@@ -7757,6 +7776,74 @@ function poAdvance(quiet){
   else if(!quiet) toast('Nothing to advance yet — a round has to be scored first.');
   return filled;
 }
+/* ---- next year's draft order, out of this year's bracket ----
+   The league's rule: win the whole thing and you pick last; win the consolation - the tournament
+   between the teams that missed the playoffs - and you pick first. That is what stops the
+   consolation being a dead rubber, so the order has to come out of the bracket rather than out
+   of the standings.
+   Placement games are the source. The bracket already resolves every finish; a stored order
+   would just be a second copy to disagree with it. */
+const PO_PLACE_GAMES = {
+  'Fantasy Super Bowl':1, '3rd Place Game':3, '5th Place Game':5, '7th Place Game':7,
+  'Consolation Final':1, 'Consolation 3rd Place':3          /* places WITHIN the consolation */
+};
+function poFinish(games){
+  const champ = {}, cons = {};
+  (games||[]).forEach(g=>{
+    const top = PO_PLACE_GAMES[g.label];
+    if(!top || !g.ta || !g.tb) return;
+    if(!(+g.pa) && !(+g.pb)) return;                        /* unplayed: no result to read */
+    const side = (g.bracket||'championship')==='consolation' && /^Consolation/.test(g.label) ? cons : champ;
+    const aWon = (+g.pa) >= (+g.pb);
+    side[aWon ? g.ta : g.tb] = top;
+    side[aWon ? g.tb : g.ta] = top + 1;
+  });
+  return { champ, cons };
+}
+/* Consolation first, best consolation finish to worst - winning it is the prize, so it has to be
+   worth more than losing it. Then the playoff teams, worst finish to best, which lands the
+   champion on the last pick without having to say so. */
+function draftOrderFromBracket(games, standings){
+  const { champ, cons } = poFinish(games);
+  if(!Object.keys(champ).length && !Object.keys(cons).length) return null;
+  const names = (standings||[]).map(r=>r.name);
+  const byRank = (map) => Object.keys(map).sort((a,b)=>map[a]-map[b]);
+  const order = [];
+  byRank(cons).forEach(t=>{ if(!order.includes(t)) order.push(t); });        /* 1st, 2nd, 3rd… */
+  byRank(champ).reverse().forEach(t=>{ if(!order.includes(t)) order.push(t); }); /* 8th … 1st */
+  /* anyone the bracket never mentions - a team that played no placement game - keeps their
+     standings position at the back rather than being dropped from the draft entirely */
+  names.forEach(t=>{ if(!order.includes(t)) order.push(t); });
+  return order;
+}
+function poApplyDraftOrder(){
+  if(!requireAdmin()) return;
+  /* same guard the arrows carry: the order IS the pick order, and moving it under a live draft
+     would reassign picks that have already been made */
+  if(D.started && D.picks.length){ toast("Can't change draft positions mid-draft — reset the draft first."); return; }
+  const games = poGames();
+  const order = draftOrderFromBracket(games, seasonStandings());
+  if(!order){ toast('No finished placement games yet — nothing to build an order from.'); return; }
+  const missing = order.filter(n=>!(S.teams||[]).some(t=>t.name===n));
+  if(missing.length){ toast(`The bracket names ${missing.length} team${missing.length>1?'s':''} not in the league (${esc(missing[0])}…). Fix the bracket first.`); return; }
+  const left = (S.teams||[]).map(t=>t.name).filter(n=>!order.includes(n));
+  const full = order.concat(left);
+  const { champ, cons } = poFinish(games);
+  const champion = Object.keys(champ).find(t=>champ[t]===1);
+  const consWinner = Object.keys(cons).find(t=>cons[t]===1);
+  if(!confirm(`Set the draft order from the ${window.histPOYear} bracket?\n\n`+
+    full.map((n,i)=>`${String(i+1).padStart(2)}. ${n}`).join('\n')+
+    `\n\nThis reorders the teams, which is the round 1 pick order.`)) return;
+  const byName = {}; (S.teams||[]).forEach(t=>byName[t.name]=t);
+  const target = full.map(n=>byName[n]).filter(Boolean);
+  if(target.length !== (S.teams||[]).length){ toast('Could not match every team by name — nothing changed.'); return; }
+  /* Through reorderTeams, never by assigning S.teams outright: it is what carries claims,
+     managers, logos, lineups, dues and waiver order across with their teams. Writing the array
+     directly is exactly what scrambled everyone's bindings the last time. */
+  reorderTeams(()=>{ S.teams = target; });
+  saveState(); renderSettings(); renderTrades(); refreshDraftUI(); renderHistory();
+  toast(`Draft order set: ${consWinner?consWinner+' picks first':'consolation winner first'}${champion?`, ${champion} last`:''}`);
+}
 function poNewBracket(){
   const yr = prompt("Season year for the new bracket:", String(new Date().getFullYear()));
   if(!yr || !/^20\d\d$/.test(yr.trim())) return;
@@ -7768,14 +7855,20 @@ function poNewBracket(){
     {week:15, label:"Quarterfinal", sa:4, ta:"", pa:0, sb:5, tb:"", pb:0, bracket:"championship"},
     {week:15, label:"Quarterfinal", sa:3, ta:"", pa:0, sb:6, tb:"", pb:0, bracket:"championship"},
     {week:15, label:"Quarterfinal", sa:2, ta:"", pa:0, sb:7, tb:"", pb:0, bracket:"championship"},
+    /* The four who missed, playing their own tournament for the first pick. Starting in week 15
+       alongside the quarterfinals is what marks this as a separate competition rather than a
+       losers' bracket — see poConsolationIsOwnBracket. Seeds are league-wide, so 9 through 12
+       are exactly the teams that did not make the playoffs. */
+    {week:15, label:"Consolation Semifinal", sa:9,  ta:"", pa:0, sb:12, tb:"", pb:0, bracket:"consolation"},
+    {week:15, label:"Consolation Semifinal", sa:10, ta:"", pa:0, sb:11, tb:"", pb:0, bracket:"consolation"},
     {week:16, label:"Semifinal", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
     {week:16, label:"Semifinal", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
-    {week:16, label:"Consolation", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
-    {week:16, label:"Consolation", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:16, label:"Consolation Final", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
+    {week:16, label:"Consolation 3rd Place", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
     {week:17, label:"Fantasy Super Bowl", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
-    {week:17, label:"3rd Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
-    {week:17, label:"5th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"},
-    {week:17, label:"7th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"consolation"}
+    {week:17, label:"3rd Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
+    {week:17, label:"5th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"},
+    {week:17, label:"7th Place Game", sa:0, ta:"", pa:0, sb:0, tb:"", pb:0, bracket:"championship"}
   ];
   window.histPOYear = y; window.poEdit = true;
   saveState(); renderHistory();
