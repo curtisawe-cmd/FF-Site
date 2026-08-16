@@ -1465,6 +1465,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <button class="btn ghost" onclick="showView('settings')">League Settings</button>
     </div>
   </div>
+  <!-- A warning nobody sees is not a warning: the same banner rides on the landing page, since
+       the manager who has left a slot empty is exactly the one not visiting My Team. -->
+  <div id="homeLineupWarn"></div>
 
   <div class="grid2">
     <div class="card">
@@ -6463,6 +6466,11 @@ document.querySelectorAll('.statssub button, .chatsub button').forEach(b=>b.addE
 
 function renderHome(){
   document.getElementById('homeLeagueName').textContent = S.leagueName;
+  { const hw=document.getElementById('homeLineupWarn');
+    if(hw){ const mi=myTeamIdx();
+      const w = (mi===null || !D.started) ? '' : lineupWarningHTML(mi);   /* nothing to field pre-draft */
+      hw.innerHTML = w ? `<div style="max-width:760px;margin:0 0 18px">${w
+        .replace('Fix', '<a href="#" onclick="showView(\'teams\');window.teamsSub=\'my\';renderTeams();return false" style="color:var(--charge);font-weight:700">Fix</a>')}</div>` : ''; } }
   document.getElementById('wmName').textContent = S.leagueName;
   { const wd=document.getElementById('wmNameDrawer'); if(wd) wd.textContent = S.leagueName; }
   const done = D.picks.length;
@@ -9354,6 +9362,69 @@ function playerKickoff(pid){
   return Number.isFinite(at) ? at : null;
 }
 function playerLocked(pid){ const at = playerKickoff(pid); return !!at && Date.now() >= at; }
+
+/* ---------- byes, and the lineup they quietly ruin ----------
+   Byes come out of the week's own schedule instead of a hardcoded table: every team playing
+   that week lands in NFL_KICKS.map, so a team missing from it has no game. A typed-in bye table
+   is wrong the moment the NFL flexes a game and has to be re-entered every season; this cannot
+   drift because it IS the schedule.
+   The count guard is the whole safety of it. A failed fetch leaves the map empty, and without
+   the guard an offline morning would report all 12 rosters as entirely on bye - a warning that
+   cries wolf is worse than no warning, because it trains you to ignore the real one. */
+function byesKnown(){
+  return NFL_KICKS.wk >= 1 && NFL_KICKS.wk === currentNflWeek()
+      && Object.keys(NFL_KICKS.map||{}).length >= 20;
+}
+function onBye(pid){
+  if(!byesKnown()) return false;
+  const p = POOL_MAP.get(pid) || (POOL||[]).find(x=>x.id===pid)
+         || (realDraft().picks||[]).find(x=>x.playerId===pid && !x.cut);
+  const tm = p && String(p.team || p.nfl || '').toUpperCase();
+  if(!tm) return false;                       /* unknown team: say nothing rather than guess */
+  return !Number.isFinite(NFL_KICKS.map[tm]);
+}
+/* What is wrong with a team's starting lineup right now: slots with nobody in them, and starters
+   whose team is not playing. Both score exactly zero, which is the point - they are the same
+   mistake wearing different clothes. */
+function lineupIssues(ti){
+  const out = { empty: [], bye: [], total: 0 };
+  if(!Number.isInteger(ti) || !((S.teams||[])[ti])) return out;
+  const lu = (S.lineups||{})[ti] || {};
+  const roster = (realDraft().picks||[]).filter(p=>p.teamIndex===ti && !p.cut);
+  const req = starterReq(), have = {};
+  roster.forEach(p=>{
+    const s = lu[p.playerId];
+    if(!s || s==='BN' || s==='IR') return;
+    have[s] = (have[s]||0) + 1;
+    if(onBye(p.playerId)) out.bye.push({ name:p.name||'', pos:p.pos||'', nfl:p.nfl||'', slot:s });
+  });
+  Object.keys(req).forEach(s=>{
+    const gap = (+req[s]||0) - (have[s]||0);
+    for(let k=0;k<gap;k++) out.empty.push(s);
+  });
+  out.total = out.empty.length + out.bye.length;
+  return out;
+}
+/* One line saying what to fix. Empty first: a hole is worse than a bye, because a bye at least
+   tells you the player exists. */
+function lineupWarningHTML(ti){
+  const w = lineupIssues(ti);
+  if(!w.total) return '';
+  const n = s => s.length===1 ? '' : 's';
+  const bits = [];
+  if(w.empty.length){
+    const counts = {}; w.empty.forEach(s=>counts[s]=(counts[s]||0)+1);
+    bits.push(`<b>${w.empty.length} empty slot${n(w.empty)}</b> (${
+      Object.entries(counts).map(([s,c])=>c>1?`${c}× ${s}`:s).join(', ')})`);
+  }
+  if(w.bye.length){
+    bits.push(`<b>${w.bye.length} starter${n(w.bye)} on bye</b> (${
+      w.bye.map(b=>`${esc(b.name)}${b.nfl?' '+esc(b.nfl):''}`).join(', ')})`);
+  }
+  return `<div class="notice lineup-warn" style="border-left-color:var(--danger);margin:0 0 12px">
+    ⚠️ ${bits.join(' · ')} — ${w.total===1?'it':'they'} will score
+    <b>0</b>. Fix ${w.total===1?'it':'them'} before kickoff.</div>`;
+}
 /* Boot fetch DEFERRED: loadKickoffs reads NFL_2026_WEEK1, a const declared further down this
    script, so calling it inline here would die in the temporal dead zone. After the current
    task the whole script has run and every binding exists. The minute tick keeps it fresh. */
@@ -10002,8 +10073,13 @@ function renderMyTeam(){
     const locked = playerLocked(p.playerId);
     const dead = locked && !isAdmin();
     const lockChip = locked ? ` <span class="inj q" title="His game has started \u2014 locked until next week">\uD83D\uDD12</span>` : '';
+    /* the banner says how many are on bye; this says which. Loudest in a starting slot, where it
+       costs you points - on the bench it is just a fact about the week. */
+    const bye = onBye(p.playerId);
+    const byeChip = !bye ? ''
+      : ` <span class="inj ${slotLabel==='BN'||slotLabel==='IR'?'q':'out'}" title="${esc(p.nfl||'His team')} is on bye in week ${currentNflWeek()}${slotLabel==='BN'||slotLabel==='IR'?'':' \u2014 this slot scores 0'}">BYE</span>`;
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${byeChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${dead?' disabled':''} title="${dead?'Locked \u2014 his game has started':'Drop to free agents'}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
@@ -10044,6 +10120,7 @@ function renderMyTeam(){
         <span class="eyebrow" style="margin:0">Starting lineup${statsLoaded?` · <span style="color:var(--turf)">${projectedTotal(mi).toFixed(1)} projected</span>`:''}</span>
         ${canEditTeam(mi)?`<button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Start whoever projects highest this week under your league's scoring. Nobody is dropped — the bench is only reordered." onclick="optimizeLineup(${mi})">Best lineup</button>`:''}
       </div>
+      ${lineupWarningHTML(mi)}
       <div style="overflow-x:auto"><table class="plain" style="min-width:300px">${slotRows.join('')}</table></div>
       <div class="eyebrow" style="margin-top:14px">Bench</div>
       <div style="overflow-x:auto"><table class="plain" style="min-width:300px">${benchRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>
