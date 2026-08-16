@@ -1179,7 +1179,15 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
   top:var(--wm-top, 12px); right:2vmin;
   width:min(42vw, 46vh); height:min(42vw, 46vh);
   background:no-repeat center/contain var(--wm-img, none);
-  opacity:.10;
+  /* 0.22, measured rather than eyeballed. The background sits at luminance 16.8; at the 0.10 this
+     started on, the Raiders crest landed 8.0 above it and the Bills 10.3 - under the threshold
+     where anything reads on a dark screen, which is why it looked like nothing was there at all.
+     At 0.22 the dimmest crest in the league clears 17 and the brightest 33: visible for every
+     team without drowning the text underneath.
+     Deliberately no brightness filter. It would clamp the already-light crests while barely
+     moving the dark ones, and it would invert the effect in the light theme, where the crest has
+     to DARKEN the page to show up. Plain opacity works in both. */
+  opacity:.22;
   transition:opacity .2s ease;
 }
 #wmark[hidden]{display:none}
@@ -1187,7 +1195,7 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
    header is mostly height, so lean on vw and let it run bigger. Slightly fainter, because a
    phone has no gutters: it is always over content. */
 @media(max-width:720px){
-  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; opacity:.085; }
+  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; opacity:.16; }
 }
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
@@ -11750,7 +11758,10 @@ function applyTeamWatermark(code){
   syncWatermarkTop();                       /* the header may have wrapped since last time */
   const team = NFL_TEAMS[code];
   if(!team || !watermarkOn()){ el.hidden = true; el.style.removeProperty('--wm-img'); return; }
-  const url = `https://sleepercdn.com/images/team_logos/nfl/${String(code).trim().toLowerCase()}.png`;
+  /* ESPN's 500px logo, not the Sleeper one the defence badges use: that is 150px square, and at
+     the ~300px this is drawn it came out visibly soft. Checked: all 32 codes resolve here,
+     including WAS, so no abbreviation mapping is needed. */
+  const url = `https://a.espncdn.com/i/teamlogos/nfl/500/${String(code).trim().toLowerCase()}.png`;
   el.style.setProperty('--wm-img', `url("${url}")`);
   el.hidden = false;
 }
