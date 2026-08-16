@@ -142,7 +142,7 @@ body{
   /* Per layer: the wash fills the viewport, the crest sits in the top right corner. Out of the
      reading column it can be carried a good deal stronger than it could behind body text, which
      is the point of moving it there. */
-  background-position:center, right 2vmin top 2vmin;
+  background-position:center, right 2vmin top var(--wm-top, 2vmin);
   background-attachment:fixed;      /* it stays put while the page scrolls under it */
   background-size:auto, min(42vw, 46vh);
   color:var(--chalk);
@@ -1161,6 +1161,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
 body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
+/* On a phone 42vw is only about 157px - a badge rather than a crest - and the viewport below the
+   header is mostly height, so lean on vw and let it run bigger. */
+@media(max-width:720px){
+  body{ background-size:auto, min(62vw, 34vh); background-position:center, right 3vw top var(--wm-top, 2vmin); }
+}
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
   .ticker-move{animation:none}
@@ -11612,8 +11617,26 @@ function hexWash(hex, alpha){
   return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;
 }
 function watermarkOn(){ return store.get('ffl_wmark') !== '0'; }
+/* The header is sticky, opaque and 20 deep in the stack, so anything the crest puts under it is
+   simply painted over. On a desktop the header is one row and most of a 42vw crest still hangs
+   below it; on a phone the header wraps to three rows - wordmark, nav, switches - and swallows a
+   157px crest whole, which is why it looked like the watermark was missing on mobile rather than
+   faint. Measured, not guessed at: it wraps differently per nav layout, per orientation and per
+   font setting, and every hardcoded number would be wrong for somebody. */
+function syncWatermarkTop(){
+  try{
+    const h = document.querySelector('header.top');
+    const px = (h && h.getClientRects().length) ? Math.round(h.getBoundingClientRect().height) : 0;
+    document.documentElement.style.setProperty('--wm-top', (px + 12) + 'px');
+  }catch(e){}
+}
+try{
+  addEventListener('resize', syncWatermarkTop);
+  addEventListener('orientationchange', ()=>setTimeout(syncWatermarkTop, 250));
+}catch(e){}
 function applyTeamWatermark(code){
   const b = document.body; if(!b) return;
+  syncWatermarkTop();                       /* the header may have wrapped since last time */
   const team = NFL_TEAMS[code];
   if(!team || !watermarkOn()){ b.style.removeProperty('background-image'); return; }
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
