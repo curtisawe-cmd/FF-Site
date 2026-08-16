@@ -670,6 +670,25 @@ nav.tabs button{position:relative}
 .inj.d{color:var(--te);border-color:var(--te)}
 .inj.out{color:var(--charge);border-color:var(--charge)}
 .inj.sus{color:var(--k);border-color:var(--k)}
+/* trade block: off is a faint switch you can find, on is a sign everyone can read */
+.blockchip{display:inline-flex;align-items:center;font-family:var(--f-ui);font-weight:700;font-size:10px;
+  letter-spacing:.06em;padding:0 7px;height:17px;line-height:1;border-radius:5px;white-space:nowrap;
+  background:transparent;border:1px dashed var(--line-strong);color:var(--chalk-dim);
+  cursor:pointer;user-select:none;vertical-align:middle}
+.blockchip:hover{border-color:var(--gold);color:var(--gold)}
+.blockchip.on{background:var(--gold);border:1px solid var(--gold);color:#0e1114;border-style:solid}
+.blockchip.on:hover{color:#0e1114;opacity:.85}
+/* the Trade Center's shop window */
+.tbk-team{border-bottom:1px solid var(--line);padding:9px 0}
+.tbk-team:last-child{border-bottom:none}
+.tbk-head{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:6px}
+.tbk-head b{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbk-list{display:flex;flex-wrap:wrap;gap:6px}
+.tbk-p{display:inline-flex;align-items:center;gap:6px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:20px;padding:3px 11px 3px 4px;font-size:13px;cursor:pointer}
+.tbk-p:hover{border-color:var(--gold)}
+.tbk-p .postag{min-width:28px;font-size:10px}
+@media(max-width:560px){ .tbk-p{font-size:12px;padding:2px 9px 2px 3px} .tbk-head b{font-size:13px} }
 .poolrefresh{color:var(--turf);font-weight:600;text-decoration:none}
 .poolrefresh:hover{text-decoration:underline}
 /* players tab table */
@@ -6278,7 +6297,42 @@ async function commitMoves(){
 }
 function pushTeamData(ti){
   if(!fbOk() || !canEditTeam(ti)) return;
-  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null, name: (S.teams[ti]||{}).name || null })).catch(()=>{}); }catch(e){}
+  /* the block rides in the team's own node, which its manager already owns - no new database
+     rule, and it reaches everyone through the teamData listener that is already running */
+  const blk = ((TD[ti]||{}).block) || [];
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null, name: (S.teams[ti]||{}).name || null, block: blk })).catch(()=>{}); }catch(e){}
+}
+/* ---------- the trade block ----------
+   Players their manager has hung a sign on. Filtered against the roster on every read, so a
+   blocked player who is dropped or traded away falls off by himself - no cleanup pass to
+   forget, and no ghost entries advertising somebody else's player. */
+function blockList(ti){
+  const b = (teamDataFor(ti)||{}).block;
+  if(!Array.isArray(b)) return [];
+  const on = new Set((realDraft().picks||[])
+    .filter(p=>p.teamIndex===ti && !p.cut).map(p=>String(p.playerId)));
+  return b.map(String).filter(id=>on.has(id));
+}
+function onBlock(ti, pid){ return blockList(ti).includes(String(pid)); }
+function blockCount(){ return (S.teams||[]).reduce((n,_,i)=>n+blockList(i).length, 0); }
+function toggleBlock(ti, pid){
+  if(!requireTeam(ti)) return;
+  const id = String(pid), cur = blockList(ti);
+  const next = cur.includes(id) ? cur.filter(x=>x!==id) : cur.concat([id]);
+  TD[ti] = {...(TD[ti]||{}), block: next};        /* mirror first: the chip flips before the round trip */
+  pushTeamData(ti);
+  const p = (realDraft().picks||[]).find(x=>x.teamIndex===ti && String(x.playerId)===id);
+  toast(next.includes(id) ? `${(p&&p.name)||'He'} is on the trade block`
+                          : `${(p&&p.name)||'He'} is off the trade block`);
+  try{ renderTeams(); if(window.currentView==='trades') renderTradeCenter(); }catch(e){}
+}
+/* The chip on a player's row. Your own team gets a switch; everyone else gets a sign. */
+function blockChipHTML(ti, pid){
+  const on = onBlock(ti, pid);
+  if(!canEditTeam(ti)) return on ? ` <span class="blockchip on" title="His manager has him on the trade block">ON THE BLOCK</span>` : '';
+  return ` <span class="blockchip ${on?'on':''}" role="button" tabindex="0"
+    title="${on?'On your trade block — tap to take him off':'Tap to put him on the trade block, so the league can see he is available'}"
+    onclick="event.stopPropagation();toggleBlock(${ti},'${pid}')">${on?'ON THE BLOCK':'BLOCK'}</span>`;
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
 /* The league's manager name for an account — what people are called in chat, polls and the
@@ -8569,6 +8623,19 @@ function tradeAddRound(side, round){
 }
 /* a team still controls its own round-R pick for a given year unless already traded that year */
 function ownsPick(teamName, round, year){ return !(S.pickTrades||[]).some(t=>+t.round===round && t.from===teamName && pickYearOf(t)===+year); }
+/* Clicking a name on the block is meant to BE the opening move, not a note to go and make one:
+   it loads that team into the builder with the player already on the table, leaving only "what
+   am I sending" to answer. */
+function tradeForBlocked(ti, pid){
+  const T = window.tradeSel; if(!T) return;
+  if(ti === T.a){ toast('He is on your own block — take him off from My Team.'); return; }
+  T._defaulted = true;                     /* an explicit pick beats the starting default */
+  T.b = +ti; T.pb = new Set([String(pid)]); T.rb = new Set();
+  renderTradeCenter();
+  const p = (realDraft().picks||[]).find(x=>String(x.playerId)===String(pid));
+  toast(`${(p&&p.name)||'He'} is on the table — now pick what you are sending`);
+  try{ document.querySelector('#tradesView .tb-grid').scrollIntoView({block:'start', behavior:'smooth'}); }catch(e){}
+}
 function tradeSetTeam(side, ti){
   window.tradeSel._defaulted = true;      /* an explicit pick wins over the starting default */
   window.tradeSel[side] = +ti;
@@ -9179,12 +9246,38 @@ function renderTradeCenter(){
     renderOffers();
     return;
   }
+  /* The shop window. A trade system with no way to say "these are available" leaves cold
+     offers as the only opening move, which is why most of them go unanswered. Clicking a name
+     loads that team into the builder with the player already ticked, so the sign leads straight
+     into an offer. Your own team is listed too - seeing your own sign is how you remember to
+     take it down. */
+  const blockHTML = (()=>{
+    const rows = (S.teams||[]).map((t,i)=>({ i, t, ids: blockList(i) })).filter(r=>r.ids.length);
+    if(!rows.length) return `<div class="card" style="margin-bottom:18px"><h2>Trade block</h2>
+      <p class="sub" data-note="tbk-empty" style="margin:0">Nobody has hung a sign out yet. Put a player on your block from My Team and every manager will see he is available.</p></div>`;
+    const picks = realDraft().picks||[];
+    return `<div class="card" style="margin-bottom:18px">
+      <h2>Trade block <span class="statpill" style="margin-left:8px">${rows.reduce((n,r)=>n+r.ids.length,0)} available</span></h2>
+      <p class="sub" data-note="tbk-intro" style="margin:2px 0 10px">Players their manager says are available. Tap one to start an offer with that team.</p>
+      ${rows.map(({i,t,ids})=>`<div class="tbk-team">
+        <div class="tbk-head">${teamMarkHTML(t,26)}<b>${esc(t.name)}</b>${i===mineIdx?`<span class="divtag">you</span>`:''}</div>
+        <div class="tbk-list">${ids.map(id=>{
+          const p = picks.find(x=>String(x.playerId)===id) || {};
+          const pos = String(p.pos||'');
+          return `<span class="tbk-p" title="${i===mineIdx?'On your block — take him off from My Team':'Start an offer with '+esc(t.name)}"
+            onclick="tradeForBlocked(${i},'${id}')">
+            <span class="postag pos-${esc(pos)}" style="--pc:var(--${esc(pos.toLowerCase())})">${esc(pos)}</span>
+            ${esc(p.name||'')}${p.nfl?` <span style="color:var(--chalk-dim);font-size:11px">${esc(p.nfl)}</span>`:''}</span>`;
+        }).join('')}</div>
+      </div>`).join('')}
+    </div>`;
+  })();
   const deadlineNote = tradeDeadlineWk()
     ? `<div class="notice" style="margin:0 0 14px">Trade deadline: <b>${esc(tradeDeadlineLabel())}</b>. Offers still pending at the deadline die unaccepted.</div>` : '';
   /* Send is live only while something is actually on the table. Because a successful send
      clears the selection, this is also what greys the button out the moment an offer goes. */
   const armed = tradeHasSelection() && !window.__tradeSending;
-  el.innerHTML = deadlineNote + `
+  el.innerHTML = deadlineNote + blockHTML + `
     <div class="grid2 tb-grid" style="margin-bottom:14px">
       <div class="card">
         <div class="row tb-head" style="justify-content:space-between;margin-bottom:8px">${teamSel('a')}<span class="sub" style="margin:0">${cnt(T.a)} \u2192 ${after('a')} players</span></div>
@@ -10143,7 +10236,7 @@ function renderMyTeam(){
     const byeChip = !bye ? ''
       : ` <span class="inj ${slotLabel==='BN'||slotLabel==='IR'?'q':'out'}" title="${esc(p.nfl||'His team')} is on bye in week ${currentNflWeek()}${slotLabel==='BN'||slotLabel==='IR'?'':' \u2014 this slot scores 0'}">BYE</span>`;
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${byeChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${byeChip}${blockChipHTML(mi, p.playerId)}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${dead?' disabled':''} title="${dead?'Locked \u2014 his game has started':'Drop to free agents'}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
