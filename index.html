@@ -532,7 +532,10 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line)}
 .prow:hover{background:var(--turf-wash)}
 .prow .pname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-.prow .pmeta{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim)}
+/* fixed slot: NE and WAS are different widths, and without it the bye tag beside them stepped
+   left and right down the list */
+.prow .pmeta{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);
+  min-width:34px;text-align:right;flex:none}
 .prow .pick{
   font-family:var(--f-ui);font-weight:700;font-size:13px;letter-spacing:.05em;text-transform:uppercase;
   background:var(--turf);color:var(--on-turf);border-radius:var(--r-chip);padding:4px 12px;transition:background .12s ease,transform .08s ease;
@@ -685,11 +688,17 @@ nav.tabs button{position:relative}
 .inj.out{color:var(--charge);border-color:var(--charge)}
 .inj.sus{color:var(--k);border-color:var(--k)}
 /* a player's bye week, always shown; red only in the week it is actually costing you */
-.byetag{display:inline-flex;align-items:center;flex:none;font-family:var(--f-mono);font-weight:700;
-  font-size:10px;letter-spacing:.02em;padding:0 5px;height:16px;line-height:1;border-radius:4px;
+/* justify-content + min-width so BYE 5 and BYE 14 occupy the same box: one character of
+   difference was enough to make a column of them look ragged */
+.byetag{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  font-family:var(--f-mono);font-weight:700;font-size:10px;letter-spacing:.02em;
+  min-width:48px;padding:0 5px;height:16px;line-height:1;border-radius:4px;
   background:transparent;border:1px solid var(--line-strong);color:var(--chalk-dim);
   white-space:nowrap;vertical-align:middle;margin-left:5px}
 .byetag.now{border-color:var(--charge);color:var(--charge);font-weight:800}
+/* the bare number in the Players table's Bye column */
+.byenum{display:inline-block;min-width:22px;font-family:var(--f-mono);color:var(--chalk-dim)}
+.byenum.now{color:var(--charge);font-weight:800}
 /* trade block: off is a faint switch you can find, on is a sign everyone can read */
 .blockchip{display:inline-flex;align-items:center;font-family:var(--f-ui);font-weight:700;font-size:10px;
   letter-spacing:.06em;padding:0 7px;height:17px;line-height:1;border-radius:5px;white-space:nowrap;
@@ -812,6 +821,10 @@ nav.tabs button{position:relative}
 }
 .faRow:hover{background:var(--turf-wash)}
 .faRow .faName{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+/* same fixed slot as the draft pool, so the team abbreviation and the bye beside it line up
+   down the list instead of stepping about with the length of the name */
+.faRow .pmeta{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);
+  min-width:34px;text-align:right;flex:none}
 .pick:disabled{opacity:.4;cursor:not-allowed}
 .pmodal-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--chalk-dim);font-size:14px;margin-top:8px}
 .pcareer{display:flex;align-items:flex-end;gap:8px;height:190px;padding-top:12px}
@@ -4793,11 +4806,12 @@ function renderPlayers(){
   const st=document.getElementById('plStatus');
   if(st) st.innerHTML=`${eligible.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${canAdd?` · adding to <b>${esc(teamName(addTi))}</b> (${rosterCount(addTi)}/${rosterLimit()})`:''}${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
   list.innerHTML=`<div style="overflow-x:auto"><table class="plain plplayers">
-    <tr><th style="width:44px">Pos</th><th>Player</th><th>Team</th><th style="text-align:center">Age</th><th style="text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
+    <tr><th style="width:44px">Pos</th><th>Player</th><th style="width:58px">Team</th><th style="width:52px;text-align:center" title="The week this player's NFL team does not play">Bye</th><th style="width:52px;text-align:center">Age</th><th style="width:52px;text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
       <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}</span></span></td>
-      <td style="font-family:var(--f-mono)">${esc(p.team)}${byeTagHTML(null, p.team)}</td>
+      <td style="font-family:var(--f-mono)">${esc(p.team)}</td>
+      <td style="text-align:center;font-family:var(--f-mono)">${byeCellHTML(null, p.team)}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.age??'—'}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.exp==null?'—':(p.exp===0?'R':p.exp)}</td>
       <td>${p.inj?`${injBadge(p.inj,p.injBody).trim()}${p.injNote?`<div style="color:var(--chalk-dim);font-size:11px;max-width:280px">${esc(p.injNote)}</div>`:''}`:'<span style="color:var(--rb);font-size:13px">Healthy</span>'}</td>
@@ -6682,8 +6696,8 @@ function renderPool(){
   list.innerHTML = avail.map(p=>`
     <div class="prow pos-${p.pos}">
       <span class="postag">${p.pos}</span>${playerFace(p,30)}
-      <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}${byeTagHTML(null, p.team)}
-      <span class="pmeta">${p.team||''}</span>
+      <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
+      <span class="pmeta">${p.team||''}</span>${byeTagHTML(null, p.team)}
       ${canPickNow()?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
 }
@@ -10003,6 +10017,16 @@ function byeTagHTML(pid, nfl){
   const on = now>=1 && w===now;
   return ` <span class="byetag${on?' now':''}" title="${on?'On bye this week — will score 0':'Bye week '+w}">BYE ${w}</span>`;
 }
+/* In a table the week wants a column of its own. Appended to the Team cell it landed wherever
+   the abbreviation ended - after BUF on one row, after WAS on the next - so the numbers never
+   lined up with each other. Bare digits, centred, in the same monospace as the other numbers. */
+function byeCellHTML(pid, nfl){
+  const w = (pid ? byeWeekOf(pid) : null) || byeWeekOfTeam(nfl);
+  if(!w) return `<span style="color:var(--chalk-dim)">—</span>`;
+  const now = (typeof currentNflWeek==='function') ? currentNflWeek() : 0;
+  const on = now>=1 && w===now;
+  return `<span class="byenum${on?' now':''}" title="${on?'On bye this week — will score 0':'Bye week '+w}">${w}</span>`;
+}
 function refreshByeUI(){
   try{
     if(window.currentView==='draft') renderPool();
@@ -10667,8 +10691,8 @@ function renderFreeAgents(ti){
   el.innerHTML = filters + note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
-      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${byeTagHTML(null, p.team)}</span>
-      <span class="pmeta">${p.team||''}</span>
+      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+      <span class="pmeta">${p.team||''}</span>${byeTagHTML(null, p.team)}
       ${onWaivers(p.id)
         ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
            <button class="pick" onclick="claimWaiver('${p.id}')">Claim</button>`
