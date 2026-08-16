@@ -1628,6 +1628,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <select id="txFilter" onchange="window.txFilter=this.value;renderTransactions()" style="max-width:170px">
         <option value="all">All moves</option>
         <option value="trade">Trades only</option>
+        <option value="waiver">Waiver claims</option>
         <option value="add">Adds only</option>
         <option value="drop">Drops only</option>
       <option value="undo">Undos only</option>
@@ -5909,9 +5910,26 @@ function logCommish(what, detail){
 }
 function logMove(ti, type, p){
   /* playerId is what makes an entry reversible — names are for reading, ids are for undoing. */
-  logTx({ type, team: (S.teams[ti]||{}).name || ('Team '+(ti+1)), teamIndex: ti,
-          playerId: String(p.playerId||p.id||''),
-          player: p.name||'', pos: p.pos||'', nfl: p.nfl||p.team||'' });
+  const rec = { type, team: (S.teams[ti]||{}).name || ('Team '+(ti+1)), teamIndex: ti,
+                playerId: String(p.playerId||p.id||''),
+                player: p.name||'', pos: p.pos||'', nfl: p.nfl||p.team||'' };
+  /* an add off waivers is still an add, but it is worth being able to ask for only those */
+  if(p.waiver) rec.waiver = true;
+  logTx(rec);
+}
+/* Adds logged before the flag existed are still recognisable: a won claim on the same player by
+   the same team is what a waiver add IS, so the history does not start blank. */
+function txIsWaiver(x){
+  if(!x) return false;
+  if(x.waiver) return true;
+  if(x.type!=='add' || !x.playerId) return false;
+  try{ return claimList().some(c=>c.status==='won' && String(c.pid)===String(x.playerId) && c.team===x.teamIndex); }
+  catch(e){ return false; }
+}
+function txMatchesType(x, f){
+  if(!f || f==='all') return true;
+  if(f==='waiver') return txIsWaiver(x);
+  return x.type===f;
 }
 /* Commissioner-only reversal. The log stays append-only: the original entry is marked undone
    rather than deleted, and the reversal is recorded as its own entry, so the record shows what
@@ -6122,7 +6140,7 @@ function renderTransactions(){
      while the filter is still holding the old value. The control then lies about what it is
      filtering and the list looks empty for no visible reason. */
   if(window.txTeam && window.txTeam!=='all' && !names.includes(window.txTeam)) window.txTeam='all';
-  if(!['all','trade','add','drop','undo','commish'].includes(window.txFilter||'all')) window.txFilter='all';
+  if(!['all','trade','waiver','add','drop','undo','commish'].includes(window.txFilter||'all')) window.txFilter='all';
   if(sel){
     const cur=window.txTeam||'all';
     sel.innerHTML=`<option value="all" ${cur==='all'?'selected':''}>All teams</option>`+names.map(n=>`<option value="${esc(n)}" ${n===cur?'selected':''}>${esc(n)}</option>`).join('');
@@ -6133,7 +6151,7 @@ function renderTransactions(){
   /* Pending claims ride above the log on every exit path below, including the empty-log one -
      an empty log with claims outstanding is exactly when "nothing here yet" would be wrong. */
   let pendHTML=''; try{ pendHTML=pendingClaimsHTML(fType, fTeam); }catch(e){}
-  const list=all.filter(x=>(fType==='all'||x.type===fType) && (fTeam==='all'||x.team===fTeam||x.teamB===fTeam));
+  const list=all.filter(x=>txMatchesType(x, fType) && (fTeam==='all'||x.team===fTeam||x.teamB===fTeam));
   const cnt=document.getElementById('txCount');
   if(cnt) cnt.textContent = list.length===all.length ? `${all.length} total` : `${list.length} of ${all.length}`;
   if(!all.length){
@@ -6151,7 +6169,9 @@ function renderTransactions(){
   if(!list.length){
     /* name the active filter — "nothing matches" with the controls apparently on "all" is the
        most confusing thing this page can say */
-    const bits=[fType!=='all'?fType+'s only':'', fTeam!=='all'?'team: '+esc(fTeam):''].filter(Boolean).join(' · ');
+    const TXLBL={trade:'trades only', waiver:'waiver claims', add:'adds only', drop:'drops only',
+                 undo:'undos only', commish:'commissioner changes'};
+    const bits=[fType!=='all'?(TXLBL[fType]||fType+'s only'):'', fTeam!=='all'?'team: '+esc(fTeam):''].filter(Boolean).join(' · ');
     el.innerHTML=pendHTML+`<div class="card"><p class="sub" style="margin:0">No moves match ${bits?'<b>'+bits+'</b>':'the current filter'} — ${all.length} in the log. <a href="#" onclick="window.txFilter='all';window.txTeam='all';renderTransactions();return false" style="color:var(--charge)">show all</a></p></div>`;
     return;
   }
@@ -6197,7 +6217,8 @@ function renderTransactions(){
         <span style="min-width:0">
           <b style="color:${isAdd?'var(--rb)':'var(--danger)'}">${isAdd?'+ Added':'− Dropped'}</b>
           ${x.pos?`<span class="postag pos-${esc(x.pos)}" style="--pc:var(--${esc(String(x.pos).toLowerCase())});margin:0 6px">${esc(x.pos)}</span>`:''}
-          <b>${esc(x.player||'')}</b>${x.nfl?` <span style="color:var(--chalk-dim);font-size:12px">${esc(x.nfl)}</span>`:''}
+          <b>${esc(x.player||'')}</b>${x.nfl?` <span style="color:var(--chalk-dim);font-size:12px">${esc(x.nfl)}</span>`:''}${
+            txIsWaiver(x)?` <span class="divtag" style="color:var(--gold);border-color:var(--gold);background:transparent">waiver</span>`:''}
           <span style="color:var(--chalk-dim)"> · ${esc(x.team||'')}</span> ${undoneTag}
         </span>
         <span class="row" style="gap:8px;align-items:center"><span class="sub" style="margin:0;font-size:12px">${stamp}</span>${undoBtn}</span>
@@ -9680,8 +9701,8 @@ function awardClaim(c){
   if(rosterCount(ti) >= rosterLimit()) return false;                 /* named drop was already gone */
   d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true, waiver:true });
   saveRealDraft(d); saveState(); pushTeamData(ti);
-  if(dropped) logMove(ti,'drop',dropped);
-  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
+  if(dropped) logMove(ti,'drop',{...dropped, waiver:true});
+  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team, waiver:true});
   return true;
 }
 function maybeProcessWaivers(){
@@ -9797,7 +9818,7 @@ function claimantsHTML(pid){
    wants to know is "who is on this guy and am I ahead", not one row per claim. */
 function pendingClaimsHTML(fType, fTeam){
   if(!waiversOn()) return '';
-  if(fType && fType!=='all' && fType!=='add') return '';      /* a claim is a pending add */
+  if(fType && fType!=='all' && fType!=='add' && fType!=='waiver') return '';   /* a claim is a pending waiver add */
   const pend=claimList().filter(c=>c.status==='pending');
   if(!pend.length) return '';
   const pids=[...new Set(pend.map(c=>c.pid))];
