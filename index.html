@@ -949,6 +949,24 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 :root[data-role="admin"] .role-btn{color:var(--on-turf);background:var(--turf);border-color:var(--turf)}
 :root[data-role="admin"] .role-btn .dot{background:var(--gold);box-shadow:0 0 0 3px rgba(255,202,58,.2)}
 :root[data-role="user"] .admin-only{display:none !important}
+/* ---- settings pages ---- */
+.spage-off{display:none !important}
+.spage-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 18px}
+.spage-tabs button{
+  font-family:var(--f-ui);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r-chip);padding:6px 13px;transition:color .12s ease,border-color .12s ease,background .12s ease}
+.spage-tabs button:hover{color:var(--chalk);border-color:var(--chalk-dim)}
+.spage-tabs button.on{color:var(--on-turf);background:var(--turf);border-color:var(--turf)}
+.spage-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
+.spage-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
+@media(max-width:560px){
+  .spage-tabs{gap:6px;margin-bottom:14px}
+  .spage-tabs button{font-size:11px;padding:5px 10px}
+  .spage-pager{margin-top:18px}
+  .spage-pager .btn{padding:8px 14px;font-size:14px}
+}
 /* an unlocked description: it has to look like something you can type in, or nobody will */
 .note-edit{
   display:block;background:var(--panel-2);border:1px dashed var(--turf);border-radius:8px;
@@ -1863,8 +1881,12 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="notice viewer-note" id="settingsViewerNote" style="display:none;margin-bottom:18px">
     Read-only — this is how the league is set up. Only the commissioner can change it.
   </div>
+  <!-- Settings was one column about fifteen cards deep, which meant hunting for the waiver box by
+       scrolling past the scoring table every time. Each section is its own page now; these tabs
+       jump straight to one and the button at the foot of every page walks to the next. -->
+  <div class="spage-tabs" id="setTabs"></div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="league" class="card" style="margin-bottom:18px">
     <h2>League</h2>
     <div class="setgrid">
       <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
@@ -1882,14 +1904,14 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div id="snapExtras"></div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="league" class="card" style="margin-bottom:18px">
     <h2>Prize Money</h2>
     <p class="sub" data-note="set-buyin" style="margin-bottom:12px">Buy-in per manager sets the pot. Division winners get their buy-in back; the podium payouts below are placeholders — edit them to match your league.</p>
     <div id="prizesView"></div>
   </div>
 
 
-  <div class="card" id="commishCard" style="margin-bottom:18px;display:none">
+  <div data-spage="people" class="card" id="commishCard" style="margin-bottom:18px;display:none">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">Commissioners</h2>
       <span id="commishHint" class="eyebrow" style="margin:0"></span>
@@ -1898,7 +1920,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div id="commishList"></div>
   </div>
 
-  <div class="card managers-card" style="margin-bottom:18px">
+  <div data-spage="people" class="card managers-card" style="margin-bottom:18px">
     <div class="row" style="align-items:baseline">
       <h2 style="margin:0">League Managers</h2>
       <span id="mgrCount" class="eyebrow" style="margin:0"></span>
@@ -1911,7 +1933,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="draft" class="card" style="margin-bottom:18px">
     <h2>Teams &amp; Draft Order</h2>
     <p class="sub" data-note="set-draftorder" style="margin-bottom:10px">Order below = round 1 pick order (snakes every round). Check <b>auto</b> for any manager who can’t attend — auto teams draft themselves: starters first (QB, 2 RB, 2 WR, TE, flex, K, DEF), then best available. The commissioner still makes auto teams’ keeper-round picks.</p>
     <div class="row" style="margin:0 0 14px;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1929,7 +1951,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="grid2" style="margin-bottom:18px">
+  <div data-spage="scoring" class="grid2" style="margin-bottom:18px">
     <div class="card">
       <h2>Roster Structure</h2>
       <div id="rosterInputs"></div>
@@ -1941,7 +1963,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="rules" class="card" style="margin-bottom:18px">
     <h2>League Rules</h2>
     <p class="sub" data-note="set-rules" style="margin-bottom:10px">Imported from your NFL.com settings — playoffs, keepers, waivers, tiebreakers. These drive the matchup and standings features when the season engine goes live. Structural formats from other platforms (Superflex, extra game vs. league median, top-half bonus wins) can be wired in on request.</p>
     <div class="setgrid" style="margin-bottom:12px">
@@ -1966,7 +1988,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div id="rulesInputs"></div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="draft" class="card" style="margin-bottom:18px">
     <h2>Traded Draft Picks</h2>
     <p class="sub" data-note="set-pickstrades" style="margin-bottom:10px">Picks that changed hands before the draft. The draft room honors these automatically — the 2026 deadline deals are preloaded. (Trades are matched by team name, so finish renaming teams before adding trades.)</p>
     <div id="tradeList"></div>
@@ -1980,13 +2002,13 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="season" class="card" style="margin-bottom:18px">
     <h2>Season</h2>
     <p class="sub" style="margin-bottom:10px">Current draft/season year: <b id="seasonYear">2026</b>. When the season's over, start the next one — it archives this year (and its champion) to History, hands you a fresh draft board + schedule, uses up this year's traded picks, and carries any future‑year pick trades forward.</p>
     <button class="btn" onclick="startNextSeason()">Start Next Season</button>
   </div>
 
-  <div class="card admin-only">
+  <div data-spage="season" class="card admin-only">
     <h2>Save / Share League File</h2>
     <p class="sub" data-note="set-backup" style="margin-bottom:10px">Your settings save automatically in this browser. Export a league file as a backup or to move to another computer — it also captures draft results.</p>
     <div class="row">
@@ -1996,7 +2018,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:18px">
+  <div data-spage="look" class="card" style="margin-bottom:18px">
     <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <h2 style="margin:0">Typography</h2>
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="resetTypography()">Reset to default</button>
@@ -2007,8 +2029,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <!-- alarms and other noise-makers live down here, out of the way of real league settings.
        admin-only: managers must never see the insults before they get screamed at them -->
-  <div class="eyebrow admin-only" style="margin:26px 0 10px">Alarms &amp; noise</div>
-  <div class="grid2 admin-only" style="margin-bottom:18px">
+  <div data-spage="look" class="eyebrow admin-only" style="margin:26px 0 10px">Alarms &amp; noise</div>
+  <div data-spage="look" class="grid2 admin-only" style="margin-bottom:18px">
     <div class="card">
       <h2>Draft Alarm Insults</h2>
       <p class="sub" data-note="set-alarms" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Write <b>{mgr}</b> for the manager on the clock, <b>{team}</b> for their team, <b>{player}</b> for whoever they tried to draft and <b>{pos}</b> for the position; each alarm fills in the real ones, and a line with no tokens shows as-is. <b>{mgr}</b> falls back to the team name for anyone without a manager set. Leave it blank to use the built-in set.</p>
@@ -2046,7 +2068,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card tabflash-card admin-only" style="margin-top:18px;max-width:420px;opacity:.75">
+  <div data-spage="alerts" class="card tabflash-card admin-only" style="margin-top:18px;max-width:420px;opacity:.75">
     <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
       <h2 style="margin:0;font-size:15px">Tab Flash <span style="color:var(--chalk-dim);font-weight:400">🔒</span></h2>
       <button class="btn ghost" style="padding:2px 10px;font-size:12px" id="tfLockBtn" onclick="toggleTabFlashLock()">Unlock</button>
@@ -2064,7 +2086,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
   </div>
 
-  <div class="card" style="margin-top:18px">
+  <div data-spage="alerts" class="card" style="margin-top:18px">
     <h2>Push notifications</h2>
     <p class="sub" data-note="set-push" style="margin:0 0 10px">The App ID lets managers subscribe. Sending goes through a small relay, because OneSignal refuses requests made straight from a browser &mdash; deploy <code>push/cloudflare-worker.js</code> (free, no card) and paste its URL here. Your REST key lives on the relay, never in this browser or the repo.</p>
     <div class="setgrid">
@@ -2082,6 +2104,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
     <p class="sub" id="buildStamp" style="margin:6px 0 0;font-size:11px;opacity:.7"></p>
   </div>
+  <!-- page-down: the next section, named, at the foot of every page -->
+  <div class="spage-pager" id="setPager"></div>
 </section>
 
 </main>
@@ -7584,6 +7608,71 @@ function h2hCardHTML(from, to, isAll){
     </table></div>
   </div>`;
 }
+/* ===================== SETTINGS PAGES =====================
+   Fifteen cards in one column meant scrolling past the scoring table to reach the waiver box.
+   Each section is a page now. The blocks themselves did not move - every one carries a
+   data-spage and the rest are hidden - so nothing about how they save or render changed.
+   A page whose every block is admin-only is dropped from the strip entirely for a manager,
+   rather than offered and then found empty. */
+const SET_PAGES = [
+  ['league',  'League'],
+  ['people',  'People'],
+  ['draft',   'Teams & Draft'],
+  ['scoring', 'Roster & Scoring'],
+  ['rules',   'Rules & Fees'],
+  ['season',  'Season'],
+  ['look',    'Look & Alarms'],
+  ['alerts',  'Alerts']
+];
+function setBlocks(key){
+  return [...document.querySelectorAll('#view-settings [data-spage]')]
+    .filter(el=>el.getAttribute('data-spage')===key);
+}
+/* Visible to THIS reader: a manager never sees admin-only blocks, so a page made only of them
+   has nothing to show. Checked with getClientRects rather than the class, so it stays honest if
+   the role rules ever change. */
+function setPageHasContent(key){
+  const blocks = setBlocks(key);
+  if(!blocks.length) return false;
+  if(isAdmin()) return true;
+  return blocks.some(el=>!el.classList.contains('admin-only'));
+}
+function setPageList(){ return SET_PAGES.filter(([k])=>setPageHasContent(k)); }
+function currentSetPage(){
+  const list = setPageList().map(p=>p[0]);
+  if(!list.length) return null;
+  return list.includes(window.setPage) ? window.setPage : list[0];
+}
+function goSetPage(key, scroll){
+  const list = setPageList().map(p=>p[0]);
+  if(!list.includes(key)) key = list[0];
+  window.setPage = key;
+  document.querySelectorAll('#view-settings [data-spage]').forEach(el=>{
+    /* a class, never an inline display: #commishCard carries its own inline display that JS
+       toggles, and writing over it here would strand it shown or hidden */
+    el.classList.toggle('spage-off', el.getAttribute('data-spage')!==key);
+  });
+  renderSetTabs();
+  if(scroll){ try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); } }
+}
+function renderSetTabs(){
+  const strip = document.getElementById('setTabs'), pager = document.getElementById('setPager');
+  const list = setPageList();
+  const cur = currentSetPage();
+  if(strip) strip.innerHTML = list.map(([k,label])=>
+    `<button class="${k===cur?'on':''}" onclick="goSetPage('${k}', true)">${esc(label)}</button>`).join('');
+  if(pager){
+    const i = list.findIndex(p=>p[0]===cur);
+    const prev = i>0 ? list[i-1] : null, next = (i>=0 && i<list.length-1) ? list[i+1] : null;
+    pager.innerHTML = (!list.length) ? '' : `
+      <div class="spage-count">Page ${i+1} of ${list.length}</div>
+      <div class="row" style="gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        ${prev?`<button class="btn ghost" onclick="goSetPage('${prev[0]}', true)">↑ ${esc(prev[1])}</button>`:''}
+        ${next?`<button class="btn" onclick="goSetPage('${next[0]}', true)">${esc(next[1])} ↓</button>`
+              :`<button class="btn ghost" onclick="goSetPage('${list[0][0]}', true)">↑ Back to ${esc(list[0][1])}</button>`}
+      </div>`;
+  }
+}
 window.statsSort = window.statsSort || {key:'titles', dir:-1};
 function setStatsSort(key){
   const ss = window.statsSort;
@@ -10935,6 +11024,9 @@ async function releaseClaimSlot(ti){
   catch(e){ toast('Could not release — try again.'); }
 }
 function renderSettings(){
+  /* first, so a page the reader cannot see is never the one left showing - the role can change
+     under us when a manager signs in, or the commissioner previews as one */
+  try{ goSetPage(currentSetPage(), false); }catch(e){}
   document.getElementById('setLeagueName').value = S.leagueName;
   document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
   document.getElementById('setRounds').value = snakeRounds();
