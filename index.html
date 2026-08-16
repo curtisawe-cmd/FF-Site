@@ -131,20 +131,6 @@ try{var _l=localStorage.getItem('ffl_layout');if(_l==='side')document.documentEl
 html,body{height:100%}
 body{
   background:var(--bg);
-  /* The team watermark rides in body's OWN background rather than in a fixed element behind the
-     page. A fixed div would have to sit at z-index:-1 to stay behind the content, and body's
-     opaque background would then hide it entirely; moving the background to html to fix that
-     re-layers the whole app. Painting it here cannot disturb the stacking order at all.
-     Two layers: a near-opaque wash of the background colour laid OVER the logo, which is what
-     gives an exact, tunable faintness - background-image has no opacity of its own.
-     Set by applyTeamWatermark; absent until a team is picked. */
-  background-repeat:no-repeat;
-  /* Per layer: the wash fills the viewport, the crest sits in the top right corner. Out of the
-     reading column it can be carried a good deal stronger than it could behind body text, which
-     is the point of moving it there. */
-  background-position:center, right 2vmin top var(--wm-top, 2vmin);
-  background-attachment:fixed;      /* it stays put while the page scrolls under it */
-  background-size:auto, min(42vw, 46vh);
   color:var(--chalk);
   font-family:var(--f-body);
   font-size:15px;
@@ -1180,10 +1166,28 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
 body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
-/* On a phone 42vw is only about 157px - a badge rather than a crest - and the viewport below the
-   header is mostly height, so lean on vw and let it run bigger. */
+/* ---- the team crest ----
+   An overlay ON TOP of the page, not a background behind it. Behind it was the obvious place and
+   the wrong one: .card is opaque, main runs to 1800px, so on a desktop every card covered the
+   crest and only slivers between cards ever showed. Nothing painted below opaque content can be
+   a watermark.
+   z-index 5 clears the cards, which are unpositioned, while staying under the sticky header
+   (20) and every modal, so the chrome stays clean. pointer-events:none so it can never eat a
+   click - it is decoration sitting over the buttons. */
+#wmark{
+  position:fixed; pointer-events:none; z-index:5;
+  top:var(--wm-top, 12px); right:2vmin;
+  width:min(42vw, 46vh); height:min(42vw, 46vh);
+  background:no-repeat center/contain var(--wm-img, none);
+  opacity:.10;
+  transition:opacity .2s ease;
+}
+#wmark[hidden]{display:none}
+/* On a phone 42vw is only about 157px - a badge rather than a crest - and the space below the
+   header is mostly height, so lean on vw and let it run bigger. Slightly fainter, because a
+   phone has no gutters: it is always over content. */
 @media(max-width:720px){
-  body{ background-size:auto, min(62vw, 34vh); background-position:center, right 3vw top var(--wm-top, 2vmin); }
+  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; opacity:.085; }
 }
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
@@ -1496,6 +1500,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 </style>
 </head>
 <body>
+<!-- the colours team's crest, faint, over the page. Purely decorative, so it is hidden from
+     assistive tech and cannot take a click. -->
+<div id="wmark" aria-hidden="true" hidden></div>
 
 <header class="top">
   <button class="burger" id="navBurger" onclick="toggleDrawer()" aria-label="Open menu">☰</button>
@@ -11720,13 +11727,6 @@ function myTeamTheme(){
    The wash over it is built from the LIVE --bg, not a fixed colour: every team theme repaints
    the background, and a hardcoded wash would leave a pale rectangle floating over a dark
    palette. It is rebuilt on every theme change for the same reason. */
-function hexWash(hex, alpha){
-  const h = String(hex||'').trim().replace('#','');
-  const full = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
-  if(!/^[0-9a-f]{6}$/i.test(full)) return null;
-  const n = parseInt(full,16);
-  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;
-}
 function watermarkOn(){ return store.get('ffl_wmark') !== '0'; }
 /* The header is sticky, opaque and 20 deep in the stack, so anything the crest puts under it is
    simply painted over. On a desktop the header is one row and most of a 42vw crest still hangs
@@ -11746,18 +11746,13 @@ try{
   addEventListener('orientationchange', ()=>setTimeout(syncWatermarkTop, 250));
 }catch(e){}
 function applyTeamWatermark(code){
-  const b = document.body; if(!b) return;
+  const el = document.getElementById('wmark'); if(!el) return;
   syncWatermarkTop();                       /* the header may have wrapped since last time */
   const team = NFL_TEAMS[code];
-  if(!team || !watermarkOn()){ b.style.removeProperty('background-image'); return; }
-  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
-          || getComputedStyle(b).backgroundColor;
-  /* 0.88, not the 0.955 it wore in the centre: in the corner it is no longer sitting under
-     paragraphs, so it can be seen properly without costing anything in readability */
-  const wash = hexWash(bg, 0.88) || 'rgba(4,18,43,0.88)';
+  if(!team || !watermarkOn()){ el.hidden = true; el.style.removeProperty('--wm-img'); return; }
   const url = `https://sleepercdn.com/images/team_logos/nfl/${String(code).trim().toLowerCase()}.png`;
-  /* wash first so it paints ON TOP of the logo - background layers stack front to back */
-  b.style.backgroundImage = `linear-gradient(${wash}, ${wash}), url("${url}")`;
+  el.style.setProperty('--wm-img', `url("${url}")`);
+  el.hidden = false;
 }
 function toggleWatermark(){
   const on = !watermarkOn();
