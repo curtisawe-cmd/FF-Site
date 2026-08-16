@@ -131,6 +131,17 @@ try{var _l=localStorage.getItem('ffl_layout');if(_l==='side')document.documentEl
 html,body{height:100%}
 body{
   background:var(--bg);
+  /* The team watermark rides in body's OWN background rather than in a fixed element behind the
+     page. A fixed div would have to sit at z-index:-1 to stay behind the content, and body's
+     opaque background would then hide it entirely; moving the background to html to fix that
+     re-layers the whole app. Painting it here cannot disturb the stacking order at all.
+     Two layers: a near-opaque wash of the background colour laid OVER the logo, which is what
+     gives an exact, tunable faintness - background-image has no opacity of its own.
+     Set by applyTeamWatermark; absent until a team is picked. */
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-attachment:fixed;      /* it stays put while the page scrolls under it */
+  background-size:auto, min(74vw, 74vh);
   color:var(--chalk);
   font-family:var(--f-body);
   font-size:15px;
@@ -1483,6 +1494,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="theme-toggle role-preview" id="rolePreview" style="display:none" title="See the site the way a manager sees it. You stay a commissioner." onclick="toggleViewAs()"><span class="dot"></span><span id="rolePreviewLabel">View as manager</span></button>
     <button class="theme-toggle" id="pushBtn" style="display:none" title="Alerts are off. Tap to get told when you're on the clock or someone offers you a trade." onclick="togglePush()"><span class="dot"></span><span>Alerts off</span></button>
     <button class="theme-toggle" id="muteBtn" onclick="toggleMute()" aria-label="Toggle sounds"><span class="dot"></span><span>Sound on</span></button>
+    <button class="theme-toggle" id="wmarkBtn" onclick="toggleWatermark()" title="Show the colours team's crest faintly behind the whole page. Your device only."><span class="dot"></span><span id="wmarkLabel">Crest on</span></button>
     <button class="theme-toggle admin-only" id="notesBtn" onclick="toggleNotesEdit()" title="Unlock the little descriptions around the site so you can type over them. Nobody else can edit them."><span class="dot"></span><span id="notesLabel">Text locked</span></button>
   </div>
 </header>
@@ -11513,6 +11525,9 @@ function fitContrast(hex, against, min, dir){
   return hsl2hex(h,s,Math.max(0,Math.min(1,l))); }
 function rgbaOf(hex, a){ const [r,g,b]=hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; }
 function applyTeamTheme(code){
+  /* every path that repaints the palette repaints the crest with it - the wash is built from the
+     --bg this call is about to set, so it can never be left over from the previous team */
+  try{ setTimeout(()=>applyTeamWatermark(code), 0); }catch(e){}
   const el=document.documentElement;
   const VARS=['--turf','--turf-bright','--turf-deep','--turf-wash','--charge','--charge-wash',
     '--neon','--neon-soft','--bg','--bg-2','--panel','--panel-2','--line','--line-strong','--chalk','--chalk-dim',
@@ -11579,6 +11594,45 @@ function myTeamTheme(){
   const mine = store.get('ffl_team_theme');
   return (mine && NFL_TEAMS[mine]) ? mine : 'BUF';
 }
+/* ---- the team watermark ----
+   Pick a team's colours and its mark sits behind the whole page. The logo comes from the same
+   Sleeper CDN path the app already uses for defence badges, so this adds no new dependency and
+   nothing to host.
+   The wash over it is built from the LIVE --bg, not a fixed colour: every team theme repaints
+   the background, and a hardcoded wash would leave a pale rectangle floating over a dark
+   palette. It is rebuilt on every theme change for the same reason. */
+function hexWash(hex, alpha){
+  const h = String(hex||'').trim().replace('#','');
+  const full = h.length===3 ? h.split('').map(c=>c+c).join('') : h;
+  if(!/^[0-9a-f]{6}$/i.test(full)) return null;
+  const n = parseInt(full,16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`;
+}
+function watermarkOn(){ return store.get('ffl_wmark') !== '0'; }
+function applyTeamWatermark(code){
+  const b = document.body; if(!b) return;
+  const team = NFL_TEAMS[code];
+  if(!team || !watermarkOn()){ b.style.removeProperty('background-image'); return; }
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+          || getComputedStyle(b).backgroundColor;
+  const wash = hexWash(bg, 0.955) || 'rgba(4,18,43,0.955)';
+  const url = `https://sleepercdn.com/images/team_logos/nfl/${String(code).trim().toLowerCase()}.png`;
+  /* wash first so it paints ON TOP of the logo - background layers stack front to back */
+  b.style.backgroundImage = `linear-gradient(${wash}, ${wash}), url("${url}")`;
+}
+function toggleWatermark(){
+  const on = !watermarkOn();
+  store.set('ffl_wmark', on ? '1' : '0');
+  applyTeamWatermark(myTeamTheme());
+  syncWatermarkBtn();
+  toast(on ? 'Team watermark on' : 'Team watermark off');
+}
+function syncWatermarkBtn(){
+  const btn=document.getElementById('wmarkBtn'); if(!btn) return;
+  const on=watermarkOn();
+  btn.classList.toggle('on', on);
+  const l=document.getElementById('wmarkLabel'); if(l) l.textContent = on ? 'Crest on' : 'Crest off';
+}
 function setMyTeamTheme(code){
   store.set('ffl_team_theme', code||'');
   applyTeamTheme(myTeamTheme());
@@ -11602,7 +11656,7 @@ function applyTheme(t){
   if(lbl) lbl.textContent = (t==='dark') ? 'Lights on' : 'Lights out';
   store.set('ffl_theme', t);
   applyTeamTheme(myTeamTheme());             /* shades differ per mode — recompute on every switch */
-  syncTeamPicker();
+  syncTeamPicker(); syncWatermarkBtn();
 }
 function toggleTheme(){
   const cur = document.documentElement.getAttribute('data-theme')==='dark' ? 'dark' : 'light';
