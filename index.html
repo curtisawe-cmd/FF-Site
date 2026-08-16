@@ -7425,6 +7425,9 @@ function renderStats(){
   const fmt = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
   const rows = Object.entries(fr);
   const pct = v => { const g=v.w+v.l+v.t; return g? v.w/g : 0; };
+  /* .slice(1) drops the leading zero from ".667" — but on a perfect 1.000 it drops the ONE,
+     printing an unbeaten record as ".000". Only trim when there is a zero there to trim. */
+  const pctStr = p => p>=1 ? '1.000' : p.toFixed(3).slice(1);
   const lead = (title, pick, val) => { const r=[...rows].sort(pick)[0]; return r? `<div class="card"><div class="eyebrow">${title}</div><h2 style="margin-bottom:2px">${esc(r[0])}</h2><div style="font-family:var(--f-mono);font-size:22px;color:var(--turf)">${val(r[1])}</div></div>` : ''; };
   const ss = window.statsSort || (window.statsSort = {key:'titles', dir:-1});
   const metric = {
@@ -7470,7 +7473,7 @@ function renderStats(){
         ${sorted.map(([mg,v],i)=>{
           const names=[...new Set(v.seasons.map(s2=>s2.team))];
           const nm = names.length>3 ? names.slice(0,2).join(' \u2192 ')+' \u2192 \u2026 \u2192 '+names[names.length-1] : names.join(' \u2192 ');
-          return `<tr class="${i===0?'top':''}"><td>${v.titles.length?'\uD83C\uDFC6'.repeat(v.titles.length)+' ':''}${esc(mg)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length}</td><td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}-${v.t}</td><td style="text-align:right;font-family:var(--f-mono)">${(v.w+v.l+v.t)?pct(v).toFixed(3).slice(1):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${fmt(v.pf)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length?fmt(v.pf/v.seasons.length):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.last||'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.titles.join(', ')||'\u2014'}</td><td style="color:var(--chalk-dim);font-size:12px">${esc(nm)}</td></tr>`;
+          return `<tr class="${i===0?'top':''}"><td>${v.titles.length?'\uD83C\uDFC6'.repeat(v.titles.length)+' ':''}${esc(mg)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length}</td><td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}-${v.t}</td><td style="text-align:right;font-family:var(--f-mono)">${(v.w+v.l+v.t)?pctStr(pct(v)):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${fmt(v.pf)}</td><td style="text-align:right;font-family:var(--f-mono)">${v.seasons.length?fmt(v.pf/v.seasons.length):'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.last||'\u2014'}</td><td style="text-align:right;font-family:var(--f-mono)">${v.titles.join(', ')||'\u2014'}</td><td style="color:var(--chalk-dim);font-size:12px">${esc(nm)}</td></tr>`;
         }).join('')}
       </table></div>
     </div>
@@ -7511,7 +7514,7 @@ function h2hCardHTML(from, to, isAll){
         return `<tr${owns?' class="top"':''}>
           <td>${esc(opp)}${owns?' <span class="h2h-tag good">owns</span>':''}${owned?' <span class="h2h-tag bad">owned</span>':''}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}${v.t?'-'+v.t:''}</td>
-          <td style="text-align:right;font-family:var(--f-mono)">${v.games?pct.toFixed(3).slice(1):'—'}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${v.games?(pct>=1?'1.000':pct.toFixed(3).slice(1)):'—'}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pf)}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pa)}</td>
           <td style="text-align:right;font-family:var(--f-mono);color:var(--chalk-dim);font-size:12px">${
