@@ -9233,7 +9233,13 @@ const SLOT_ELIG = { QB:['QB'], RB:['RB','FLEX'], WR:['WR','FLEX'], TE:['TE','FLE
 function myTeamIdx(){
   const claimed = (typeof myTeamIndex==='function') ? myTeamIndex() : null;
   if(Number.isInteger(claimed)) return claimed;   /* logged-in manager: locked to their claimed team */
-  const v = store.get('ffl_my_team'); return v===null? null : +v;
+  /* The "— pick your team —" option carries value="", and +'' is 0, so deselecting a team used to
+     quietly make this device team 0 - someone else's roster, lineup and warnings. Blank means
+     blank. The bounds check covers a stored index left behind by a league that has since shrunk. */
+  const v = store.get('ffl_my_team');
+  if(v===null || String(v).trim()==='') return null;
+  const n = +v;
+  return (Number.isInteger(n) && n>=0 && n < (S.teams||[]).length) ? n : null;
 }
 /* Rosters ALWAYS read the real board. D is whichever board is loaded, so while a mock draft
    is running these would otherwise report mock picks as real rosters — mock players showing
@@ -9408,6 +9414,10 @@ function lineupIssues(ti){
 /* One line saying what to fix. Empty first: a hole is worse than a bye, because a bye at least
    tells you the player exists. */
 function lineupWarningHTML(ti){
+  /* Before the draft every slot is empty and none of it is anybody's fault. Warning then would
+     mean the banner is on screen for months before the one week it matters, which is how a
+     warning becomes wallpaper. */
+  if(!D.started) return '';
   const w = lineupIssues(ti);
   if(!w.total) return '';
   const n = s => s.length===1 ? '' : 's';
