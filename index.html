@@ -684,6 +684,12 @@ nav.tabs button{position:relative}
 .inj.d{color:var(--te);border-color:var(--te)}
 .inj.out{color:var(--charge);border-color:var(--charge)}
 .inj.sus{color:var(--k);border-color:var(--k)}
+/* a player's bye week, always shown; red only in the week it is actually costing you */
+.byetag{display:inline-flex;align-items:center;flex:none;font-family:var(--f-mono);font-weight:700;
+  font-size:10px;letter-spacing:.02em;padding:0 5px;height:16px;line-height:1;border-radius:4px;
+  background:transparent;border:1px solid var(--line-strong);color:var(--chalk-dim);
+  white-space:nowrap;vertical-align:middle;margin-left:5px}
+.byetag.now{border-color:var(--charge);color:var(--charge);font-weight:800}
 /* trade block: off is a faint switch you can find, on is a sign everyone can read */
 .blockchip{display:inline-flex;align-items:center;font-family:var(--f-ui);font-weight:700;font-size:10px;
   letter-spacing:.06em;padding:0 7px;height:17px;line-height:1;border-radius:5px;white-space:nowrap;
@@ -6676,7 +6682,7 @@ function renderPool(){
   list.innerHTML = avail.map(p=>`
     <div class="prow pos-${p.pos}">
       <span class="postag">${p.pos}</span>${playerFace(p,30)}
-      <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}
+      <span class="pname" onclick="openPlayer('${p.id}')" title="View career points">${esc(p.name)}</span>${injBadge(p.inj,p.injBody)}${byeTagHTML(null, p.team)}
       <span class="pmeta">${p.team||''}</span>
       ${canPickNow()?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
     </div>`).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
@@ -9928,11 +9934,89 @@ function playerLocked(pid){ const at = playerKickoff(pid); return !!at && Date.n
    The count guard is the whole safety of it. A failed fetch leaves the map empty, and without
    the guard an offline morning would report all 12 rosters as entirely on bye - a warning that
    cries wolf is worse than no warning, because it trains you to ignore the real one. */
+/* ---- the bye week table ----
+   Nobody hands this out. Sleeper's player feed carries no bye_week field at all (checked: 0 of
+   12,219 players), and a typed-in table is wrong every August and has to be re-entered every
+   season. So it is derived the same way a bye is: fetch each week's schedule and find the week
+   a team has no game. Eighteen requests, once a season, cached.
+   Cached against the season year, so it rebuilds itself in a new season and never goes stale in
+   the one it was built for - the NFL flexes kickoff times, never byes. */
+let BYES = { year: 0, map: {} };
+function byeCacheKey(){ return 'ffl_byes_' + (typeof curDraftYear==='function' ? curDraftYear() : 'x'); }
+function loadByesCached(){
+  try{ const raw = store.get(byeCacheKey()); if(!raw) return false;
+    const j = JSON.parse(raw);
+    if(j && j.map && Object.keys(j.map).length >= 30){ BYES = j; return true; }
+  }catch(e){}
+  return false;
+}
+async function loadByeWeeks(force){
+  const yr = (typeof curDraftYear==='function') ? curDraftYear() : new Date().getFullYear();
+  if(!force && BYES.year===yr && Object.keys(BYES.map).length>=30) return BYES.map;
+  if(!force && loadByesCached() && BYES.year===yr) return BYES.map;
+  try{
+    const weeks = await Promise.all(Array.from({length:18},(_,i)=>
+      fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${i+1}&dates=${yr}`)
+        .then(r=>r.json()).catch(()=>null)));
+    const seen = {}, all = new Set();
+    weeks.forEach((j,i)=>{
+      if(!j) return;
+      const wk = i+1; seen[wk] = new Set();
+      (j.events||[]).forEach(ev=>(((ev.competitions||[])[0]||{}).competitors||[]).forEach(c=>{
+        const ab = String((c.team||{}).abbreviation||'').toUpperCase();
+        if(!ab) return;
+        const code = ESPN_TEAM_FIX[ab] || ab;      /* ESPN says WSH, this app says WAS */
+        seen[wk].add(code); all.add(code);
+      }));
+    });
+    /* a week that failed to load would make every team look like it had a bye that week, so
+       only weeks that actually returned a full slate get a say */
+    const good = Object.keys(seen).map(Number).filter(w=>seen[w].size >= 24);
+    if(good.length < 16 || all.size < 30) return BYES.map;      /* too patchy to trust */
+    const map = {};
+    [...all].forEach(t=>{ const w = good.find(w=>!seen[w].has(t)); if(w) map[t] = w; });
+    if(Object.keys(map).length >= 30){
+      BYES = { year: yr, map };
+      try{ store.set(byeCacheKey(), JSON.stringify(BYES)); }catch(e){}
+      try{ refreshByeUI(); }catch(e){}
+    }
+  }catch(e){}
+  return BYES.map;
+}
+function byeWeekOfTeam(nfl){
+  const t = String(nfl||'').trim().toUpperCase();
+  return t ? (BYES.map[t] || null) : null;
+}
+function byeWeekOf(pid){
+  const p = (typeof POOL_MAP!=='undefined' && POOL_MAP) ? POOL_MAP.get(String(pid)) : null;
+  const q = p || (POOL||[]).find(x=>String(x.id)===String(pid))
+              || (realDraft().picks||[]).find(x=>String(x.playerId)===String(pid) && !x.cut);
+  return q ? byeWeekOfTeam(q.team || q.nfl) : null;
+}
+/* the little BYE 7 that rides next to a player's name */
+function byeTagHTML(pid, nfl){
+  const w = pid ? byeWeekOf(pid) : byeWeekOfTeam(nfl);
+  if(!w) return '';
+  const now = (typeof currentNflWeek==='function') ? currentNflWeek() : 0;
+  const on = now>=1 && w===now;
+  return ` <span class="byetag${on?' now':''}" title="${on?'On bye this week — will score 0':'Bye week '+w}">BYE ${w}</span>`;
+}
+function refreshByeUI(){
+  try{
+    if(window.currentView==='draft') renderPool();
+    if(window.currentView==='teams') renderTeams();
+    if(window.currentView==='players') renderPlayers();
+  }catch(e){}
+}
 function byesKnown(){
   return NFL_KICKS.wk >= 1 && NFL_KICKS.wk === currentNflWeek()
       && Object.keys(NFL_KICKS.map||{}).length >= 20;
 }
 function onBye(pid){
+  /* the derived table is the better answer where it exists: it knows the whole season, not just
+     whether this week's fetch happened to succeed */
+  const bw = byeWeekOf(pid);
+  if(bw){ const now = currentNflWeek(); return now>=1 && bw===now; }
   if(!byesKnown()) return false;
   const p = POOL_MAP.get(pid) || (POOL||[]).find(x=>x.id===pid)
          || (realDraft().picks||[]).find(x=>x.playerId===pid && !x.cut);
@@ -9990,6 +10074,9 @@ function lineupWarningHTML(ti){
    script, so calling it inline here would die in the temporal dead zone. After the current
    task the whole script has run and every binding exists. The minute tick keeps it fresh. */
 setTimeout(()=>{ try{ loadKickoffs(); }catch(e){} }, 0);
+/* the bye table off the cache immediately, then rebuilt in the background if it is missing or
+   belongs to a season that has ended */
+setTimeout(()=>{ try{ loadByesCached(); refreshByeUI(); loadByeWeeks(); }catch(e){} }, 0);
 /* true = go ahead. Names the player and, for the commissioner, asks instead of refusing. */
 function lockGuard(pid, what){
   if(!playerLocked(pid)) return true;
@@ -10578,7 +10665,7 @@ function renderFreeAgents(ti){
   el.innerHTML = filters + note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
-      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${byeTagHTML(null, p.team)}</span>
       <span class="pmeta">${p.team||''}</span>
       ${onWaivers(p.id)
         ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
@@ -10634,11 +10721,9 @@ function renderMyTeam(){
     const locked = playerLocked(p.playerId);
     const dead = locked && !isAdmin();
     const lockChip = locked ? ` <span class="inj q" title="His game has started \u2014 locked until next week">\uD83D\uDD12</span>` : '';
-    /* the banner says how many are on bye; this says which. Loudest in a starting slot, where it
-       costs you points - on the bench it is just a fact about the week. */
-    const bye = onBye(p.playerId);
-    const byeChip = !bye ? ''
-      : ` <span class="inj ${slotLabel==='BN'||slotLabel==='IR'?'q':'out'}" title="${esc(p.nfl||'His team')} is on bye in week ${currentNflWeek()}${slotLabel==='BN'||slotLabel==='IR'?'':' \u2014 this slot scores 0'}">BYE</span>`;
+    /* every player carries his bye week, so you can see a stack of them coming; the one that is
+       THIS week goes red, because that is the one costing you points right now */
+    const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
       <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${byeChip}${blockChipHTML(mi, p.playerId)}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
