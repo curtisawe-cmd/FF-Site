@@ -1190,6 +1190,22 @@ table.standings td:nth-child(2) > span > span{overflow:hidden;text-overflow:elli
 table.standings col.c-rk{width:44px}
 table.standings col.c-wlt{width:100px}
 table.standings col.c-pf{width:96px}
+table.standings col.c-ap{width:96px}
+.ap-luck{font-size:11px;font-weight:700}
+.ap-luck.up{color:var(--turf-bright)}
+.ap-luck.down{color:var(--charge)}
+/* the all-play card: rank by the neutral record, with the schedule's gift or tax beside it */
+.ap-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.ap-row:last-child{border-bottom:none}
+.ap-rk{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);min-width:20px;text-align:right}
+.ap-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.ap-rec{font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+.ap-pctv{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);min-width:42px;text-align:right}
+.ap-real{font-size:11px;color:var(--chalk-dim);white-space:nowrap}
+@media(max-width:560px){
+  .ap-row{gap:7px;padding:6px 0}
+  .ap-rec{font-size:12px} .ap-pctv{display:none} .ap-nm{font-size:13px}
+}
 @media (max-width:640px){
   /* NOT table-layout:auto — with nowrap cells that grows the table past the card (was 79px
      off-screen at 375px). Keep fixed layout, shrink the number columns, and let the long
@@ -1198,6 +1214,9 @@ table.standings col.c-pf{width:96px}
   table.standings col.c-rk{width:28px}
   table.standings col.c-wlt{width:58px}
   table.standings col.c-pf{width:62px}
+  /* six fixed columns leave a phone about 87px for a team name. All-play gets its own card
+     below, which reads better on a narrow screen than a sixth number ever would. */
+  table.standings col.c-ap,table.standings th.c-ap,table.standings td.c-ap{display:none}
   table.standings td:nth-child(2),
   table.standings td:nth-child(2) > span > span{white-space:normal;overflow:visible;text-overflow:clip}
   table.standings td:nth-child(2) > span{align-items:flex-start}
@@ -8188,6 +8207,50 @@ function seasonStandings(){
   });
   return rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
 }
+/* ---- all-play ----
+   Your score each week against EVERY other team's, not just the one the schedule happened to
+   hand you. In a twelve team league that is eleven results a week instead of one, so it says
+   how you have actually played with the luck of the draw taken out - which is the argument
+   every league has, and the only honest way to settle it.
+   Derived from the same mScore the standings use, so the two can never disagree about a score. */
+function allPlayRows(){
+  const rows = (S.teams||[]).map((t,i)=>({ i, name:t.name, manager:t.manager, w:0, l:0, t:0 }));
+  const sched = (S.season && S.season.schedule) || {};
+  Object.entries(sched).forEach(([wk, games])=>{
+    const pts = {};
+    (games||[]).forEach((g,m)=>{
+      const [pa,pb] = mScore(wk,m);
+      if(pa!=null && rows[g[0]]) pts[g[0]] = pa;
+      if(pb!=null && rows[g[1]]) pts[g[1]] = pb;
+    });
+    const ids = Object.keys(pts).map(Number);
+    if(ids.length < 2) return;                 /* a single score is not a comparison */
+    ids.forEach(a=>ids.forEach(b=>{
+      if(a===b) return;
+      if(pts[a] > pts[b]) rows[a].w++;
+      else if(pts[a] < pts[b]) rows[a].l++;
+      else rows[a].t++;
+    }));
+  });
+  rows.forEach(r=>{ const g=r.w+r.l+r.t; r.games=g; r.pct = g ? (r.w + r.t/2)/g : 0; });
+  return rows;
+}
+let _apCache = { key:'', rows:null };
+/* The standings table asks for this once per row; recomputing the whole season each time is
+   wasteful, and the answer only moves when a score does. */
+function allPlayFor(ti){
+  const key = JSON.stringify([S.season&&S.season.scores, liveScoresMap, (S.teams||[]).length]);
+  if(_apCache.key !== key){ _apCache = { key, rows: allPlayRows() }; }
+  return (_apCache.rows||[])[ti] || { w:0,l:0,t:0,games:0,pct:0 };
+}
+/* How many wins the schedule gave or cost you: your real wins against the wins your all-play
+   rate says you earned. +2 means the fixture list has been kind. */
+function luckWins(r){
+  const ap = allPlayFor(r.i);
+  if(!ap.games) return null;
+  const played = r.w + r.l + r.t;
+  return Math.round((r.w - ap.pct*played) * 10) / 10;
+}
 /* The Toilet Bowl: lowest score of the most recent scored week wears the crown until somebody
    earns it off them. Derived from the scores on every render - no state to desync. */
 function toiletBowlTeam(){
@@ -8240,6 +8303,12 @@ function standingsRowHTML(r, rank, leader){
   return `<tr${leader?' class="top"':''}><td style="font-family:var(--f-mono)">${rank}</td>`+
     `<td><span style="display:inline-flex;align-items:center;gap:8px">${teamMarkHTML(S.teams[r.i],32)}<span>${esc(r.name)}${toiletCrown(r.i)}${r.manager?` <span style="color:var(--chalk-dim);font-size:12px">· ${esc(r.manager)}</span>`:''}</span></span></td>`+
     `<td style="text-align:center;font-family:var(--f-mono)">${r.w}-${r.l}-${r.t}</td>`+
+    (()=>{ const ap=allPlayFor(r.i); const lk=luckWins(r);
+      const tip = !ap.games ? 'No scores yet'
+        : `${ap.w}-${ap.l}${ap.t?'-'+ap.t:''} against the whole league (${Math.round(ap.pct*100)}%)`+
+          (lk===null?'':` · the schedule has been worth ${lk>0?'+':''}${lk} win${Math.abs(lk)===1?'':'s'} to you`);
+      return `<td class="c-ap" style="text-align:center;font-family:var(--f-mono)" title="${esc(tip)}">${
+        ap.games ? `${ap.w}-${ap.l}${lk===null||Math.abs(lk)<0.5?'':` <span class="ap-luck ${lk>0?'up':'down'}">${lk>0?'+':''}${Math.round(lk)}</span>`}` : '—'}</td>`; })()+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pf.toFixed(1)}</td>`+
     `<td style="text-align:right;font-family:var(--f-mono)">${r.pa.toFixed(1)}</td></tr>`;
 }
@@ -8247,8 +8316,10 @@ function standingsRowHTML(r, rank, leader){
 function standingsHTML(rows, anyScores){
   /* fixed column geometry so every division table lines up with the others;
      widths live in CSS (.standings col.*) so phones can shrink them */
-  const cols = `<colgroup><col class="c-rk"><col><col class="c-wlt"><col class="c-pf"><col class="c-pf"></colgroup>`;
-  const header = cols+`<tr><th>#</th><th>Team</th><th style="text-align:center">W-L-T</th><th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>`;
+  const cols = `<colgroup><col class="c-rk"><col><col class="c-wlt"><col class="c-ap"><col class="c-pf"><col class="c-pf"></colgroup>`;
+  const header = cols+`<tr><th>#</th><th>Team</th><th style="text-align:center">W-L-T</th>`+
+    `<th class="c-ap" style="text-align:center" title="Your score against every other team, every week — the record you would have with a neutral schedule">All-play</th>`+
+    `<th style="text-align:right">PF</th><th style="text-align:right">PA</th></tr>`;
   const divs = +S.divisions||0;
   if(divs>0){
     let out = '';
@@ -8257,7 +8328,7 @@ function standingsHTML(rows, anyScores){
       out += `<div class="eyebrow" style="margin:16px 0 6px">Division ${d}</div>`+
         `<table class="plain standings">${header}${
           drows.length ? drows.map((r,idx)=>standingsRowHTML(r, idx+1, anyScores && idx===0)).join('')
-                       : `<tr><td colspan="5" style="color:var(--chalk-dim)">No teams assigned.</td></tr>`
+                       : `<tr><td colspan="6" style="color:var(--chalk-dim)">No teams assigned.</td></tr>`
         }</table>`;
     }
     return out;
@@ -8580,7 +8651,36 @@ function renderMatchups(){
       <h2>2026 Standings</h2>
       <p class="sub" style="margin-bottom:10px">${(+S.divisions>0?'Grouped by division. ':'') + (anyScores? 'Sorted by wins, then points for. Official tiebreaker is head-to-head \u2014 commissioner has final say on ties.' : 'Fills in as weekly scores get entered.')}</p>
       ${standingsHTML(rows, anyScores)}
-    </div>`;
+    </div>
+    ${allPlayCardHTML(rows)}`;
+}
+/* The neutral table. Ranking by all-play is the whole point - it is the order the season would
+   have if nobody drew an easy week, and putting the real record beside it is what turns a
+   number into an argument. */
+function allPlayCardHTML(rows){
+  const ap = allPlayRows().filter(r=>r.games);
+  if(!ap.length) return '';
+  ap.sort((a,b)=> b.pct-a.pct || b.w-a.w);
+  const realRank = {}; rows.forEach((r,i)=>realRank[r.i]=i+1);
+  const byIdx = {}; rows.forEach(r=>byIdx[r.i]=r);
+  return `<div class="card" style="margin-top:18px">
+    <h2>All-play standings</h2>
+    <p class="sub" data-note="allplay-intro" style="margin:2px 0 10px">Everyone's score against everyone else's, every week. This is the table you would have if the schedule never did you a favour, so the gap between a team's two records is how lucky it has been.</p>
+    ${ap.map((r,i)=>{
+      const real = byIdx[r.i] || {w:0,l:0,t:0};
+      const lk = luckWins(real);
+      const moved = (realRank[r.i]||0) - (i+1);
+      return `<div class="ap-row">
+        <span class="ap-rk">${i+1}</span>
+        ${teamMarkHTML(S.teams[r.i], 26)}
+        <span class="ap-nm">${esc(r.name)}${moved?` <span class="ap-luck ${moved>0?'up':'down'}" title="${moved>0?`${moved} place${moved===1?'':'s'} better than the real standings`:`${-moved} place${moved===-1?'':'s'} worse than the real standings`}">${moved>0?'\u25b2':'\u25bc'}${Math.abs(moved)}</span>`:''}</span>
+        <span class="ap-real">real ${real.w}-${real.l}${real.t?'-'+real.t:''}${
+          lk===null||Math.abs(lk)<0.5?'':` <span class="ap-luck ${lk>0?'up':'down'}">${lk>0?'+':''}${Math.round(lk)}</span>`}</span>
+        <span class="ap-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span>
+        <span class="ap-pctv">${Math.round(r.pct*100)}%</span>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 /* =====================================================
