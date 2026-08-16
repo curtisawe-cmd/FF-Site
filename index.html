@@ -673,6 +673,24 @@ nav.tabs button{position:relative}
 .inj.d{color:var(--te);border-color:var(--te)}
 .inj.out{color:var(--charge);border-color:var(--charge)}
 .inj.sus{color:var(--k);border-color:var(--k)}
+/* My Team: the bye and the trade block get columns of their own rather than trailing the name,
+   where they started at a different x on every row. Fixed widths so the two stacks line up,
+   and the chips are centred inside them. */
+/* Starters, bench and IR are three separate tables, and with auto layout each sized its columns
+   to its own contents - the three stacks of chips landed at three different x positions. Fixed
+   layout makes the widths declarative, so all three tables draw the same grid; the name column
+   takes whatever is left. */
+.mt-tbl{table-layout:fixed;width:100%}
+.mt-tbl td:nth-last-child(2){width:104px}     /* the slot select */
+.mt-tbl .pcell > span{overflow:hidden}        /* fixed layout: a long name must clip, not push */
+.mt-bye{width:56px;text-align:center}
+.mt-block{width:104px;text-align:center;white-space:nowrap}
+.mt-bye .byetag{margin-left:0}
+.mt-block .blockchip{margin-left:0;min-width:92px}
+@media(max-width:560px){
+  .mt-bye{width:48px} .mt-block{width:88px}
+  .mt-block .blockchip{min-width:78px;font-size:9px;padding:0 4px}
+}
 /* a player's bye week, always shown; red only in the week it is actually costing you */
 /* justify-content + min-width so BYE 5 and BYE 14 occupy the same box: one character of
    difference was enough to make a column of them look ragged */
@@ -10860,7 +10878,9 @@ function renderMyTeam(){
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${byeChip}${blockChipHTML(mi, p.playerId)}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td class="mt-bye">${byeChip}</td>
+      <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${dead?' disabled':''} title="${dead?'Locked \u2014 his game has started':'Drop to free agents'}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
@@ -10871,10 +10891,14 @@ function renderMyTeam(){
        have been designated out, so the way in is the slot dropdown on their own row. An Add
        button here would send you to free agency and then park the pickup on the bench
        anyway, which reads as the IR slot being broken. */
+    /* the empty rows carry the same six cells, or the bye and block columns would collapse to
+       nothing on a roster with a hole in it and the ones below would step out of line */
     if(s2==='IR') return `<tr><td style="width:56px">${slotTag(s2)}</td>
       <td style="color:var(--chalk-dim)">Empty<div style="font-size:11px">Move a player here from your roster once they are listed out</div></td>
+      <td class="mt-bye"></td><td class="mt-block"></td>
       <td></td><td style="width:58px"></td></tr>`;
-    return `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td>
+    return `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td>
+      <td class="mt-bye"></td><td class="mt-block"></td><td></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn" style="padding:2px 9px;font-size:12px" title="Find a player for this slot" onclick="addFromSlot('${s2}')">Add</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
@@ -10902,11 +10926,11 @@ function renderMyTeam(){
         ${canEditTeam(mi)?`<button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Start whoever projects highest this week under your league's scoring. Nobody is dropped — the bench is only reordered." onclick="optimizeLineup(${mi})">Best lineup</button>`:''}
       </div>
       ${lineupWarningHTML(mi)}
-      <div style="overflow-x:auto"><table class="plain" style="min-width:300px">${slotRows.join('')}</table></div>
+      <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${slotRows.join('')}</table></div>
       <div class="eyebrow" style="margin-top:14px">Bench</div>
-      <div style="overflow-x:auto"><table class="plain" style="min-width:300px">${benchRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>
+      <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${benchRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>
       ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
-      <div style="overflow-x:auto"><table class="plain" style="min-width:300px">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>`:''}
+      <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
       ${canEditTeam(mi)?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
       <p class="sub" style="margin:2px 0 8px">Every available player. Roster caps at ${rosterLimit()} (${rosterLimit()-(+S.roster.BN||0)} starters + ${+S.roster.BN||0} bench); IR is separate. Drop someone to make room.</p>
