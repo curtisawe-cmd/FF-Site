@@ -244,7 +244,7 @@ section.view > .viewhead{
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .subnav::-webkit-scrollbar{display:none}
 .subnav button{flex:0 0 auto;white-space:nowrap}
-@media(max-width:640px){ .subnav{gap:6px;margin-bottom:12px} .subnav button{font-size:13px;padding:5px 11px} }
+@media(max-width:640px){ .subnav{gap:6px;margin-bottom:12px} .subnav button{font-size:15px;padding:7px 13px} }   /* a fifth taller (26px -> 32) for thumbs */
 /* Kickoff chip, top right of the header. Hidden until renderKickoff() decides there is
    something to count to, so it never flashes an empty pill mid-season. Fixed-width digits stop
    the header reflowing every second as the seconds tick. */
@@ -1006,7 +1006,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 .spage-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
 @media(max-width:560px){
   .spage-tabs{gap:6px;margin-bottom:14px}
-  .spage-tabs button{font-size:11px;padding:5px 10px}
+  .spage-tabs button{font-size:13px;padding:7px 13px}   /* a fifth bigger, same as the other tab rows */
   .spage-pager{margin-top:18px}
   .spage-pager .btn{padding:8px 14px;font-size:14px}
 }
@@ -1019,6 +1019,10 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 .note-edit:empty::before{content:'Empty — the original wording comes back';color:var(--chalk-dim);font-style:italic}
 /* managers get Settings read-only, so the tab stays visible */
 :root[data-role="user"] #view-settings button{display:none}
+/* ...except the page tabs and the page-down buttons. They only navigate; hiding them left a
+   manager stranded on the first settings page with the other seven unreachable. */
+:root[data-role="user"] #view-settings .spage-tabs button,
+:root[data-role="user"] #view-settings .spage-pager button{display:inline-flex}
 :root[data-role="user"] #view-settings input:disabled,
 :root[data-role="user"] #view-settings select:disabled,
 :root[data-role="user"] #view-settings textarea:disabled{
@@ -1123,7 +1127,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
     background-position:right 6px center;letter-spacing:.02em}
   nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
-  nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:15px;padding:6px 12px}
+  /* a fifth bigger than they were (30px tall -> 37): a thumb is not a cursor. Covers the
+     drawer too, whose nav reuses these classes. */
+  nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:18px;padding:8px 14px}
   main{padding:12px calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l))}
   .card{padding:16px 14px}
   .hero{padding:30px 20px}
