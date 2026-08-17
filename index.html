@@ -1263,11 +1263,16 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
   transition:opacity .2s ease;
 }
 #wmark[hidden]{display:none}
-/* The phone keeps what it had, unchanged: it reads well there. A narrow screen has no panel
-   edges running down the middle of the crest, which is the whole reason the desktop needed a
-   different treatment. */
+/* The phone's crest sits dead centre of the screen and carries more weight than the desktop's -
+   the page scrolls under it like a stamp on the glass. Centred with fixed positioning rather
+   than margins so it holds the middle whatever is rendered behind it. */
 @media(max-width:720px){
-  #wmark{ width:min(62vw, 34vh); height:min(62vw, 34vh); right:3vw; }
+  #wmark{
+    width:min(78vw, 44vh); height:min(78vw, 44vh);
+    top:50%; left:50%; right:auto;
+    transform:translate(-50%,-50%);
+    opacity:.30;
+  }
 }
 /* apply bar is top-anchored now, so the ticker can't overlap it */
 @media (prefers-reduced-motion:reduce){
