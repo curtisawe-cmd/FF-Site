@@ -687,9 +687,34 @@ nav.tabs button{position:relative}
 .mt-block{width:104px;text-align:center;white-space:nowrap}
 .mt-bye .byetag{margin-left:0}
 .mt-block .blockchip{margin-left:0;min-width:92px}
+.mt-chips{display:none}
+/* A phone cannot afford the columns: the card is ~310px wide and the five fixed cells alone come
+   to 354, which squeezed the player's NAME to zero and put the whole table on a sideways scroll.
+   So under 560px the two cells collapse and the chips drop to a line under the name instead -
+   every name cell starts at the same x and the bye tag has a fixed width, so the byes and the
+   block switches still stand in two straight stacks. Same both-layouts-in-the-markup pattern as
+   the trade builder's full/short names; CSS picks one. */
+.blockchip .bc-s{display:none}
 @media(max-width:560px){
-  .mt-bye{width:48px} .mt-block{width:88px}
-  .mt-block .blockchip{min-width:78px;font-size:9px;padding:0 4px}
+  .mt-bye,.mt-block{display:none}
+  .mt-chips{display:flex;align-items:center;gap:5px;margin-top:4px}
+  /* a fixed width, not a min: BYE 14 is a character wider than BYE 9, and the block chips
+     behind them inherited the wobble */
+  .mt-chips .byetag{margin-left:0;width:50px}
+  .mt-chips .blockchip{margin-left:0;min-width:64px;font-size:9px;padding:0 5px}
+  /* the chip column is narrow: "ON THE BLOCK" becomes "ON BLOCK" */
+  .mt-chips .blockchip .bc-l{display:none}
+  .mt-chips .blockchip .bc-s{display:inline}
+  /* the headshot goes, as it does in the trade builder: beside it the name column left the
+     name itself about 90px, which wrapped "Dak Prescott" onto two lines and clipped the chips */
+  .mt-tbl .pcell > .pface{display:none}
+  .mt-tbl td:nth-last-child(2){width:78px}
+  .mt-tbl select{width:72px !important}       /* the select carries an inline width:84px */
+  /* tighter cell padding: at 8px a side the 46px Drop button poked 2px past the card and put
+     the whole table on a sideways scroll; the FLEX slot tag needs the extra room too */
+  table.mt-tbl td{padding:6px 3px}   /* table.plain td outguns a lone class, so match its weight */
+  .mt-tbl td:first-child{width:50px !important}
+  .mt-tbl td:last-child{width:52px !important}
 }
 /* a player's bye week, always shown; red only in the week it is actually costing you */
 /* justify-content + min-width so BYE 5 and BYE 14 occupy the same box: one character of
@@ -6454,10 +6479,12 @@ function toggleBlock(ti, pid){
 /* The chip on a player's row. Your own team gets a switch; everyone else gets a sign. */
 function blockChipHTML(ti, pid){
   const on = onBlock(ti, pid);
-  if(!canEditTeam(ti)) return on ? ` <span class="blockchip on" title="His manager has him on the trade block">ON THE BLOCK</span>` : '';
+  /* both labels ship and CSS picks one: "ON THE BLOCK" does not fit a phone's chip column */
+  const lbl = on ? `<span class="bc-l">ON THE BLOCK</span><span class="bc-s">ON BLOCK</span>` : 'BLOCK';
+  if(!canEditTeam(ti)) return on ? ` <span class="blockchip on" title="His manager has him on the trade block">${lbl}</span>` : '';
   return ` <span class="blockchip ${on?'on':''}" role="button" tabindex="0"
     title="${on?'On your trade block — tap to take him off':'Tap to put him on the trade block, so the league can see he is available'}"
-    onclick="event.stopPropagation();toggleBlock(${ti},'${pid}')">${on?'ON THE BLOCK':'BLOCK'}</span>`;
+    onclick="event.stopPropagation();toggleBlock(${ti},'${pid}')">${lbl}</span>`;
 }
 function teamName(ti){ const t=(S.teams||[])[ti]; return (t && t.name) || ('Team '+(ti+1)); }
 /* The league's manager name for an account — what people are called in chat, polls and the
@@ -10878,7 +10905,7 @@ function renderMyTeam(){
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
