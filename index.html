@@ -11898,7 +11898,13 @@ function watermarkOn(){ return store.get('ffl_wmark') !== '0'; }
    font setting, and every hardcoded number would be wrong for somebody. */
 function syncWatermarkTop(){
   try{
-    const h = document.querySelector('header.top');
+    /* In the side-rail layout header.top IS the rail: a full-height left column. Measuring it
+       as "the header to clear" produced --wm-top: 912px on a 900px screen and shoved the crest
+       clean off the bottom of the viewport - which is why the desktop, where that layout lives,
+       showed nothing while phones (forced to the top bar) were fine. In that layout there is no
+       top bar to clear at all. Same special case syncBoardMax makes, for the same reason. */
+    const side = document.documentElement.getAttribute('data-layout')==='side';
+    const h = side ? null : document.querySelector('header.top');
     const px = (h && h.getClientRects().length) ? Math.round(h.getBoundingClientRect().height) : 0;
     document.documentElement.style.setProperty('--wm-top', (px + 12) + 'px');
   }catch(e){}
@@ -12336,6 +12342,7 @@ function setLayout(v){
   if(side) document.documentElement.setAttribute('data-layout','side');
   else document.documentElement.removeAttribute('data-layout');
   syncHeaderH();
+  try{ syncWatermarkTop(); }catch(e){}   /* the crest's clearance depends on which header exists */
   toast(side ? 'Sidebar layout on' : 'Top bar layout');
 }
 window.addEventListener('resize', ()=>{ syncHeaderH(); try{ syncBoardMax(); }catch(e){} try{ syncRolePreviewBtn(); }catch(e){}
