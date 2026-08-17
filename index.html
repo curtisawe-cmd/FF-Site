@@ -10980,12 +10980,35 @@ function renderTeams(){
   el.style.display = sub2==='all'?'grid':'none';
   updateGhost();
   if(sub2==='my'){ renderMyTeam(); return; }
+  /* Rosters shown the way their managers set them - starters in slot order, then the bench,
+     then IR - instead of one flat list in draft order with three QBs shuffled through it.
+     ensureLineup is the same derivation Game Center runs for every team, so what this shows is
+     exactly what will score. An unfilled starting slot renders as an Empty row on purpose:
+     this is the scouting view, and a rival's hole at TE is the point of looking. */
   el.innerHTML = S.teams.map((t,i)=>{
     const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
-    return `<div class="card team-card">
-      <div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>` +
-      (picks.length? `<table class="plain">`+picks.map(p=>`<tr><td style="width:44px"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`).join('')+`</table>`
-        : `<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p>`) + `</div>`;
+    const head = `<div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>`;
+    if(!picks.length) return `<div class="card team-card">${head}<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p></div>`;
+    const lu = ensureLineup(i);
+    const row = (p, label) => `<tr><td style="width:44px">${slotTag(label, p.pos)}</td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`;
+    const starters = [];
+    const consumed = new Set();
+    ['QB','RB','WR','TE','FLEX','K','DEF'].forEach(s2=>{
+      for(let k=0;k<(+S.roster[s2]||0);k++){
+        const p = picks.find(x=>lu[x.playerId]===s2 && !consumed.has(x.playerId));
+        if(p){ consumed.add(p.playerId); starters.push(row(p, s2)); }
+        else starters.push(`<tr><td style="width:44px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td></tr>`);
+      }
+    });
+    const bench = picks.filter(p=>lu[p.playerId]==='BN').map(p=>row(p, p.pos));
+    const ir    = picks.filter(p=>lu[p.playerId]==='IR').map(p=>row(p, 'IR'));
+    return `<div class="card team-card">${head}
+      <div class="eyebrow" style="margin:2px 0 4px">Starters</div>
+      <table class="plain">${starters.join('')}</table>
+      <div class="eyebrow" style="margin:12px 0 4px">Bench</div>
+      ${bench.length?`<table class="plain">${bench.join('')}</table>`:`<p class="sub" style="margin:0">Empty</p>`}
+      ${ir.length?`<div class="eyebrow" style="margin:12px 0 4px">Reserve (IR)</div><table class="plain">${ir.join('')}</table>`:''}
+    </div>`;
   }).join('');
 }
 
