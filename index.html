@@ -1263,6 +1263,24 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
   transition:opacity .2s ease;
 }
 #wmark[hidden]{display:none}
+/* ---- the opening splash ----
+   Above every modal (1500) but pointer-events:none throughout: an opening flourish must never
+   sit between a thumb and a button, and a fast tap during it should land on the app below. */
+#splash{position:fixed;inset:0;z-index:3000;background:var(--bg);display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none}
+#splash.on{display:flex}
+#splash .sp-crest{width:38vw;max-width:170px;height:auto;
+  animation:sp-pop .7s cubic-bezier(.2,1.4,.3,1) both}
+#splash .sp-name{font-family:var(--f-display);text-transform:uppercase;color:var(--chalk);
+  font-size:clamp(28px,9vw,42px);letter-spacing:.01em;line-height:.98;text-align:center;
+  padding:0 20px;animation:sp-rise .6s .18s cubic-bezier(.2,.9,.2,1) both}
+#splash .sp-year{font-family:var(--f-mono);font-size:13px;letter-spacing:.3em;color:var(--charge);
+  animation:sp-rise .6s .3s cubic-bezier(.2,.9,.2,1) both}
+#splash.bye{animation:sp-out .5s ease both}
+@keyframes sp-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+@keyframes sp-rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes sp-out{to{opacity:0;transform:translateY(-3vh)}}
+@media(prefers-reduced-motion:reduce){#splash{display:none !important}}
 /* The phone's crest sits dead centre of the screen and carries more weight than the desktop's -
    the page scrolls under it like a stamp on the glass. Centred with fixed positioning rather
    than margins so it holds the middle whatever is rendered behind it. */
@@ -1588,6 +1606,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <!-- the colours team's crest, faint, over the page. Purely decorative, so it is hidden from
      assistive tech and cannot take a click. -->
 <div id="wmark" aria-hidden="true" hidden></div>
+<!-- the opening splash: crest pops, wordmark rises, the whole thing lifts away. Filled and
+     armed by showSplash(); phones only. -->
+<div id="splash" aria-hidden="true"></div>
 
 <header class="top">
   <button class="burger" id="navBurger" onclick="toggleDrawer()" aria-label="Open menu">☰</button>
@@ -10268,6 +10289,8 @@ setTimeout(()=>{ try{ loadKickoffs(); }catch(e){} }, 0);
 /* the bye table off the cache immediately, then rebuilt in the background if it is missing or
    belongs to a season that has ended */
 setTimeout(()=>{ try{ loadByesCached(); refreshByeUI(); loadByeWeeks(); }catch(e){} }, 0);
+/* the opening splash, on the same deferred beat so every binding it reads exists */
+setTimeout(()=>{ try{ showSplash(); }catch(e){} }, 0);
 /* true = go ahead. Names the player and, for the commissioner, asks instead of refusing. */
 function lockGuard(pid, what){
   if(!playerLocked(pid)) return true;
@@ -11953,6 +11976,45 @@ function applyTeamWatermark(code){
   el.style.setProperty('--wm-img', `url("${url}")`);
   el.hidden = false;
 }
+/* ---- the opening splash ----
+   Phones only, like the compact layouts: on a desktop the app is a page you visit, on a phone
+   it is an app you open, and opening deserves a beat. The crest pops, the league name rises,
+   the whole thing lifts away - about 1.7 seconds, none of it blocking: pointer-events stays
+   off, and the element is hard-removed on a timer so no missed animation event can ever leave
+   a dead sheet over the app. Coming back after five minutes away counts as opening it again,
+   the same rule the intro sound lives by - installed apps resume, they do not reload. */
+function showSplash(){
+  try{
+    if(innerWidth > 720) return;
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let el = document.getElementById('splash');
+    if(!el){ el = document.createElement('div'); el.id='splash'; el.setAttribute('aria-hidden','true');
+             document.body.appendChild(el); }
+    const code = (typeof myTeamTheme==='function') ? myTeamTheme() : null;
+    const url = (code && NFL_TEAMS[code])
+      ? `https://a.espncdn.com/i/teamlogos/nfl/500/${String(code).trim().toLowerCase()}.png` : '';
+    const yr = (typeof curDraftYear==='function') ? curDraftYear() : '';
+    el.innerHTML = `${url?`<img class="sp-crest" src="${url}" alt="">`:''}
+      <div class="sp-name">${esc(S.leagueName||'')}</div>
+      ${yr?`<div class="sp-year">${yr} SEASON</div>`:''}`;
+    el.classList.remove('bye'); el.classList.add('on');
+    setTimeout(()=>{ try{ el.classList.add('bye'); }catch(e){} }, 1250);
+    setTimeout(()=>{ try{ el.remove(); }catch(e){} }, 1900);
+  }catch(e){ try{ const el=document.getElementById('splash'); el&&el.remove(); }catch(_){} }
+}
+let _splashHidAt = 0;
+try{
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ _splashHidAt = Date.now(); return; }
+    if(_splashHidAt && Date.now()-_splashHidAt > 5*60000) showSplash();
+  });
+  /* interruptible: the splash never blocks a tap (pointer-events is off), and a tap also
+     fast-forwards it - someone opening the app to do something should not wait on a flourish */
+  document.addEventListener('pointerdown', ()=>{
+    const el = document.getElementById('splash');
+    if(el && el.classList.contains('on') && !el.classList.contains('bye')) el.classList.add('bye');
+  }, {passive:true});
+}catch(e){}
 function toggleWatermark(){
   const on = !watermarkOn();
   store.set('ffl_wmark', on ? '1' : '0');
