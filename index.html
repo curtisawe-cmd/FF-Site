@@ -12003,10 +12003,17 @@ function showSplash(){
     el.innerHTML = `${url?`<img class="sp-crest" src="${url}" alt="">`:''}
       <div class="sp-name">${esc(S.leagueName||'')}</div>
       ${yr?`<div class="sp-year">${yr} SEASON</div>`:''}`;
+    /* Cancel any earlier run's timers first. showSplash reuses the existing #splash element, so
+       a pending remove() from a previous showing would fire against the NEW one and cut it down
+       seconds early - the splash killing its own replacement. */
+    try{ (window.__spTimers||[]).forEach(clearTimeout); }catch(e){}
     el.classList.remove('bye'); el.classList.add('on');
+    el.dataset.shownAt = Date.now();      /* the tap-to-skip grace period reads this */
     window.__spTrace.push('shown');
-    setTimeout(()=>{ try{ el.classList.add('bye'); window.__spTrace.push('bye@'+Date.now()); }catch(e){} }, 5300);
-    setTimeout(()=>{ try{ el.remove(); window.__spTrace.push('removed@'+Date.now()); }catch(e){} }, 6100);
+    window.__spTimers = [
+      setTimeout(()=>{ try{ el.classList.add('bye'); window.__spTrace.push('bye@'+Date.now()); }catch(e){} }, 5300),
+      setTimeout(()=>{ try{ el.remove(); window.__spTrace.push('removed@'+Date.now()); }catch(e){} }, 6100)
+    ];
   }catch(e){
     /* keep the reason: a swallowed boot error here cost a debugging round once already */
     try{ window.__splashErr = String((e && e.stack) || e); }catch(_){}
@@ -12017,17 +12024,24 @@ let _splashHidAt = 0;
 try{
   document.addEventListener('visibilitychange', ()=>{
     if(document.hidden){ _splashHidAt = Date.now(); return; }
-    /* Sixty seconds, not the intro sound's five minutes. An installed app RESUMES rather than
-       reloads, so this handler - not the boot path - is what "opening the app" actually hits,
-       and five minutes made the splash look broken: close it, reopen it, nothing. A flick to
-       another app and straight back still stays quiet. */
-    if(_splashHidAt && Date.now()-_splashHidAt > 60000) showSplash();
+    /* Ten seconds. An installed app RESUMES rather than reloads, so this handler - not the boot
+       path - is what "opening the app" actually hits. Five minutes, then sixty seconds, both
+       meant closing the app and opening it again showed nothing, which reads as broken. Ten is
+       short enough that reopening always plays it and long enough that the screen waking, or a
+       permission sheet closing over the app, does not. Tap-to-skip covers the rest. */
+    if(_splashHidAt && Date.now()-_splashHidAt > 10000) showSplash();
   });
-  /* interruptible: the splash never blocks a tap (pointer-events is off), and a tap also
-     fast-forwards it - someone opening the app to do something should not wait on a flourish */
+  /* Interruptible: the splash never blocks a tap (pointer-events is off), and a tap also
+     fast-forwards it - someone opening the app to do something should not wait on a flourish.
+     But NOT for the first 800ms. The tap that opens the app arrives on the page a moment after
+     it resumes, and it was killing the splash on the same beat it appeared: the whole thing
+     showed as a flash and looked broken. Skipping has to be something you choose, not the
+     leftover of the gesture that got you here. */
   document.addEventListener('pointerdown', ()=>{
     const el = document.getElementById('splash');
-    if(el && el.classList.contains('on') && !el.classList.contains('bye')) el.classList.add('bye');
+    if(!el || !el.classList.contains('on') || el.classList.contains('bye')) return;
+    if(Date.now() - (+el.dataset.shownAt||0) < 800) return;
+    el.classList.add('bye');
   }, {passive:true});
 }catch(e){}
 function toggleWatermark(){
