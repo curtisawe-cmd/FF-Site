@@ -707,6 +707,17 @@ nav.tabs button{position:relative}
 .pulse-bar{height:10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);
   overflow:hidden;margin:8px 0 2px}
 .pulse-fill{height:100%;background:linear-gradient(90deg,var(--turf),var(--turf-bright));border-radius:6px}
+/* the weekly shame report */
+.shame-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.shame-row:last-child{border-bottom:none}
+.shame-row > span:last-child{display:inline-flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap}
+.shame-tag{flex:0 0 auto;font-family:var(--f-ui);font-weight:800;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--charge);border:1px solid var(--charge);border-radius:5px;padding:2px 8px}
+/* the rivalry line on a matchup card */
+.gc-rival{padding:7px 14px;font-size:12px;font-family:var(--f-mono);letter-spacing:.02em;
+  border-top:1px solid var(--line);color:var(--chalk-dim)}
+.gc-rival.owns{color:var(--charge);border-left:3px solid var(--charge)}
+.gc-rival.even{color:var(--gold);border-left:3px solid var(--gold)}
 .hero::after{content:'';position:absolute;top:0;bottom:0;right:0;width:12px;background:var(--charge)}
 .hero .big{font-family:var(--f-display);font-weight:400;font-size:clamp(38px,7vw,80px);line-height:.9;letter-spacing:.005em;text-transform:uppercase;text-wrap:balance}
 .phase{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px dashed var(--line)}
@@ -1783,6 +1794,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <!-- Every corner of the league, one tap from the front door. Rendered by renderHomeLaunch so
        the subtitles carry live facts and the badges live-update. -->
   <nav class="home-launch" id="homeLaunch" aria-label="Everything in the league"></nav>
+
+  <!-- the week's disgraces, written by the data itself. Hidden until a week has scores. -->
+  <div class="card" id="homeShame" style="display:none;margin-bottom:18px"></div>
 
   <div class="grid2">
     <div class="card">
@@ -4155,6 +4169,7 @@ function startLeagueSync(){
     try{ const now=(D.picks||[]).filter(p=>+p.pickIndex>=0).length;
       if(window._draftSynced && now>picksBefore && D.started && !D.finished) playSound('pick');
       window._draftSynced = true;
+      checkPickRoasts();
     }catch(e){}
     /* the turn just advanced - the next manager's queued request may be ready to apply */
     try{ maybeApplyPickRequests(); }catch(e){}
@@ -5649,6 +5664,7 @@ function afterPick(){
     toast("That's a wrap — draft complete! 🏈");
   } else { armClock(); }
   playSound('pick');           /* local pick; remote devices sound it from the draft feed */
+  try{ checkPickRoasts(); }catch(e){}
   saveDraft();
   refreshDraftUI();
 }
@@ -6854,6 +6870,124 @@ function renderHome(){
       }).join('')}
     </table>`;
   try{ renderHeroBits(); renderHomeLaunch(); renderHomePulse(); }catch(e){}
+  try{ renderHomeShame(); }catch(e){}
+}
+
+/* ===================== THE FUN =====================
+   Three surprises, every one written by the league's own data so nothing here can go stale or
+   need a copywriter: the weekly shame report, the rivalry line on a matchup, and the draft-day
+   reach roast. */
+
+/* ---- the shame report ---- */
+async function renderHomeShame(){
+  const el = document.getElementById('homeShame'); if(!el) return;
+  const hide = ()=>{ el.style.display='none'; el.innerHTML=''; };
+  try{
+    if(!(S.season && S.season.schedule)) return hide();
+    let wk = 0; for(let w=REG_WEEKS; w>=1; w--){ if(weekHasScores(w)){ wk=w; break; } }
+    if(!wk) return hide();
+    const rows = [];
+    (S.season.schedule[wk]||[]).forEach((g,m)=>{
+      const [pa,pb] = mScore(wk,m);
+      if(pa!=null && pb!=null){
+        rows.push({ti:g[0], pts:pa, win:pa>pb, tie:pa===pb});
+        rows.push({ti:g[1], pts:pb, win:pb>pa, tie:pa===pb});
+      }
+    });
+    if(rows.length < 2) return hide();
+    const bum = [...rows].sort((a,b)=>a.pts-b.pts)[0];
+    /* the worst beat is the highest-scoring LOSER - real points, no reward */
+    const losers = rows.filter(r=>!r.win && !r.tie && r.ti!==bum.ti);
+    const beat = losers.length ? [...losers].sort((a,b)=>b.pts-a.pts)[0] : null;
+    const line = (tag,ti,txt)=>`<div class="shame-row"><span class="shame-tag">${tag}</span><span>${teamMarkHTML(S.teams[ti],24)}<b>${esc(teamName(ti))}</b> <span style="color:var(--chalk-dim)">${txt}</span></span></div>`;
+    el.innerHTML = `<h2>Week ${wk} Shame Report</h2>`
+      + line('BUM OF THE WEEK', bum.ti, 'scored '+bum.pts.toFixed(1)+'. The floor.')
+      + (beat ? line('WORST BEAT', beat.ti, 'dropped '+beat.pts.toFixed(1)+' and still lost') : '');
+    el.style.display='block';
+    /* the bench crime needs the week's player stats, which arrive when they arrive */
+    const yr = (S.season && S.season.year) || curDraftYear();
+    const stats = await fetchWeekStats(yr, wk);
+    if(!stats || !Object.keys(stats).length) return;
+    let worst = null;
+    (S.teams||[]).forEach((t,i)=>{
+      const b = benchLeft(i, stats, false);
+      if(b && b.left > 0 && (!worst || b.left > worst.left)) worst = {ti:i, ...b};
+    });
+    if(worst && worst.left >= 10 && el.style.display !== 'none')
+      el.insertAdjacentHTML('beforeend', line('BENCH CRIME', worst.ti,
+        'left '+worst.left.toFixed(1)+' on the bench'
+        + (worst.missed[0] ? ' while '+esc(worst.missed[0].name)+' sat' : '')));
+  }catch(e){ hide(); }
+}
+
+/* ---- the rivalry line ---- */
+function rivalryBannerHTML(ai, bi){
+  const mA = String((S.teams[ai]||{}).manager||'').trim();
+  const mB = String((S.teams[bi]||{}).manager||'').trim();
+  if(!mA || !mB || mA===mB) return '';
+  const rec = (h2hAll()[mA]||{})[mB];
+  if(!rec || !rec.games) return `<div class="gc-rival">First meeting ever. No excuses yet.</div>`;
+  const g = rec.games, pct = (rec.w + rec.t/2)/g;
+  const line = r => r.w+'-'+r.l+(r.t?'-'+r.t:'');
+  if(g>=3 && pct>=0.7)
+    return `<div class="gc-rival owns">${esc(mA)} owns ${esc(mB)} ${line(rec)} lifetime. Do something about it, ${esc(mB)}.</div>`;
+  if(g>=3 && pct<=0.3){
+    const m = (h2hAll()[mB]||{})[mA] || {w:rec.l,l:rec.w,t:rec.t};
+    return `<div class="gc-rival owns">${esc(mB)} owns ${esc(mA)} ${line(m)} lifetime. Do something about it, ${esc(mA)}.</div>`;
+  }
+  if(g>=4 && Math.abs(pct-0.5)<=0.125)
+    return `<div class="gc-rival even">Dead even rivalry: ${line(rec)} all time. Somebody flinch.</div>`;
+  return '';
+}
+
+/* ---- the draft-day roast ----
+   Fires on every device from the same delta that sounds the pick, with the same first-sync
+   baseline, so loading a board mid-draft never replays twenty roasts. */
+let _projRank = null;
+function projRankOf(pid){
+  if(!statsLoaded) return null;
+  if(!_projRank){
+    _projRank = new Map();
+    POOL.map(x=>({id:String(x.id), v:seasonProjPts(x)})).filter(x=>x.v!=null)
+      .sort((a,b)=>b.v-a.v).forEach((x,i)=>_projRank.set(x.id, i+1));
+  }
+  return _projRank.get(String(pid)) || null;
+}
+const REACH_SPOTS = 25;   /* how far past his projection a pick has to be before the room hears about it */
+function roastPick(p){
+  try{
+    const total = totalPicks();
+    const done = (D.picks||[]).filter(x=>+x.pickIndex>=0).length;
+    if(+p.pickIndex === total-1 && done >= total){
+      trashTalk(['MR. IRRELEVANT', (p.name||'The last pick')+' — picked dead last, remembered forever']);
+      return;
+    }
+    if(p.pos==='K' || p.pos==='DEF') return;      /* the early-kicker alarm already has that beat */
+    const rank = projRankOf(p.playerId);
+    if(rank==null) return;
+    const pickNo = (+p.pickIndex)+1;
+    const spots = rank - pickNo;
+    if(spots < REACH_SPOTS) return;
+    const who = teamName(p.teamIndex);
+    const lines = [
+      ['THE REACH', who+' took '+p.name+' '+spots+' spots early'],
+      ['SCOUT OF THE YEAR', p.name+'? At pick '+pickNo+'? Sure, '+who+'.'],
+      ['PANIC PICK', who+' smashed the button on '+p.name]
+    ];
+    trashTalk(lines[Math.floor(Math.random()*lines.length)]);
+  }catch(e){}
+}
+let _roastSeen = null, _roastBoard = '';
+function checkPickRoasts(){
+  try{
+    const board = draftKey();
+    const picks = (D.picks||[]).filter(x=>+x.pickIndex>=0);
+    const keys = new Set(picks.map(x=>+x.pickIndex));
+    if(_roastSeen===null || board!==_roastBoard){ _roastSeen=keys; _roastBoard=board; return; }
+    const fresh = picks.filter(x=>!_roastSeen.has(+x.pickIndex));
+    _roastSeen = keys;
+    fresh.sort((a,b)=>+a.pickIndex-+b.pickIndex).slice(-2).forEach(roastPick);
+  }catch(e){}
 }
 
 /* ===================== HOME V2 =====================
@@ -8862,6 +8996,7 @@ async function renderGameCenter(){
         <span class="gc-vs">VS</span>
         <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
       </div>
+      ${(()=>{ try{ return rivalryBannerHTML(g[0], g[1]); }catch(e){ return ''; } })()}
       <div class="wp-desk">${winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability')}</div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
       ${h2hBlock(g[0], g[1], A, B)}
