@@ -1271,11 +1271,13 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
 #splash.on{display:flex}
 /* Three and a half seconds. The entrance takes the first second, the crest breathes through the
    short hold, and it lifts away at 2.9s. */
-#splash .sp-crest{width:38vw;max-width:170px;height:auto;
+/* min() rather than a flat max-width: 38vw is right on a phone but only 170px of a 1440px
+   desktop, which reads as a stray favicon in the middle of an empty screen. */
+#splash .sp-crest{width:min(38vw, 240px);height:auto;
   animation:sp-pop .8s cubic-bezier(.2,1.4,.3,1) both,
             sp-float 2s .8s ease-in-out infinite alternate}
 #splash .sp-name{font-family:var(--f-display);text-transform:uppercase;color:var(--chalk);
-  font-size:clamp(28px,9vw,42px);letter-spacing:.01em;line-height:.98;text-align:center;
+  font-size:clamp(28px,9vw,58px);letter-spacing:.01em;line-height:.98;text-align:center;
   padding:0 20px;animation:sp-rise .7s .25s cubic-bezier(.2,.9,.2,1) both}
 #splash .sp-year{font-family:var(--f-mono);font-size:13px;letter-spacing:.3em;color:var(--charge);
   animation:sp-rise .7s .4s cubic-bezier(.2,.9,.2,1) both}
@@ -2112,7 +2114,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
        admin-only: managers must never see the insults before they get screamed at them -->
   <div data-spage="look" class="card" style="margin-bottom:18px">
     <h2>Opening animation</h2>
-    <p class="sub" data-note="set-splash" style="margin-bottom:10px">The crest and league name that play when you open the app on a phone. Roughly three and a half seconds, and a tap skips it. Play it here to see it on this device, whatever size the screen is.</p>
+    <p class="sub" data-note="set-splash" style="margin-bottom:10px">The crest and league name that play when the app opens. Roughly three and a half seconds, and a tap skips it. On a phone it plays again whenever you come back to the app after a while away; on a desktop only on a fresh load, since a browser tab you click back into all day would be ambushed by it. Play it here to see it now.</p>
     <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn ghost" onclick="testSplash()">Play it now</button>
       <span class="sub" id="splashWhy" style="margin:0;font-size:12px"></span>
@@ -11999,9 +12001,8 @@ function applyTeamWatermark(code){
    a dead sheet over the app. Coming back after five minutes away counts as opening it again,
    the same rule the intro sound lives by - installed apps resume, they do not reload. */
 function splashSkipReason(){
-  if(innerWidth > 720) return 'this screen is '+innerWidth+'px wide — the splash is phones only (720px and under)';
   if(matchMedia('(prefers-reduced-motion: reduce)').matches)
-    return 'this device has Reduce Motion switched on (iPhone: Settings > Accessibility > Motion), and the splash respects it';
+    return 'this device has Reduce Motion switched on (iPhone: Settings > Accessibility > Motion; Windows: Settings > Accessibility > Visual effects), and the splash respects it';
   return null;
 }
 /* force skips the phone-only and reduced-motion guards, for the Settings test button: those are
@@ -12047,7 +12048,9 @@ function testSplash(){
   const note = document.getElementById('splashWhy');
   if(note) note.innerHTML = why
     ? `Playing it anyway. On its own it stays quiet here because ${esc(why)}.`
-    : `This device plays it normally: open the app, or come back to it after ten seconds away.`;
+    : (innerWidth > 720
+        ? `This screen plays it on a fresh load — reload the page to see it in place.`
+        : `This device plays it normally: open the app, or come back to it after ten seconds away.`);
   showSplash(true);
 }
 /* ---- knowing the app was away ----
@@ -12066,8 +12069,13 @@ try{
     if(document.hidden) return;
     const away = Date.now() - _spLastActive;
     _spLastActive = Date.now();
-    /* Ten seconds: reopening the app always plays it, while the screen waking or a permission
+    /* Replaying on return is a PHONE behaviour. A phone app is opened and closed; a desktop
+       browser tab is left open all day and clicked back into constantly, and focus fires on
+       every one of those - the splash would ambush you every time you came back from your
+       email. On a desktop, opening the app means loading the page, which the boot call covers.
+       Ten seconds: reopening the app always plays it, while the screen waking or a permission
        sheet closing over the app does not. Tap-to-skip covers anything in between. */
+    if(innerWidth > 720) return;
     if(away > 10000) showSplash();
   };
   document.addEventListener('visibilitychange', backFromAway);
