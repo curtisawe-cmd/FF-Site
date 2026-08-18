@@ -611,6 +611,58 @@ nav.tabs button{position:relative}
     linear-gradient(160deg,var(--hero-grad-a),var(--hero-grad-b));
   padding:44px 34px;margin-bottom:22px;box-shadow:var(--sh-2);
 }
+/* ---------- home v2 ---------- */
+.hero-v2{padding:46px 38px 38px}
+@media(max-width:640px){.hero-v2{padding:34px 20px 28px}}
+/* the countdown: scoreboard digits, tabular so the ticking never makes them jitter sideways */
+.hero-count{display:flex;gap:12px;margin:20px 0 12px;flex-wrap:wrap}
+.hero-count:empty{display:none}
+.hero-count .hc{min-width:76px;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:10px 12px 9px;text-align:center;box-shadow:var(--sh-1)}
+.hero-count .hc b{display:block;font-family:var(--f-mono);font-weight:600;font-size:30px;line-height:1;
+  color:var(--chalk);font-variant-numeric:tabular-nums}
+.hero-count .hc span{display:block;margin-top:5px;font-family:var(--f-ui);font-weight:700;font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--chalk-dim)}
+.hero-count.live .hc b{color:var(--turf-bright)}
+.hero-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.hero-chip{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:12px;
+  color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:5px 12px}
+.hero-chip b{color:var(--chalk);font-weight:600}
+@media(max-width:560px){
+  .hero-count{gap:8px}
+  .hero-count .hc{min-width:64px;padding:8px 9px 7px}
+  .hero-count .hc b{font-size:23px}
+}
+/* the launcher: every destination in the league as a tile. Flat grid, no scrolling rows. */
+.home-launch{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 20px}
+@media(min-width:760px){.home-launch{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}
+@media(min-width:1150px){.home-launch{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.hl-tile{position:relative;display:flex;align-items:center;gap:12px;text-align:left;
+  background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 14px;
+  min-height:64px;cursor:pointer;box-shadow:var(--sh-1);
+  transition:transform .16s ease,border-color .16s ease,background .16s ease}
+.hl-tile:hover{transform:translateY(-2px);border-color:var(--turf);background:var(--panel-2)}
+.hl-tile:active{transform:translateY(0) scale(.985)}
+.hl-tile:focus-visible{outline:none;box-shadow:0 0 0 3px var(--turf-wash),var(--sh-1)}
+.hl-ic{flex:0 0 auto;width:36px;height:36px;border-radius:10px;background:var(--turf-wash);
+  display:grid;place-items:center;color:var(--turf)}
+.hl-ic svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.hl-t{min-width:0}
+.hl-name{font-family:var(--f-ui);font-weight:700;font-size:13px;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--chalk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hl-sub{font-size:11px;color:var(--chalk-dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hl-tile .tabbadge{position:absolute;top:8px;right:8px;margin-left:0}
+@media(max-width:560px){ .hl-tile{min-height:58px;padding:11px 12px} }
+@media(prefers-reduced-motion:reduce){ .hl-tile,.hl-tile:hover{transition:none;transform:none} }
+/* season pulse: the draft as a progress bar */
+.pulse-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-top:12px}
+.pulse-row:first-child{margin-top:2px}
+.pulse-row .k{color:var(--chalk-dim);font-size:13px}
+.pulse-row .v{font-family:var(--f-mono);font-size:13px;color:var(--chalk);text-align:right}
+.pulse-bar{height:10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);
+  overflow:hidden;margin:8px 0 2px}
+.pulse-fill{height:100%;background:linear-gradient(90deg,var(--turf),var(--turf-bright));border-radius:6px}
 .hero::after{content:'';position:absolute;top:0;bottom:0;right:0;width:12px;background:var(--charge)}
 .hero .big{font-family:var(--f-display);font-weight:400;font-size:clamp(38px,7vw,80px);line-height:.9;letter-spacing:.005em;text-transform:uppercase;text-wrap:balance}
 .phase{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px dashed var(--line)}
@@ -1668,28 +1720,30 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
 <!-- ============ HOME ============ -->
 <section class="view active" id="view-home">
-  <div class="hero">
+  <div class="hero hero-v2">
     <div class="eyebrow">Your league. Your rules.</div>
     <div class="big" id="homeLeagueName">Bitch Boy League</div>
     <p class="sub" data-note="home-tagline" style="margin-top:8px">The league's own turf — off NFL.com, fully customizable.</p>
-    <div class="row">
-      <button class="btn" onclick="showView('draft')">Enter Draft Room</button>
-      <button class="btn ghost" onclick="showView('settings')">League Settings</button>
+    <!-- filled by renderHeroBits: countdown to kickoff, or the live week once the season runs -->
+    <div class="hero-count" id="heroCount" aria-label="Season countdown"></div>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="heroCTA" onclick="showView('draft')">Enter Draft Room</button>
+      <button class="btn ghost" onclick="showView('teams');window.teamsSub='my';renderTeams()">My Team</button>
     </div>
+    <div class="hero-chips" id="heroChips"></div>
   </div>
   <!-- A warning nobody sees is not a warning: the same banner rides on the landing page, since
        the manager who has left a slot empty is exactly the one not visiting My Team. -->
   <div id="homeLineupWarn"></div>
 
+  <!-- Every corner of the league, one tap from the front door. Rendered by renderHomeLaunch so
+       the subtitles carry live facts and the badges live-update. -->
+  <nav class="home-launch" id="homeLaunch" aria-label="Everything in the league"></nav>
+
   <div class="grid2">
     <div class="card">
-      <h2>Season Roadmap</h2>
-      <div class="phase"><span class="tag">Live now</span><span>Draft room — live 12-team snake board with pick clock and auto-pick</span></div>
-      <div class="phase"><span class="tag">Live now</span><span>Custom scoring editor and roster structure</span></div>
-      <div class="phase"><span class="tag">Live now</span><span>League History record book (2012–2025 points leaders)</span></div>
-      <div class="phase dim"><span class="tag">Next</span><span>Online logins so every manager drafts from their own device</span></div>
-      <div class="phase dim"><span class="tag">Week 1</span><span>Matchups, auto-updated scoring and standings</span></div>
-      <div class="phase dim"><span class="tag">Season</span><span>Photo wall, trash talk board, trades and waivers</span></div>
+      <h2>Season Pulse</h2>
+      <div id="homePulse"></div>
     </div>
     <div class="card">
       <h2>League Snapshot</h2>
@@ -6752,7 +6806,133 @@ function renderHome(){
           ? `<tr><td>${esc(label)}</td><td style="text-align:right">${esc(value)}</td></tr>` : '';
       }).join('')}
     </table>`;
+  try{ renderHeroBits(); renderHomeLaunch(); renderHomePulse(); }catch(e){}
 }
+
+/* ===================== HOME V2 =====================
+   The launcher, the countdown and the pulse. Everything shown is read from live league state -
+   nothing here is hand-typed copy that can go stale the way the old roadmap did. */
+const HOME_ICONS = {
+  standings: '<path d="M8 4h8v3.6a4 4 0 0 1-8 0z"/><path d="M8 5.6H5.2c0 2.6 1.2 4 2.9 4.3M16 5.6h2.8c0 2.6-1.2 4-2.9 4.3"/><path d="M12 11.6v3.2"/><path d="M10 14.8h4l.8 5.6H9.2z"/>',
+  myteam:    '<path d="M8.4 3.6 4 6.4l1.8 3.4 1.8-1v11.6h8.8V8.8l1.8 1L20 6.4l-4.4-2.8a3.6 3.6 0 0 1-7.2 0z"/>',
+  players:   '<circle cx="12" cy="7.6" r="3.4"/><path d="M4.8 20.4c.5-4 3.4-6.4 7.2-6.4s6.7 2.4 7.2 6.4"/>',
+  waivers:   '<circle cx="12" cy="12" r="8.2"/><path d="M12 7.2V12l3.4 2"/>',
+  trades:    '<path d="M4 8.2h13.2M14 4.6l3.6 3.6-3.6 3.6"/><path d="M20 15.8H6.8M10 12.2l-3.6 3.6 3.6 3.6"/>',
+  polls:     '<rect x="4.2" y="4.2" width="15.6" height="15.6" rx="2.2"/><path d="M8.2 12.4l2.6 2.6 5-5.4"/>'
+};
+function homeTiles(){
+  const done = D.picks.length, total = totalPicks();
+  const mi = (typeof myTeamIdx==='function') ? myTeamIdx() : null;
+  const wk = currentNflWeek();
+  const n0 = f => { try{ return (typeof f==='function') ? (+f()||0) : 0; }catch(e){ return 0; } };
+  return [
+    { ic:TAB_ICONS.draft,      name:'Draft Room',  sub: D.finished?'Draft complete':(D.started?done+' / '+total+' picks in':'Live snake board'),
+      go:()=>showView('draft') },
+    { ic:TAB_ICONS.matchups,   name:'Matchups',    sub: wk>=1?('Week '+wk+' head to head'):'Head-to-head scoreboards',
+      go:()=>showView('matchups') },
+    { ic:HOME_ICONS.standings, name:'Standings',   sub:'Wins, points, all-play',
+      go:()=>{ showView('matchups'); try{ setMuTab('st'); }catch(e){} } },
+    { ic:HOME_ICONS.myteam,    name:'My Team',     sub: (mi!==null && S.teams[mi]) ? S.teams[mi].name : 'Pick your team',
+      go:()=>{ showView('teams'); window.teamsSub='my'; renderTeams(); } },
+    { ic:TAB_ICONS.teams,      name:'All Teams',   sub: N()+' rosters, starters & bench',
+      go:()=>{ showView('teams'); window.teamsSub='all'; renderTeams(); } },
+    { ic:HOME_ICONS.players,   name:'Players',     sub:'Full pool · stats · news',
+      go:()=>{ showView('players'); try{ goSub('pl-all'); }catch(e){} } },
+    { ic:HOME_ICONS.waivers,   name:'Waivers',     sub: waiversOn()? (waiverHours()+'h claim window') : 'Switched off',
+      go:()=>{ showView('players'); try{ goSub('pl-wv'); }catch(e){} } },
+    { ic:HOME_ICONS.trades,    name:'Trades',      sub:'Offers, counters, the block', badge:n0(typeof tradeAlertCount==='function'?tradeAlertCount:null),
+      go:()=>{ showView('trades'); } },
+    { ic:TAB_ICONS.chat,       name:'Chat',        sub:'League smack talk', badge:n0(typeof chatUnreadCount==='function'?chatUnreadCount:null),
+      go:()=>showView('chat') },
+    { ic:HOME_ICONS.polls,     name:'Polls',       sub:'One vote each, no recounts', badge:n0(typeof pollAlertCount==='function'?pollAlertCount:null),
+      go:()=>showView('polls') },
+    { ic:TAB_ICONS.stats,      name:'Stats & History', sub:'Record book, 2012 to now',
+      go:()=>showView('stats') },
+    { ic:TAB_ICONS.settings,   name:'Settings',    sub: isAdmin()?'Commissioner controls':'How the league is set up',
+      go:()=>showView('settings') }
+  ];
+}
+function renderHomeLaunch(){
+  const el = document.getElementById('homeLaunch'); if(!el) return;
+  window.__homeGo = window.__homeGo || {};
+  el.innerHTML = homeTiles().map((t,i)=>{
+    window.__homeGo[i] = t.go;
+    return `<button class="hl-tile" onclick="__homeGo[${i}]()">
+      <span class="hl-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${t.ic}</svg></span>
+      <span class="hl-t"><span class="hl-name">${esc(t.name)}</span><span class="hl-sub" style="display:block">${esc(t.sub)}</span></span>
+      ${t.badge? `<span class="tabbadge">${t.badge>9?'9+':t.badge}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+/* Countdown to kickoff, or the live week once the season is on. Writes only when the text
+   changes, because it repaints every second. */
+function renderHeroCount(){
+  const el = document.getElementById('heroCount'); if(!el) return;
+  const wk = currentNflWeek();
+  let html = '', live = false;
+  if(wk >= 1){
+    live = true;
+    html = `<div class="hc"><b>WK ${wk}</b><span>Season live</span></div>`
+         + (weekHasScores(wk) ? `<div class="hc"><b>LIVE</b><span>Scores in</span></div>` : '');
+  } else {
+    const ms = NFL_2026_WEEK1.getTime() - Date.now();
+    if(ms > 0){
+      const d = Math.floor(ms/86400000), h = Math.floor(ms%86400000/3600000),
+            m = Math.floor(ms%3600000/60000), sec = Math.floor(ms%60000/1000);
+      const pad = x => String(x).padStart(2,'0');
+      html = `<div class="hc"><b>${d}</b><span>days</span></div>
+        <div class="hc"><b>${pad(h)}</b><span>hrs</span></div>
+        <div class="hc"><b>${pad(m)}</b><span>min</span></div>
+        <div class="hc"><b>${pad(sec)}</b><span>sec</span></div>
+        <div class="hc" style="min-width:auto"><b style="font-size:14px;line-height:30px">KICKOFF</b><span>Sep 10</span></div>`;
+    }
+  }
+  if(el.dataset.last !== html){ el.dataset.last = html; el.innerHTML = html; el.classList.toggle('live', live); }
+}
+function renderHeroBits(){
+  renderHeroCount();
+  const cta = document.getElementById('heroCTA');
+  if(cta){
+    if(D.finished){ cta.textContent = 'Game Center'; cta.onclick = ()=>{ showView('matchups'); try{ setMuTab('gc'); }catch(e){} }; }
+    else if(D.started){ cta.textContent = 'Draft live — jump in'; cta.onclick = ()=>showView('draft'); }
+    else { cta.textContent = 'Enter Draft Room'; cta.onclick = ()=>showView('draft'); }
+  }
+  const chips = document.getElementById('heroChips');
+  if(chips){
+    const pot = (+(S.prizes||{}).buyIn||0) * N();
+    const bits = [
+      `<span class="hero-chip"><b>${N()}</b> teams</span>`,
+      `<span class="hero-chip"><b>${snakeRounds()}</b> rounds${KR()?' <b>+ keeper</b>':''}</span>`,
+      pot>0 ? `<span class="hero-chip"><b>$${pot.toLocaleString('en-US')}</b> pot</span>` : '',
+      tradeDeadlineWk() ? `<span class="hero-chip">deadline <b>wk ${tradeDeadlineWk()}</b></span>` : ''
+    ].filter(Boolean);
+    chips.innerHTML = bits.join('');
+  }
+}
+function renderHomePulse(){
+  const el = document.getElementById('homePulse'); if(!el) return;
+  const done = D.picks.length, total = Math.max(1,totalPicks());
+  const pct = D.finished ? 100 : Math.round(done/total*100);
+  const wk = currentNflWeek();
+  const ms = NFL_2026_WEEK1.getTime() - Date.now();
+  const days = Math.max(0, Math.ceil(ms/86400000));
+  el.innerHTML = `
+    <div class="pulse-row"><span class="k">The draft</span>
+      <span class="v">${D.finished?'complete':(D.started? done+' / '+total+' picks':'not started')}</span></div>
+    <div class="pulse-bar" role="img" aria-label="Draft ${pct}% done"><div class="pulse-fill" style="width:${pct}%"></div></div>
+    <div class="pulse-row"><span class="k">Kickoff</span>
+      <span class="v">${wk>=1? 'Week '+wk+' underway' : 'Sep 10 · in '+days+' day'+(days===1?'':'s')}</span></div>
+    <div class="pulse-row"><span class="k">Waivers</span>
+      <span class="v">${waiversOn()? waiverHours()+'h window · rolling priority' : 'off'}</span></div>
+    <div class="pulse-row"><span class="k">Trade deadline</span>
+      <span class="v">${tradeDeadlineWk()? esc(tradeDeadlineLabel()) : 'none set'}</span></div>`;
+}
+/* one ticking second-hand for the hero, alive only while Home is on screen */
+try{
+  if(!window.__heroTick) window.__heroTick = setInterval(()=>{
+    try{ if(window.currentView==='home') renderHeroCount(); }catch(e){}
+  }, 1000);
+}catch(e){}
 
 /* One stable colour per team for the draft board, keyed by slot so a column and every pick
    traded TO that column match. Hand-picked, not generated: golden-angle hues left several
