@@ -1269,23 +1269,24 @@ body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
 #splash{position:fixed;inset:0;z-index:3000;background:var(--bg);display:none;
   flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none}
 #splash.on{display:flex}
-/* Six seconds, at the commissioner's request. A slow entrance, then the crest breathes through
-   the hold so the middle seconds read as alive rather than frozen; tap-to-skip matters all the
-   more at this length and is unchanged. */
+/* Three and a half seconds. The entrance takes the first second, the crest breathes through the
+   short hold, and it lifts away at 2.9s. */
 #splash .sp-crest{width:38vw;max-width:170px;height:auto;
-  animation:sp-pop 1s cubic-bezier(.2,1.4,.3,1) both,
-            sp-float 3.2s 1s ease-in-out infinite alternate}
+  animation:sp-pop .8s cubic-bezier(.2,1.4,.3,1) both,
+            sp-float 2s .8s ease-in-out infinite alternate}
 #splash .sp-name{font-family:var(--f-display);text-transform:uppercase;color:var(--chalk);
   font-size:clamp(28px,9vw,42px);letter-spacing:.01em;line-height:.98;text-align:center;
-  padding:0 20px;animation:sp-rise .9s .3s cubic-bezier(.2,.9,.2,1) both}
+  padding:0 20px;animation:sp-rise .7s .25s cubic-bezier(.2,.9,.2,1) both}
 #splash .sp-year{font-family:var(--f-mono);font-size:13px;letter-spacing:.3em;color:var(--charge);
-  animation:sp-rise .9s .5s cubic-bezier(.2,.9,.2,1) both}
-#splash.bye{animation:sp-out .7s ease both}
+  animation:sp-rise .7s .4s cubic-bezier(.2,.9,.2,1) both}
+#splash.bye{animation:sp-out .6s ease both}
 @keyframes sp-pop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
 @keyframes sp-float{from{transform:scale(1) translateY(0)}to{transform:scale(1) translateY(-7px)}}
 @keyframes sp-rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 @keyframes sp-out{to{opacity:0;transform:translateY(-3vh)}}
-@media(prefers-reduced-motion:reduce){#splash{display:none !important}}
+/* Reduce Motion hides it - except when the Settings test button forces it, which needs to be
+   able to prove the splash works even on a device whose setting is why it never appears. */
+@media(prefers-reduced-motion:reduce){#splash:not(.forced){display:none !important}}
 /* The phone's crest sits dead centre of the screen and carries more weight than the desktop's -
    the page scrolls under it like a stamp on the glass. Centred with fixed positioning rather
    than margins so it holds the middle whatever is rendered behind it. */
@@ -2109,6 +2110,15 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <!-- alarms and other noise-makers live down here, out of the way of real league settings.
        admin-only: managers must never see the insults before they get screamed at them -->
+  <div data-spage="look" class="card" style="margin-bottom:18px">
+    <h2>Opening animation</h2>
+    <p class="sub" data-note="set-splash" style="margin-bottom:10px">The crest and league name that play when you open the app on a phone. Roughly three and a half seconds, and a tap skips it. Play it here to see it on this device, whatever size the screen is.</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn ghost" onclick="testSplash()">Play it now</button>
+      <span class="sub" id="splashWhy" style="margin:0;font-size:12px"></span>
+    </div>
+  </div>
+
   <div data-spage="look" class="eyebrow admin-only" style="margin:26px 0 10px">Alarms &amp; noise</div>
   <div data-spage="look" class="grid2 admin-only" style="margin-bottom:18px">
     <div class="card">
@@ -11988,11 +11998,19 @@ function applyTeamWatermark(code){
    off, and the element is hard-removed on a timer so no missed animation event can ever leave
    a dead sheet over the app. Coming back after five minutes away counts as opening it again,
    the same rule the intro sound lives by - installed apps resume, they do not reload. */
-function showSplash(){
+function splashSkipReason(){
+  if(innerWidth > 720) return 'this screen is '+innerWidth+'px wide — the splash is phones only (720px and under)';
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)
+    return 'this device has Reduce Motion switched on (iPhone: Settings > Accessibility > Motion), and the splash respects it';
+  return null;
+}
+/* force skips the phone-only and reduced-motion guards, for the Settings test button: those are
+   the two ways it can decline silently, and "I see nothing" needs to be answerable. */
+function showSplash(force){
   try{
     (window.__spTrace=window.__spTrace||[]).push('called w='+innerWidth);
-    if(innerWidth > 720){ window.__spTrace.push('skip: wide'); return; }
-    if(matchMedia('(prefers-reduced-motion: reduce)').matches){ window.__spTrace.push('skip: reduced-motion'); return; }
+    const why = force ? null : splashSkipReason();
+    if(why){ window.__spTrace.push('skip: '+why); return; }
     let el = document.getElementById('splash');
     if(!el){ el = document.createElement('div'); el.id='splash'; el.setAttribute('aria-hidden','true');
              document.body.appendChild(el); }
@@ -12008,17 +12026,29 @@ function showSplash(){
        seconds early - the splash killing its own replacement. */
     try{ (window.__spTimers||[]).forEach(clearTimeout); }catch(e){}
     el.classList.remove('bye'); el.classList.add('on');
+    el.classList.toggle('forced', !!force);
     el.dataset.shownAt = Date.now();      /* the tap-to-skip grace period reads this */
     window.__spTrace.push('shown');
     window.__spTimers = [
-      setTimeout(()=>{ try{ el.classList.add('bye'); window.__spTrace.push('bye@'+Date.now()); }catch(e){} }, 5300),
-      setTimeout(()=>{ try{ el.remove(); window.__spTrace.push('removed@'+Date.now()); }catch(e){} }, 6100)
+      setTimeout(()=>{ try{ el.classList.add('bye'); window.__spTrace.push('bye@'+Date.now()); }catch(e){} }, 2900),
+      setTimeout(()=>{ try{ el.remove(); window.__spTrace.push('removed@'+Date.now()); }catch(e){} }, 3600)
     ];
   }catch(e){
     /* keep the reason: a swallowed boot error here cost a debugging round once already */
     try{ window.__splashErr = String((e && e.stack) || e); }catch(_){}
     try{ const el=document.getElementById('splash'); el&&el.remove(); }catch(_){}
   }
+}
+/* Plays it regardless, and says plainly why it would not have played on its own - the two
+   guards are silent by nature, and a feature nobody can see is indistinguishable from a broken
+   one until something tells you which it is. */
+function testSplash(){
+  const why = splashSkipReason();
+  const note = document.getElementById('splashWhy');
+  if(note) note.innerHTML = why
+    ? `Playing it anyway. On its own it stays quiet here because ${esc(why)}.`
+    : `This device plays it normally: open the app, or come back to it after ten seconds away.`;
+  showSplash(true);
 }
 let _splashHidAt = 0;
 try{
