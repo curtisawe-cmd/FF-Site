@@ -12050,17 +12050,29 @@ function testSplash(){
     : `This device plays it normally: open the app, or come back to it after ten seconds away.`;
   showSplash(true);
 }
-let _splashHidAt = 0;
+/* ---- knowing the app was away ----
+   The obvious way to do this is to note the time when visibilitychange says hidden, and compare
+   on the way back. It does not work: iOS suspends an installed PWA without reliably firing that
+   event, so the "hidden at" stamp was often never set, the resume check saw 0, and opening the
+   app played nothing - which is exactly the fault that survived three attempts at this.
+   A heartbeat cannot miss it. The timer only ticks while the app is running, so if the app was
+   suspended the stamp simply stops advancing, and the gap on return IS the time away. No event
+   has to fire for that to be true. Every way back in is wired up, because which one iOS uses
+   depends on how the app was left. */
+let _spLastActive = Date.now();
 try{
-  document.addEventListener('visibilitychange', ()=>{
-    if(document.hidden){ _splashHidAt = Date.now(); return; }
-    /* Ten seconds. An installed app RESUMES rather than reloads, so this handler - not the boot
-       path - is what "opening the app" actually hits. Five minutes, then sixty seconds, both
-       meant closing the app and opening it again showed nothing, which reads as broken. Ten is
-       short enough that reopening always plays it and long enough that the screen waking, or a
-       permission sheet closing over the app, does not. Tap-to-skip covers the rest. */
-    if(_splashHidAt && Date.now()-_splashHidAt > 10000) showSplash();
-  });
+  setInterval(()=>{ if(!document.hidden) _spLastActive = Date.now(); }, 1000);
+  const backFromAway = () => {
+    if(document.hidden) return;
+    const away = Date.now() - _spLastActive;
+    _spLastActive = Date.now();
+    /* Ten seconds: reopening the app always plays it, while the screen waking or a permission
+       sheet closing over the app does not. Tap-to-skip covers anything in between. */
+    if(away > 10000) showSplash();
+  };
+  document.addEventListener('visibilitychange', backFromAway);
+  window.addEventListener('pageshow', backFromAway);    /* bfcache restore */
+  window.addEventListener('focus', backFromAway);       /* iOS sometimes only gives us this */
   /* Interruptible: the splash never blocks a tap (pointer-events is off), and a tap also
      fast-forwards it - someone opening the app to do something should not wait on a flourish.
      But NOT for the first 800ms. The tap that opens the app arrives on the page a moment after
