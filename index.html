@@ -7035,8 +7035,23 @@ function renderPool(){
   /* projections load on demand the first time the pool draws without them */
   if(!statsLoaded && !statsLoading)
     loadCareerStats().then(()=>{ try{ if(window.currentView==='draft') renderPool(); }catch(e){} });
-  const avail = availablePlayers().slice(0,150);
-  list.innerHTML = avail.map(p=>{
+  /* Projection order, best first - the list exists to answer who to take next. Memoised per
+     render: the comparator would otherwise re-score 56 rules thousands of times. Players with
+     no projection sink to the bottom in their rank order (stable sort), and before the numbers
+     land the list simply stays in rank order rather than jumping once they arrive mid-look. */
+  const avail = availablePlayers();
+  if(statsLoaded){
+    const pp = new Map(avail.map(x=>[x.id, seasonProjPts(x)]));
+    avail.sort((a,b)=>{
+      const pa=pp.get(a.id), pb=pp.get(b.id);
+      if(pa==null && pb==null) return 0;
+      if(pa==null) return 1;
+      if(pb==null) return -1;
+      return pb-pa;
+    });
+  }
+  const shown = avail.slice(0,150);
+  list.innerHTML = shown.map(p=>{
     /* the name gets its own line so it never truncates; team, bye and the projection share the
        line beneath it, which is also what freed the width the ellipsis was fighting for */
     const proj = seasonProjPts(p);
