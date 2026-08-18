@@ -6869,23 +6869,30 @@ function renderHomeLaunch(){
 function renderHeroCount(){
   const el = document.getElementById('heroCount'); if(!el) return;
   const wk = currentNflWeek();
+  const pad = x => String(x).padStart(2,'0');
+  /* one tile strip, two possible targets: the draft until it has happened, kickoff after */
+  const tiles = (ms, label, sub) => {
+    const d = Math.floor(ms/86400000), h = Math.floor(ms%86400000/3600000),
+          m = Math.floor(ms%3600000/60000), sec = Math.floor(ms%60000/1000);
+    return `<div class="hc"><b>${d}</b><span>days</span></div>
+      <div class="hc"><b>${pad(h)}</b><span>hrs</span></div>
+      <div class="hc"><b>${pad(m)}</b><span>min</span></div>
+      <div class="hc"><b>${pad(sec)}</b><span>sec</span></div>
+      <div class="hc" style="min-width:auto"><b style="font-size:14px;line-height:30px">${label}</b><span>${sub}</span></div>`;
+  };
   let html = '', live = false;
   if(wk >= 1){
     live = true;
     html = `<div class="hc"><b>WK ${wk}</b><span>Season live</span></div>`
          + (weekHasScores(wk) ? `<div class="hc"><b>LIVE</b><span>Scores in</span></div>` : '');
+  } else if(!D.finished){
+    const ms = DRAFT_AT.getTime() - Date.now();
+    if(ms > 0) html = tiles(ms, 'DRAFT DAY', 'Aug 30 · 12 PM');
+    else { live = true;
+      html = `<div class="hc"><b>DRAFT</b><span>${D.started?'Live now':"It's draft day"}</span></div>`; }
   } else {
     const ms = NFL_2026_WEEK1.getTime() - Date.now();
-    if(ms > 0){
-      const d = Math.floor(ms/86400000), h = Math.floor(ms%86400000/3600000),
-            m = Math.floor(ms%3600000/60000), sec = Math.floor(ms%60000/1000);
-      const pad = x => String(x).padStart(2,'0');
-      html = `<div class="hc"><b>${d}</b><span>days</span></div>
-        <div class="hc"><b>${pad(h)}</b><span>hrs</span></div>
-        <div class="hc"><b>${pad(m)}</b><span>min</span></div>
-        <div class="hc"><b>${pad(sec)}</b><span>sec</span></div>
-        <div class="hc" style="min-width:auto"><b style="font-size:14px;line-height:30px">KICKOFF</b><span>Sep 10</span></div>`;
-    }
+    if(ms > 0) html = tiles(ms, 'KICKOFF', 'Sep 10');
   }
   if(el.dataset.last !== html){ el.dataset.last = html; el.innerHTML = html; el.classList.toggle('live', live); }
 }
@@ -6918,7 +6925,8 @@ function renderHomePulse(){
   const days = Math.max(0, Math.ceil(ms/86400000));
   el.innerHTML = `
     <div class="pulse-row"><span class="k">The draft</span>
-      <span class="v">${D.finished?'complete':(D.started? done+' / '+total+' picks':'not started')}</span></div>
+      <span class="v">${D.finished?'complete':(D.started? done+' / '+total+' picks'
+        : 'Aug 30, 12:00 PM · in '+Math.max(0,Math.ceil((DRAFT_AT.getTime()-Date.now())/86400000))+' days')}</span></div>
     <div class="pulse-bar" role="img" aria-label="Draft ${pct}% done"><div class="pulse-fill" style="width:${pct}%"></div></div>
     <div class="pulse-row"><span class="k">Kickoff</span>
       <span class="v">${wk>=1? 'Week '+wk+' underway' : 'Sep 10 · in '+days+' day'+(days===1?'':'s')}</span></div>
@@ -8303,6 +8311,9 @@ function poNewBracket(){
 const REG_WEEKS = 14;
 /* NFL 2026 season: Week 1 kicks off Thu Sep 10, 2026 (Thu after Labor Day). Each week runs Thu–Mon. */
 const NFL_2026_WEEK1 = new Date(2026, 8, 10);
+/* Draft day, straight from the commissioner: August 30, 2026 at noon. Local-time constructor,
+   the same convention as the kickoff date above. */
+const DRAFT_AT = new Date(2026, 7, 30, 12, 0, 0);
 function nflWeekRange(w){
   const start = new Date(NFL_2026_WEEK1); start.setDate(start.getDate() + (w-1)*7);
   const end = new Date(start); end.setDate(end.getDate() + 4);           /* Thu -> Mon */
