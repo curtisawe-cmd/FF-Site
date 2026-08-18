@@ -523,6 +523,12 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow .pname2{display:block;font-weight:600;line-height:1.18;white-space:normal;overflow-wrap:anywhere}
 .prow .pline{display:block;margin-top:2px;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);letter-spacing:.02em}
 .prow .pline b{color:var(--turf-bright);font-weight:600}
+/* draft night happens on phones: the Draft button was 24px tall there, a mouse target in the
+   most thumb-critical tap this app has */
+@media(max-width:640px){
+  .prow{padding:8px 10px}
+  .prow .pick{min-height:42px;padding:8px 16px;font-size:14px}
+}
 /* fixed slot: NE and WAS are different widths, and without it the bye tag beside them stepped
    left and right down the list */
 .prow .pmeta{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);
