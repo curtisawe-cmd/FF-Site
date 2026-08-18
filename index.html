@@ -523,6 +523,39 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow .pname2{display:block;font-weight:600;line-height:1.18;white-space:normal;overflow-wrap:anywhere}
 .prow .pline{display:block;margin-top:2px;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);letter-spacing:.02em}
 .prow .pline b{color:var(--turf-bright);font-weight:600}
+/* the + that stacks a player onto your queue; gold once he is on it */
+.qadd{flex:0 0 auto;width:28px;height:28px;border:1px dashed var(--line-strong);border-radius:8px;
+  background:transparent;color:var(--chalk-dim);display:grid;place-items:center;cursor:pointer;
+  transition:color .12s ease,border-color .12s ease}
+.qadd:hover{color:var(--gold);border-color:var(--gold)}
+.qadd.on{border-style:solid;border-color:var(--gold);color:var(--gold)}
+.qadd svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+/* the queue panel itself */
+.qbox{border:1px solid var(--gold);border-radius:10px;background:var(--panel-2);margin:10px 0;padding:9px 11px}
+.qbox .qhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px}
+.qbox .qhead .eyebrow{margin:0;color:var(--gold)}
+.qbox .qclear{font-size:11px;color:var(--chalk-dim);cursor:pointer}
+.qbox .qclear:hover{color:var(--charge)}
+.qrow{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid var(--line)}
+.qrow:last-child{border-bottom:none}
+.qnum{flex:0 0 auto;min-width:20px;height:20px;border-radius:50%;background:var(--gold);color:#0e1114;
+  font-family:var(--f-mono);font-size:11px;font-weight:700;display:grid;place-items:center}
+.qrow.gone .qnum{background:var(--line-strong);color:var(--chalk-dim)}
+.qname{flex:1;min-width:0;font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.qrow.gone .qname{opacity:.55;text-decoration:line-through}
+.qproj{flex:0 0 auto;font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim)}
+.qmv{display:inline-flex;gap:3px;flex:0 0 auto}
+.qmv button,.qrow .qx{width:26px;height:24px;display:grid;place-items:center;border:1px solid var(--line-strong);
+  border-radius:6px;background:transparent;color:var(--chalk-dim);font-size:11px;cursor:pointer}
+.qmv button:hover,.qrow .qx:hover{color:var(--chalk);border-color:var(--chalk-dim)}
+.qmv button:disabled{opacity:.35;cursor:default}
+.qrow .pick{padding:3px 10px;font-size:12px}
+@media(max-width:640px){
+  .qadd{width:42px;height:42px}
+  .qmv button,.qrow .qx{width:40px;height:38px;font-size:13px}
+  .qrow{gap:6px;padding:5px 0}
+  .qrow .pick{min-height:38px}
+}
 /* draft night happens on phones: the Draft button was 24px tall there, a mouse target in the
    most thumb-critical tap this app has */
 @media(max-width:640px){
@@ -1812,6 +1845,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <div class="posfilters" id="posFilters"></div>
         <div id="poolStatus" style="font-size:12px;color:var(--chalk-dim);margin-top:6px">Loading player pool…</div>
       </div>
+      <!-- the manager's own ordered shortlist. Device-local on purpose: a queue rivals could
+           read from Firebase would be a scouting report on you. -->
+      <div id="queueBox"></div>
       <div class="poollist" id="poolList"></div>
       <div class="roster-mini" id="rosterMini"></div>
     </div>
@@ -7026,6 +7062,63 @@ function renderBoard(){
   try{ syncBoardMax(); }catch(e){}
 }
 
+/* ===================== THE DRAFT QUEUE =====================
+   An ordered shortlist you build before and during the draft, so the clock never catches you
+   scrolling. Device-local by design: it lives in this browser only, because a queue synced
+   through Firebase would be readable by the league - a scouting report on you. Drafting still
+   takes your tap; the queue never picks on its own, and the commissioner's auto-pick cannot see
+   it. Taken players stay visible, struck through, so you can see what the run ahead of you ate. */
+function draftQueue(){
+  try{ const q = JSON.parse(store.get('ffl_queue')||'[]'); return Array.isArray(q)? q.filter(x=>typeof x==='string') : []; }
+  catch(e){ return []; }
+}
+function saveQueue(q){ store.set('ffl_queue', JSON.stringify(q)); renderQueue(); renderPool(); }
+function queueToggle(pid){
+  pid = String(pid);
+  const q = draftQueue(); const i = q.indexOf(pid);
+  if(i>=0){ q.splice(i,1); } else { q.push(pid); }
+  saveQueue(q);
+  const nm = (POOL_MAP.get(pid)||{}).name || 'He';
+  toast(i>=0 ? nm+' pulled off your queue' : nm+' queued at #'+q.length);
+}
+function queueMove(pid, dir){
+  const q = draftQueue(); const i = q.indexOf(String(pid));
+  const j = i + (dir<0?-1:1);
+  if(i<0 || j<0 || j>=q.length) return;
+  q.splice(j,0,q.splice(i,1)[0]);
+  saveQueue(q);
+}
+function queueClearTaken(){ const gone=draftedIds(); saveQueue(draftQueue().filter(id=>!gone.has(id))); }
+function renderQueue(){
+  const el = document.getElementById('queueBox'); if(!el) return;
+  const q = draftQueue();
+  if(!q.length){ el.innerHTML=''; return; }
+  const gone = draftedIds();
+  let n = 0;
+  const anyGone = q.some(id=>gone.has(id));
+  el.innerHTML = `<div class="qbox">
+    <div class="qhead"><span class="eyebrow">My queue</span>
+      ${anyGone?`<span class="qclear" onclick="queueClearTaken()">clear taken</span>`:''}</div>
+    ${q.map((id,i)=>{
+      const p = POOL_MAP.get(id);
+      if(!p) return '';
+      const taken = gone.has(id);
+      if(!taken) n++;
+      const proj = seasonProjPts(p);
+      return `<div class="qrow${taken?' gone':''}">
+        <span class="qnum">${taken?'\u2715':n}</span>
+        <span class="qname" onclick="openPlayer('${id}')">${esc(p.name)}</span>
+        <span class="qproj">${taken?'taken':(proj==null?'':proj+' proj')}</span>
+        ${taken?'':`<span class="qmv">
+          <button ${i===0?'disabled':''} title="Move up" onclick="queueMove('${id}',-1)">\u25B2</button>
+          <button ${i===q.length-1?'disabled':''} title="Move down" onclick="queueMove('${id}',1)">\u25BC</button>
+        </span>`}
+        ${(!taken && canPickNow())?`<button class="pick" onclick="draftTap('${id}')">Draft</button>`:''}
+        <button class="qx" title="Remove from queue" onclick="queueToggle('${id}')">\u2715</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
 /* This season's projection, scored through the league's own rules, as one number for a pool
    row. A season total, not a per-week figure - "what is this pick worth" is a season question. */
 function seasonProjPts(p){
@@ -7057,6 +7150,7 @@ function renderPool(){
     });
   }
   const shown = avail.slice(0,150);
+  const qSet = new Set(draftQueue());
   list.innerHTML = shown.map(p=>{
     /* the name gets its own line so it never truncates; team, bye and the projection share the
        line beneath it, which is also what freed the width the ellipsis was fighting for */
@@ -7070,9 +7164,13 @@ function renderPool(){
         <span class="pname2">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
         <span class="pline">${p.team||'FA'}${bye?` · BYE ${bye}`:''} · <b>${projTxt}</b></span>
       </span>
+      <button class="qadd${qSet.has(p.id)?' on':''}" aria-label="${qSet.has(p.id)?'Remove from queue':'Add to queue'}"
+        title="${qSet.has(p.id)?'On your queue - tap to remove':'Queue him for later'}"
+        onclick="event.stopPropagation();queueToggle('${p.id}')"><svg viewBox="0 0 24 24" aria-hidden="true">${qSet.has(p.id)?'<path d="M5 12.5l4.5 4.5L19 7.5"/>':'<path d="M12 5v14M5 12h14"/>'}</svg></button>
       ${canPickNow()?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
     </div>`;
   }).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
+  try{ renderQueue(); }catch(e){}
 }
 
 function renderPosFilters(){
