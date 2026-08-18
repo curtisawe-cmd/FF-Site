@@ -11990,8 +11990,9 @@ function applyTeamWatermark(code){
    the same rule the intro sound lives by - installed apps resume, they do not reload. */
 function showSplash(){
   try{
-    if(innerWidth > 720) return;
-    if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    (window.__spTrace=window.__spTrace||[]).push('called w='+innerWidth);
+    if(innerWidth > 720){ window.__spTrace.push('skip: wide'); return; }
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches){ window.__spTrace.push('skip: reduced-motion'); return; }
     let el = document.getElementById('splash');
     if(!el){ el = document.createElement('div'); el.id='splash'; el.setAttribute('aria-hidden','true');
              document.body.appendChild(el); }
@@ -12003,15 +12004,24 @@ function showSplash(){
       <div class="sp-name">${esc(S.leagueName||'')}</div>
       ${yr?`<div class="sp-year">${yr} SEASON</div>`:''}`;
     el.classList.remove('bye'); el.classList.add('on');
-    setTimeout(()=>{ try{ el.classList.add('bye'); }catch(e){} }, 5300);
-    setTimeout(()=>{ try{ el.remove(); }catch(e){} }, 6100);
-  }catch(e){ try{ const el=document.getElementById('splash'); el&&el.remove(); }catch(_){} }
+    window.__spTrace.push('shown');
+    setTimeout(()=>{ try{ el.classList.add('bye'); window.__spTrace.push('bye@'+Date.now()); }catch(e){} }, 5300);
+    setTimeout(()=>{ try{ el.remove(); window.__spTrace.push('removed@'+Date.now()); }catch(e){} }, 6100);
+  }catch(e){
+    /* keep the reason: a swallowed boot error here cost a debugging round once already */
+    try{ window.__splashErr = String((e && e.stack) || e); }catch(_){}
+    try{ const el=document.getElementById('splash'); el&&el.remove(); }catch(_){}
+  }
 }
 let _splashHidAt = 0;
 try{
   document.addEventListener('visibilitychange', ()=>{
     if(document.hidden){ _splashHidAt = Date.now(); return; }
-    if(_splashHidAt && Date.now()-_splashHidAt > 5*60000) showSplash();
+    /* Sixty seconds, not the intro sound's five minutes. An installed app RESUMES rather than
+       reloads, so this handler - not the boot path - is what "opening the app" actually hits,
+       and five minutes made the splash look broken: close it, reopen it, nothing. A flick to
+       another app and straight back still stays quiet. */
+    if(_splashHidAt && Date.now()-_splashHidAt > 60000) showSplash();
   });
   /* interruptible: the splash never blocks a tap (pointer-events is off), and a tap also
      fast-forwards it - someone opening the app to do something should not wait on a flourish */
