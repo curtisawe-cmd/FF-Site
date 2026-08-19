@@ -535,6 +535,9 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow .pname2{display:block;font-weight:600;line-height:1.18;white-space:normal;overflow-wrap:anywhere}
 .prow .pline{display:block;margin-top:2px;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);letter-spacing:.02em}
 .prow .pline b{color:var(--turf-bright);font-weight:600}
+/* the chip carries the best-available rank at that position (RB1, WR12), which is what makes
+   a value-ordered board legible. Wide enough for two digits so it never resizes mid-draft. */
+.prow .postag{min-width:44px}
 /* the + that stacks a player onto your queue; gold once he is on it */
 .qadd{flex:0 0 auto;width:28px;height:28px;border:1px dashed var(--line-strong);border-radius:8px;
   background:transparent;color:var(--chalk-dim);display:grid;place-items:center;cursor:pointer;
@@ -7522,25 +7525,74 @@ function seasonProjPts(p){
   const v = scoreSeasonStats(raw, p.pos);
   return v==null ? null : Math.round(v);
 }
+/* ===================== THE DRAFT BOARD'S VALUE ORDER =====================
+   Sorting the pool by raw projection turns the ALL tab into a list of quarterbacks. That is not
+   a bug in the numbers - a QB1 really does outscore an RB1 by two hundred points, every year -
+   it is that the number answers the wrong question. You are not choosing between a quarterback
+   and a running back in the abstract; you are choosing between the best quarterback left and
+   the best running back left, knowing you will come back for the other one in two rounds. What
+   matters is how far a player sits above what his own position will still offer you later.
+
+   So each position gets a replacement line: the best player you could expect to be holding if
+   you simply waited, which is the last one who would be starting somewhere in a league this
+   size. Twelve teams starting one quarterback puts that line at QB13; twelve teams starting two
+   running backs and sharing a flex puts it near RB29. A player is worth what he scores above
+   his own line, and ranking on that mixes the board the way a real draft does.
+
+   The lines are drawn against players still ON the board, not the preseason pool, so the order
+   answers to the draft as it happens: pick the quarterbacks clean and the ones left gain value,
+   exactly as they should. */
+function poolValueMap(){
+  const teams = Math.max(1, (S.teams||[]).length);
+  const R = S.roster || {};
+  const need = {QB:+R.QB||0, RB:+R.RB||0, WR:+R.WR||0, TE:+R.TE||0, K:+R.K||0, DEF:+R.DEF||0};
+  /* the flex is real starting demand too - split it across the positions that can fill it, in
+     proportion to how much of the lineup each already holds */
+  const flex = +R.FLEX||0;
+  const elig = ['RB','WR','TE'].filter(x=>need[x]>0);
+  const tot = elig.reduce((n,x)=>n+need[x],0);
+  if(flex>0 && tot>0){
+    const share = {}; elig.forEach(x=>{ share[x] = flex*need[x]/tot; });
+    elig.forEach(x=>{ need[x] += share[x]; });
+  }
+  const taken = draftedIds();
+  const byPos = {};
+  POOL.forEach(pl=>{
+    if(taken.has(pl.id)) return;
+    const v = seasonProjPts(pl);
+    if(v==null) return;
+    (byPos[pl.pos] = byPos[pl.pos] || []).push([pl.id, v]);
+  });
+  const val = new Map(), rank = new Map();
+  Object.keys(byPos).forEach(pos=>{
+    const arr = byPos[pos].sort((a,b)=>b[1]-a[1]);
+    /* zero-indexed, so teams*starters lands on the first man PAST the last starter */
+    const at = Math.min(arr.length-1, Math.max(0, Math.round(teams*(need[pos]||0))));
+    const line = arr[at][1];
+    arr.forEach(([id,v],i)=>{ val.set(id, v-line); rank.set(id, i+1); });
+  });
+  return {val, rank};
+}
 function renderPool(){
   const list = document.getElementById('poolList');
   if(!poolReady){ list.innerHTML=''; return; }
   /* projections load on demand the first time the pool draws without them */
   if(!statsLoaded && !statsLoading)
     loadCareerStats().then(()=>{ try{ if(window.currentView==='draft') renderPool(); }catch(e){} });
-  /* Projection order, best first - the list exists to answer who to take next. Memoised per
-     render: the comparator would otherwise re-score 56 rules thousands of times. Players with
-     no projection sink to the bottom in their rank order (stable sort), and before the numbers
-     land the list simply stays in rank order rather than jumping once they arrive mid-look. */
+  /* Value order, best first - the list exists to answer who to take next, and above his own
+     position's replacement line is what that question actually means. Computed once per render
+     over the whole board: the comparator would otherwise re-score 56 rules thousands of times.
+     Players with no projection sink to the bottom in their rank order (stable sort), and before
+     the numbers land the list simply stays in rank order rather than jumping mid-look. */
   const avail = availablePlayers();
-  if(statsLoaded){
-    const pp = new Map(avail.map(x=>[x.id, seasonProjPts(x)]));
+  const PV = statsLoaded ? poolValueMap() : null;
+  if(PV){
     avail.sort((a,b)=>{
-      const pa=pp.get(a.id), pb=pp.get(b.id);
-      if(pa==null && pb==null) return 0;
-      if(pa==null) return 1;
-      if(pb==null) return -1;
-      return pb-pa;
+      const va=PV.val.get(a.id), vb=PV.val.get(b.id);
+      if(va==null && vb==null) return 0;
+      if(va==null) return 1;
+      if(vb==null) return -1;
+      return vb-va;
     });
   }
   const shown = avail.slice(0,150);
@@ -7551,9 +7603,12 @@ function renderPool(){
     const proj = seasonProjPts(p);
     const projTxt = statsLoaded ? (proj==null?'—':proj+' proj') : '… proj';
     const bye = byeWeekOfTeam(p.team);
+    /* best-available rank at his own position: the reason a 310 sits above a 630 */
+    const rk = PV && PV.rank.get(p.id);
+    const posRk = rk ? p.pos+rk : '';
     return `
     <div class="prow pos-${p.pos}">
-      <span class="postag">${p.pos}</span>${playerFace(p,30)}
+      <span class="postag">${posRk||p.pos}</span>${playerFace(p,30)}
       <span class="pcol" onclick="openPlayer('${p.id}')" title="View career points">
         <span class="pname2">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
         <span class="pline">${p.team||'FA'}${bye?` · BYE ${bye}`:''} · <b>${projTxt}</b></span>
