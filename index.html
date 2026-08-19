@@ -886,6 +886,24 @@ nav.tabs button{position:relative}
 .pmodal-x:hover{color:var(--chalk);border-color:var(--chalk-dim)}
 .pmodal-head{display:flex;align-items:center;gap:14px}
 .pmodal-name{font-family:var(--f-display);font-size:clamp(24px,4.5vw,36px);line-height:.95;text-transform:uppercase;padding-right:34px}
+/* Draft straight from the header, where you are already looking when you decide. The right
+   padding clears the floated close button the same way the name above it does. */
+.pm-act{margin-left:auto;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;
+  gap:5px;padding-right:42px;text-align:right;max-width:172px}
+.pm-act .btn{padding:9px 26px;font-size:15px;white-space:nowrap}
+.pm-hint{font-size:10.5px;font-family:var(--f-mono);color:var(--chalk-dim);letter-spacing:.02em;
+  line-height:1.3;overflow-wrap:anywhere}
+/* the block already sits clear of the close button, so the name stops reserving room for it */
+.pmodal-head.has-act .pmodal-name{padding-right:0}
+.pm-taken{display:inline-block;padding:6px 14px;border:1px solid var(--line-strong);border-radius:var(--r-ctrl);
+  font-family:var(--f-ui);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
+@media(max-width:640px){
+  /* the header stacks rather than squeezing a 66px face, a big name and a button onto one line */
+  .pmodal-head{flex-wrap:wrap}
+  .pm-act{width:100%;max-width:none;margin-left:0;padding-right:0;align-items:stretch;text-align:center;margin-top:4px}
+  .pm-act .btn{width:100%;min-height:46px}
+  .pm-taken{text-align:center}
+}
 /* player headshot chip (photo over a monogram fallback) */
 .pface{position:relative;display:inline-flex;flex:none;align-items:center;justify-content:center;border-radius:50%;overflow:hidden;color:#fff;font-family:var(--f-ui);font-weight:700;line-height:1;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18),0 2px 6px rgba(10,27,61,.28)}
 .pface-i{position:relative}
@@ -4949,13 +4967,39 @@ function posRankOf(id, pos, yr){
   const i=RANK_CACHE[key].findIndex(x=>x.pid===id);
   return i<0 ? null : i+1;
 }
+/* The header action for a player card opened in the draft room. It always says something:
+   a live Draft button when the pick is yours to make, the same button disabled with the
+   reason when it is not, and a plain DRAFTED chip once he is gone. Silence would read as
+   a broken button, and the reason is the useful half anyway. */
+function pmDraftActionHTML(id, m){
+  try{
+    if(window.currentView!=='draft') return '';
+    const own = (D.picks||[]).find(x=>x.playerId===id && !x.cut);
+    if(own) return `<div class="pm-act"><span class="pm-taken">Drafted</span>
+      <span class="pm-hint">${esc(teamName(own.teamIndex))}</span></div>`;
+    if(D.finished) return '';
+    const onClock = (S.teams||[])[ownerForPick(currentPickIndex())] || {};
+    const clockTxt = myTurnNow() ? 'You are on the clock'
+                   : (onClock.name ? esc(onClock.name)+' is on the clock' : 'Waiting on the clock');
+    let why = '';
+    if(!D.started) why = draftMode==='mock' ? 'Start the mock draft first' : "Draft hasn't started";
+    else if(D.paused) why = 'Draft is paused';
+    else if(!canPickNow()) why = clockTxt;
+    const live = !why;
+    return `<div class="pm-act">
+      <button class="btn" ${live?'':'disabled'} ${live?`onclick="closePlayer();draftTap('${id}')"`:''}
+        title="${live?'Draft '+esc(m.name||'him'):esc(why)}">Draft</button>
+      <span class="pm-hint">${live?clockTxt:esc(why)}</span></div>`;
+  }catch(e){ return ''; }
+}
 function renderPlayerModal(id){
   const ov=document.getElementById('playerModal'); if(!ov) return;
   const m=findPlayerMeta(id)||{name:'Player',pos:'',team:''}; const pos=m.pos||'';
-  const head=`<div class="pmodal-head">${playerFace(m,66)}<div style="min-width:0">
+  const act=pmDraftActionHTML(id, m);
+  const head=`<div class="pmodal-head${act?' has-act':''}">${playerFace(m,66)}<div style="min-width:0">
     <div class="pmodal-name">${esc(m.name)}</div>
     <div class="pmodal-meta"><span class="postag pos-${pos}" style="--pc:var(--${pos.toLowerCase()||'wr'})">${pos||'?'}</span> ${esc(m.team||'FA')}${m.num!=null?` · #${m.num}`:''}${m.age?` · ${m.age} yo`:''}${m.exp!=null?` · ${m.exp===0?'Rookie':m.exp+' yr'+(m.exp>1?'s':'')}`:''}${m.inj?injBadge(m.inj,m.injBody):''}${byeTagHTML(id, m.team)}</div>
-  </div></div>`;
+  </div>${act}</div>`;
   let body;
   if(!statsLoaded){
     body=`<div class="pcareer-loading">Loading career stats…</div>`;
@@ -5001,17 +5045,8 @@ function renderPlayerModal(id){
   /* Mid-draft, this popup is where a phone naturally lands - tapping a player in the pool
      opens it. Without a draft button here it was a dead end: read the stats, close, hunt for
      the little pick button in the list. Draft him from right here instead. */
-  let draftRow='';
-  try{
-    if(window.currentView==='draft' && D.started && !D.paused && !D.finished
-       && !draftedIds().has(id) && canPickNow()){
-      const onClock=(S.teams||[])[ownerForPick(currentPickIndex())]||{};
-      draftRow=`<div class="row" style="gap:10px;align-items:center;margin-top:12px">
-        <button class="btn" style="padding:8px 22px;font-size:15px" onclick="closePlayer();draftTap('${id}')">Draft ${esc(m.name)}</button>
-        <span class="sub" style="margin:0">${myTurnNow()?'You are on the clock':esc(onClock.name||'')+' is on the clock'}</span>
-      </div>`;
-    }
-  }catch(e){}
+  /* the draft button used to live down here; it is in the header now, where the eye already is */
+  const draftRow='';
   /* rostered on another team → offer a one-tap route into the Trade Center for this player */
   const own=(realDraft().picks||[]).find(x=>x.playerId===id && !x.cut);
   const tradeRow=(own && own.teamIndex!==myTeamIdx())
