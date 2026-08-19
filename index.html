@@ -509,11 +509,23 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 }
 .pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
 .posfilters{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
+/* The free-agent list is its own 360px scroll box, and the position chips render inside it,
+   so they used to scroll away with the players. Pinned to the top of that box they stay put
+   while you scroll, which is the whole point of a filter. Opaque panel background and a soft
+   underline so the rows read as passing beneath them rather than through them. */
+#faList .posfilters{position:sticky;top:0;z-index:2;margin:0 0 6px;padding:2px 0 7px;
+  background:var(--panel);box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
 .posfilters button{
   font-family:var(--f-ui);font-weight:600;font-size:13px;letter-spacing:.04em;
   padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--chalk-dim);
 }
 .posfilters button.on{background:var(--panel-2);color:var(--chalk);border-color:var(--chalk-dim)}
+/* Pinned chips are only useful if a thumb can hit them. At 24px these were the smallest
+   control on the page, and they are now the one you tap most while scrolling the list. */
+@media(max-width:640px){
+  #faList .posfilters{gap:6px;padding:3px 0 8px}
+  #faList .posfilters button{min-height:34px;padding:6px 14px;display:inline-flex;align-items:center}
+}
 .poollist{overflow-y:auto;flex:1}
 .prow{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line)}
 .prow:hover{background:var(--turf-wash)}
@@ -11605,13 +11617,23 @@ function freeAgents(q){
     .filter(p=>posMatches(p.pos, window.faPos||'ALL'))
     .filter(p=>!q || p.name.toLowerCase().includes(q) || String(p.team||'').toLowerCase().includes(q) || p.pos.toLowerCase()===q);
 }
+function faSetPos(pos, ti){
+  window.faPos = pos;
+  const el = document.getElementById('faList'); if(el) el.scrollTop = 0;
+  renderFreeAgents(ti);
+}
+function faSetQuery(q, ti){
+  window.faQuery = q;
+  const el = document.getElementById('faList'); if(el) el.scrollTop = 0;
+  renderFreeAgents(ti);
+}
 function renderFreeAgents(ti){
   const el = document.getElementById('faList'); if(!el) return;
   if(!poolReady){ el.innerHTML = `<p class="sub" style="margin:8px 0 0">Loading player pool…</p>`; return; }
   const full = rosterCount(ti) >= rosterLimit();
   const fa = freeAgents(window.faQuery), shown = fa.slice(0,40);
   const note = full ? `<div class="notice" style="margin:0 0 8px">Roster is full (${rosterLimit()}). Adding a player will make you drop one.</div>` : '';
-  const filters = `<div class="posfilters" style="margin:0 0 8px">${['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(p=>`<button class="${(window.faPos||'ALL')===p?'on':''}" onclick="window.faPos='${p}';renderFreeAgents(${ti})">${p}</button>`).join('')}</div>`;
+  const filters = `<div class="posfilters">${['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(p=>`<button class="${(window.faPos||'ALL')===p?'on':''}" onclick="faSetPos('${p}',${ti})">${p}</button>`).join('')}</div>`;
   el.innerHTML = filters + note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
@@ -11731,7 +11753,7 @@ function renderMyTeam(){
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
       ${canEditTeam(mi)?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
       <p class="sub" style="margin:2px 0 8px">Every available player. Roster caps at ${rosterLimit()} (${rosterLimit()-(+S.roster.BN||0)} starters + ${+S.roster.BN||0} bench); IR is separate. Drop someone to make room.</p>
-      <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="window.faQuery=this.value;renderFreeAgents(${mi})" style="width:100%;max-width:340px">
+      <input type="text" id="faSearch" placeholder="Search available players\u2026" value="${esc(window.faQuery||'')}" oninput="faSetQuery(this.value,${mi})" style="width:100%;max-width:340px">
       <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>`:''}
     </div>`;
   if(canEditTeam(mi)) renderFreeAgents(mi);
