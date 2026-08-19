@@ -4213,7 +4213,6 @@ function startLeagueSync(){
     try{ const now=(D.picks||[]).filter(p=>+p.pickIndex>=0).length;
       if(window._draftSynced && now>picksBefore && D.started && !D.finished) playSound('pick');
       window._draftSynced = true;
-      checkPickRoasts();
     }catch(e){}
     /* the turn just advanced - the next manager's queued request may be ready to apply */
     try{ maybeApplyPickRequests(); }catch(e){}
@@ -5618,8 +5617,9 @@ function keeperAlarm(playerName, year, keptBy, teamName){
   bigAlarm(pool, built, '🚫',
     `${playerName} was kept by ${keptBy} in ${year} — keepers are one year only.`);
 }
-/* Round-9-or-earlier kicker: a legal pick that deserves its own siren. Distinct pool from the
-   illegal-pick insults - this is mockery, not correction. */
+/* Round-9-or-earlier kicker: a legal pick that deserves noticing, but not a full-screen alarm.
+   It used to take over every device in the league; a draft has enough interruptions without a
+   siren for a pick that stands anyway, so the joke lands as a toast now and the draft rolls on. */
 const KICKER_LINES=[
   "A KICKER?! IT'S ROUND {r}!","SOMEBODY STOP {mgr}","LEG SO GOOD YOU REACHED {n} ROUNDS EARLY?",
   "THE BOLDEST PICK EVER MADE","SCOUTS HATE THIS ONE TRICK","{mgr} HAS SEEN ENOUGH FOOTBALL",
@@ -5630,7 +5630,7 @@ function kickerAlarm(teamIdx, rd){
   const fill=s=>String(s).split('{mgr}').join(t.manager||t.name||'this maniac')
     .split('{r}').join(rd===0?'THE KEEPER ROUND':String(rd)).split('{n}').join(String(Math.max(1,10-rd)));
   const built=KICKER_LINES.map(fill);
-  bigAlarm(built, built, '🦵', `${t.name||'Somebody'} drafted a kicker in ${rd===0?'the keeper round':'round '+rd}. The pick stands. So does the shame.`);
+  toast('🦵 '+built[Math.floor(Math.random()*built.length)]);
 }
 function makePick(playerId){
   if(!requireDraftControl()) return;
@@ -5727,7 +5727,6 @@ function afterPick(){
     toast("That's a wrap — draft complete! 🏈");
   } else { armClock(); }
   playSound('pick');           /* local pick; remote devices sound it from the draft feed */
-  try{ checkPickRoasts(); }catch(e){}
   saveDraft();
   refreshDraftUI();
 }
@@ -7003,56 +7002,6 @@ function rivalryBannerHTML(ai, bi){
   if(g>=4 && Math.abs(pct-0.5)<=0.125)
     return `<div class="gc-rival even">Dead even rivalry: ${line(rec)} all time. Somebody flinch.</div>`;
   return '';
-}
-
-/* ---- the draft-day roast ----
-   Fires on every device from the same delta that sounds the pick, with the same first-sync
-   baseline, so loading a board mid-draft never replays twenty roasts. */
-let _projRank = null;
-function projRankOf(pid){
-  if(!statsLoaded) return null;
-  if(!_projRank){
-    _projRank = new Map();
-    POOL.map(x=>({id:String(x.id), v:seasonProjPts(x)})).filter(x=>x.v!=null)
-      .sort((a,b)=>b.v-a.v).forEach((x,i)=>_projRank.set(x.id, i+1));
-  }
-  return _projRank.get(String(pid)) || null;
-}
-const REACH_SPOTS = 25;   /* how far past his projection a pick has to be before the room hears about it */
-function roastPick(p){
-  try{
-    const total = totalPicks();
-    const done = (D.picks||[]).filter(x=>+x.pickIndex>=0).length;
-    if(+p.pickIndex === total-1 && done >= total){
-      trashTalk(['MR. IRRELEVANT', (p.name||'The last pick')+' — picked dead last, remembered forever']);
-      return;
-    }
-    if(p.pos==='K' || p.pos==='DEF') return;      /* the early-kicker alarm already has that beat */
-    const rank = projRankOf(p.playerId);
-    if(rank==null) return;
-    const pickNo = (+p.pickIndex)+1;
-    const spots = rank - pickNo;
-    if(spots < REACH_SPOTS) return;
-    const who = teamName(p.teamIndex);
-    const lines = [
-      ['THE REACH', who+' took '+p.name+' '+spots+' spots early'],
-      ['SCOUT OF THE YEAR', p.name+'? At pick '+pickNo+'? Sure, '+who+'.'],
-      ['PANIC PICK', who+' smashed the button on '+p.name]
-    ];
-    trashTalk(lines[Math.floor(Math.random()*lines.length)]);
-  }catch(e){}
-}
-let _roastSeen = null, _roastBoard = '';
-function checkPickRoasts(){
-  try{
-    const board = draftKey();
-    const picks = (D.picks||[]).filter(x=>+x.pickIndex>=0);
-    const keys = new Set(picks.map(x=>+x.pickIndex));
-    if(_roastSeen===null || board!==_roastBoard){ _roastSeen=keys; _roastBoard=board; return; }
-    const fresh = picks.filter(x=>!_roastSeen.has(+x.pickIndex));
-    _roastSeen = keys;
-    fresh.sort((a,b)=>+a.pickIndex-+b.pickIndex).slice(-2).forEach(roastPick);
-  }catch(e){}
 }
 
 /* ===================== THE RECORD BOOK =====================
