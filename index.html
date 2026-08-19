@@ -367,7 +367,11 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 }
 
 /* ---------- draft room ---------- */
-.draftwrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:12px}
+/* The rail was a flat 280px, which is where the squeeze actually came from: chip, two
+   buttons and the row padding take 155 of it, leaving 88 for a line of numbers that wants 143.
+   No arrangement of those parts fits in 280, so the rail gets the width instead - the board
+   beside it scrolls horizontally already and never needed to be the wider half. */
+.draftwrap{display:grid;grid-template-columns:minmax(0,1fr) clamp(350px,26vw,400px);gap:12px}
 @media(max-width:1020px){.draftwrap{grid-template-columns:minmax(0,1fr)}}   /* plain 1fr = min-width:auto, and the 736px board would blow the page out instead of scrolling */
 .clockbar{
   display:flex;align-items:center;gap:16px;flex-wrap:wrap;
@@ -532,12 +536,23 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .prow .pname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 /* the two-line pool row: whole name on top, the numbers underneath */
 .prow .pcol{flex:1;min-width:0;cursor:pointer}
-.prow .pname2{display:block;font-weight:600;line-height:1.18;white-space:normal;overflow-wrap:anywhere}
+/* break BETWEEN words, not through them. "anywhere" also told the flex layout this column
+   could shrink to a single character, which is how it ended up the only thing giving way. */
+.prow .pname2{display:block;font-weight:600;line-height:1.18;white-space:normal;overflow-wrap:break-word}
 .prow .pline{display:block;margin-top:2px;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);letter-spacing:.02em}
 .prow .pline b{color:var(--turf-bright);font-weight:600}
 /* the chip carries the best-available rank at that position (RB1, WR12), which is what makes
    a value-ordered board legible. Wide enough for two digits so it never resizes mid-draft. */
 .prow .postag{min-width:44px}
+/* The Draft button only exists for whoever is on the clock, and on a rail this narrow it costs
+   more width than there is: chip, headshot, queue button and Draft together left the name about
+   a hundred pixels, so it broke down the middle (Christi / an / McCaff / rey) and the line of
+   numbers underneath wrapped as well. When the button is there the row buys the space back -
+   the headshot is decoration and the position chip already says who this is, and the two
+   buttons run compact. Nothing changes for anyone who is not on the clock. */
+.prow.has-draft .pface{display:none}
+.prow.has-draft .qadd{width:34px;height:34px}
+.prow.has-draft .pick{padding:4px 10px}
 /* the + that stacks a player onto your queue; gold once he is on it */
 .qadd{flex:0 0 auto;width:28px;height:28px;border:1px dashed var(--line-strong);border-radius:8px;
   background:transparent;color:var(--chalk-dim);display:grid;place-items:center;cursor:pointer;
@@ -576,6 +591,12 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 @media(max-width:640px){
   .prow{padding:8px 10px}
   .prow .pick{min-height:42px;padding:8px 16px;font-size:14px}
+  /* On a phone the rail is the whole screen and still 12px short of fitting the numbers on
+     one line, so the width comes out of the queue button and the padding - never the Draft
+     button, which stays 42px tall because it is the tap this whole night runs on. */
+  .prow.has-draft{padding-left:8px;padding-right:8px}
+  .prow.has-draft .qadd{width:36px;height:36px}
+  .prow.has-draft .pick{padding:8px 11px}
 }
 /* fixed slot: NE and WAS are different widths, and without it the bye tag beside them stepped
    left and right down the list */
@@ -7546,6 +7567,7 @@ function renderPool(){
   }
   const shown = avail.slice(0,150);
   const qSet = new Set(draftQueue());
+  const canPick = canPickNow();
   list.innerHTML = shown.map(p=>{
     /* the name gets its own line so it never truncates; team, bye and the projection share the
        line beneath it, which is also what freed the width the ellipsis was fighting for */
@@ -7556,7 +7578,7 @@ function renderPool(){
     const rk = PV && PV.rank.get(p.id);
     const posRk = rk ? p.pos+rk : '';
     return `
-    <div class="prow pos-${p.pos}">
+    <div class="prow pos-${p.pos}${canPick?' has-draft':''}">
       <span class="postag">${posRk||p.pos}</span>${playerFace(p,30)}
       <span class="pcol" onclick="openPlayer('${p.id}')" title="View career points">
         <span class="pname2">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
@@ -7565,7 +7587,7 @@ function renderPool(){
       <button class="qadd${qSet.has(p.id)?' on':''}" aria-label="${qSet.has(p.id)?'Remove from queue':'Add to queue'}"
         title="${qSet.has(p.id)?'On your queue - tap to remove':'Queue him for later'}"
         onclick="event.stopPropagation();queueToggle('${p.id}')"><svg viewBox="0 0 24 24" aria-hidden="true">${qSet.has(p.id)?'<path d="M5 12.5l4.5 4.5L19 7.5"/>':'<path d="M12 5v14M5 12h14"/>'}</svg></button>
-      ${canPickNow()?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
+      ${canPick?`<button class="pick" onclick="draftTap('${p.id}')">Draft</button>`:''}
     </div>`;
   }).join('') || `<div style="padding:14px;color:var(--chalk-dim)">No players match.</div>`;
   try{ renderQueue(); }catch(e){}
