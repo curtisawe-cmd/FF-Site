@@ -718,6 +718,14 @@ nav.tabs button{position:relative}
   border-top:1px solid var(--line);color:var(--chalk-dim)}
 .gc-rival.owns{color:var(--charge);border-left:3px solid var(--charge)}
 .gc-rival.even{color:var(--gold);border-left:3px solid var(--gold)}
+/* the record book: On This Week rows, and the title pennants on a team card */
+.otd-row{padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--chalk-dim)}
+.otd-row:last-child{border-bottom:none}
+.otd-row b{color:var(--chalk)}
+.banner-row{display:flex;gap:6px;margin:10px 0 2px;flex-wrap:wrap}
+.pennant{display:inline-block;padding:4px 9px 12px;background:linear-gradient(180deg,var(--gold),#8a6d1f);
+  color:#14161a;font-family:var(--f-mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),50% 100%,0 calc(100% - 8px))}
 .hero::after{content:'';position:absolute;top:0;bottom:0;right:0;width:12px;background:var(--charge)}
 .hero .big{font-family:var(--f-display);font-weight:400;font-size:clamp(38px,7vw,80px);line-height:.9;letter-spacing:.005em;text-transform:uppercase;text-wrap:balance}
 .phase{display:flex;gap:12px;align-items:baseline;padding:10px 0;border-bottom:1px dashed var(--line)}
@@ -1797,6 +1805,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 
   <!-- the week's disgraces, written by the data itself. Hidden until a week has scores. -->
   <div class="card" id="homeShame" style="display:none;margin-bottom:18px"></div>
+
+  <!-- what happened this same week in seasons past. The archive remembers. -->
+  <div class="card" id="homeThisWeek" style="display:none;margin-bottom:18px"></div>
 
   <div class="grid2">
     <div class="card">
@@ -4186,6 +4197,7 @@ function startLeagueSync(){
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/liveScores`, (m)=>{
     liveScoresMap = m||{};
+    try{ checkRecordAlerts(); }catch(e){}    /* fresh totals, checked against fourteen seasons */
     try{ renderTicker(); renderHome();
       if(window.currentView==='matchups'){ renderMatchups(); if(window.muTab==='gc') renderGameCenter(); }
     }catch(e){}
@@ -4381,6 +4393,7 @@ setInterval(()=>{
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
   if(typeof maybeExpirePolls==='function') maybeExpirePolls();     /* stamps closed once a poll timer runs out */
+  try{ checkRecordAlerts(); }catch(e){}                             /* the record watch rides the same pulse */
   if(typeof updatePollBadge==='function') updatePollBadge();       /* expiry can clear it with no vote cast */
   if(window.currentView==='polls') renderPolls();                  /* poll countdowns tick */
   if(window.currentView==='trades') renderOffers();
@@ -6871,6 +6884,8 @@ function renderHome(){
     </table>`;
   try{ renderHeroBits(); renderHomeLaunch(); renderHomePulse(); }catch(e){}
   try{ renderHomeShame(); }catch(e){}
+  try{ renderHomeThisWeek(); }catch(e){}
+  try{ checkRecordAlerts(); }catch(e){}     /* score entry repaints home, so records get seen fast */
 }
 
 /* ===================== THE FUN =====================
@@ -6922,8 +6937,8 @@ async function renderHomeShame(){
 
 /* ---- the rivalry line ---- */
 function rivalryBannerHTML(ai, bi){
-  const mA = String((S.teams[ai]||{}).manager||'').trim();
-  const mB = String((S.teams[bi]||{}).manager||'').trim();
+  const mA = liveMgrOf(ai);
+  const mB = liveMgrOf(bi);
   if(!mA || !mB || mA===mB) return '';
   const rec = (h2hAll()[mA]||{})[mB];
   if(!rec || !rec.games) return `<div class="gc-rival">First meeting ever. No excuses yet.</div>`;
@@ -6988,6 +7003,204 @@ function checkPickRoasts(){
     _roastSeen = keys;
     fresh.sort((a,b)=>+a.pickIndex-+b.pickIndex).slice(-2).forEach(roastPick);
   }catch(e){}
+}
+
+/* ===================== THE RECORD BOOK =====================
+   Fourteen seasons of scores watching the live ones. Three pieces: record alerts (the slam
+   fires league-wide when a live total passes an all-time or franchise mark, because every
+   device computes the same condition from the same synced scores - no new writes anywhere),
+   the On This Week card (the archive retelling this same week from seasons past), and title
+   pennants on the team cards in All Teams, tied to the MANAGER through the year-by-year
+   manager map so a team rename never launders history. */
+
+/* The live season's manager for a team: the team's own field when the commissioner has set
+   it, else the newest archive year that maps this exact team name. Nine of twelve names carry
+   over year to year, so history usually knows who is behind the wheel before settings do -
+   and the explicit field takes over the moment it is filled in. */
+function liveMgrOf(tOrIdx){
+  const t = (typeof tOrIdx==='object' && tOrIdx) ? tOrIdx : ((S.teams||[])[tOrIdx] || {});
+  const own = String(t.manager||'').trim();
+  if(own) return own;
+  const nm = String(t.name||'').trim(); if(!nm) return '';
+  const M = (S.history && S.history.managers) || {};
+  for(const y of Object.keys(M).sort((a,b)=>+b-+a)){ if(M[y] && M[y][nm]) return M[y][nm]; }
+  return '';
+}
+
+/* NOT +v: the archive is sparse, and +null would count a game nobody played as a 0.0 week. */
+function recNum(v){ return (v===null||v===undefined||v==='') ? null : (Number.isFinite(+v)?+v:null); }
+
+/* a week is in the books only when every game in it has an official score */
+function recWeekDone(w){
+  const games = (S.season && S.season.schedule && S.season.schedule[w]) || [];
+  return games.length>0 && games.every((g,m)=>officialScore(w,m));
+}
+
+let _recBounds = null, _recBoundsKey = '';
+function leagueRecordBounds(){
+  const cw = currentNflWeek();
+  let doneCt = 0;
+  try{ for(let w=1; w<=REG_WEEKS; w++){ if(w!==cw && recWeekDone(w)) doneCt++; } }catch(e){}
+  const key = curDraftYear()+'_'+cw+'_'+doneCt;
+  if(_recBounds!==null && _recBoundsKey===key) return _recBounds;
+  const hi = {pts:-1, team:'', year:0}, lo = {pts:Infinity, team:'', year:0};
+  const take = (pts, team, year)=>{ const v = recNum(pts); if(v==null || v<=0) return;
+    if(v>hi.pts){ hi.pts=v; hi.team=team; hi.year=year; }
+    if(v<lo.pts){ lo.pts=v; lo.team=team; lo.year=year; } };
+  const H = S.history || {};
+  Object.entries(H.resultsByWeek||{}).forEach(([yr,byWk])=>Object.values(byWk||{}).forEach(gs=>
+    (gs||[]).forEach(g=>{ if(g){ take(g.pa,g.ta,+yr); take(g.pb,g.tb,+yr); } })));
+  Object.entries(H.playoffs||{}).forEach(([yr,gs])=>
+    (gs||[]).forEach(g=>{ if(g && g.ta && g.tb){ take(g.pa,g.ta,+yr); take(g.pb,g.tb,+yr); } }));
+  (H.teamWeeks||[]).forEach(r=>{ if(r) take(r.pts,r.team,r.year); });
+  /* this season's finished weeks count too - but never the week still being played,
+     or the new record would become its own ceiling and the alert could never fire */
+  try{
+    const yr = curDraftYear();
+    Object.keys((S.season && S.season.schedule)||{}).forEach(wk=>{ wk=+wk;
+      if(wk===cw || !recWeekDone(wk)) return;
+      (S.season.schedule[wk]||[]).forEach((g,m)=>{ const [pa,pb]=mScore(wk,m);
+        take(pa, teamName(g[0]), yr); take(pb, teamName(g[1]), yr); });
+    });
+  }catch(e){}
+  _recBounds = (hi.pts>0 && lo.pts<Infinity) ? {hi,lo} : null;
+  _recBoundsKey = key;
+  return _recBounds;
+}
+
+/* each manager's best-ever week, keyed on the manager for the same rename reason */
+let _frBests = null, _frBestsKey = '';
+function franchiseBests(){
+  const cw = currentNflWeek();
+  let doneCt = 0;
+  try{ for(let w=1; w<=REG_WEEKS; w++){ if(w!==cw && recWeekDone(w)) doneCt++; } }catch(e){}
+  const key = curDraftYear()+'_'+cw+'_'+doneCt;
+  if(_frBests!==null && _frBestsKey===key) return _frBests;
+  const out = {};
+  const add = (mgr, pts)=>{ const v = recNum(pts); if(!mgr || v==null || v<=0) return;
+    const r = out[mgr] = out[mgr] || {pts:0, games:0}; r.games++; if(v>r.pts) r.pts=v; };
+  try{
+    const {mgrOf} = franchiseData();
+    const H = S.history || {};
+    Object.entries(H.resultsByWeek||{}).forEach(([yr,byWk])=>Object.values(byWk||{}).forEach(gs=>
+      (gs||[]).forEach(g=>{ if(g){ add(mgrOf(yr,g.ta),g.pa); add(mgrOf(yr,g.tb),g.pb); } })));
+    Object.entries(H.playoffs||{}).forEach(([yr,gs])=>
+      (gs||[]).forEach(g=>{ if(g){ add(mgrOf(yr,g.ta),g.pa); add(mgrOf(yr,g.tb),g.pb); } }));
+    /* a best set in week 3 of THIS season must count by week 7 */
+    const liveMgr = ti => liveMgrOf(ti);
+    Object.keys((S.season && S.season.schedule)||{}).forEach(wk=>{ wk=+wk;
+      if(wk===cw || !recWeekDone(wk)) return;
+      (S.season.schedule[wk]||[]).forEach((g,m)=>{ const [pa,pb]=mScore(wk,m);
+        add(liveMgr(g[0]),pa); add(liveMgr(g[1]),pb); });
+    });
+  }catch(e){}
+  _frBests = out; _frBestsKey = key;
+  return out;
+}
+
+/* The watch itself. A live total only climbs, so "passed the record" cannot un-happen; the
+   localStorage key makes each ceremony a once-per-device event even across reloads. The low
+   record is the opposite kind of fact - every week STARTS as the worst ever - so it only
+   counts once the score is official and final. */
+function checkRecordAlerts(){
+  try{
+    const wk = currentNflWeek();
+    if(!(wk>=1) || !(S.season && S.season.schedule)) return;
+    const B = leagueRecordBounds(); if(!B) return;
+    const yr = curDraftYear();
+    (S.season.schedule[wk]||[]).forEach((g,m)=>{
+      const [pa,pb] = mScore(wk,m);
+      const fin = !!officialScore(wk,m);
+      [[g[0],pa],[g[1],pb]].forEach(([ti,pts])=>{
+        const v = recNum(pts); if(v==null || v<=0) return;
+        const base = 'ffl_rec_'+yr+'_'+wk+'_'+ti+'_';
+        if(v > B.hi.pts){
+          if(store.get(base+'hi')) return;
+          store.set(base+'hi','1');
+          trashTalk(['HISTORY', teamName(ti)+' just passed '+B.hi.team+"'s "+B.hi.pts.toFixed(1)
+            +' with '+v.toFixed(1)+'. The highest week this league has ever seen.']);
+        } else if(fin && v < B.lo.pts){
+          if(store.get(base+'lo')) return;
+          store.set(base+'lo','1');
+          trashTalk(['A NEW LOW', teamName(ti)+': '+v.toFixed(1)+'. The worst week in league history. '
+            +B.lo.team+' ('+B.lo.pts.toFixed(1)+') is off the hook at last.']);
+        } else {
+          const mgr = liveMgrOf(ti);
+          const fb = mgr ? franchiseBests()[mgr] : null;
+          /* eight archived games before anyone's "franchise record" means anything */
+          if(fb && fb.games>=8 && v>fb.pts){
+            if(store.get(base+'fr')) return;
+            store.set(base+'fr','1');
+            trashTalk(['FRANCHISE RECORD', teamName(ti)+': '+v.toFixed(1)+'. The best week '+mgr+' has ever had.']);
+          }
+        }
+      });
+    });
+  }catch(e){}
+}
+
+/* ---- On This Week ---- */
+function renderHomeThisWeek(){
+  const el = document.getElementById('homeThisWeek'); if(!el) return;
+  const hide = ()=>{ el.style.display='none'; el.innerHTML=''; };
+  try{
+    /* pre-season reads as week 1; weeks 15-17 pull from the playoff archive instead */
+    let wk = currentNflWeek();
+    if(!wk){ const ms = Date.now()-NFL_2026_WEEK1.getTime();
+      wk = ms<0 ? 1 : Math.min(17, Math.floor(ms/(7*86400000))+1); }
+    const H = S.history || {};
+    const rows = [];
+    Object.entries(H.resultsByWeek||{}).forEach(([yr,byWk])=>{
+      (((byWk||{})[wk])||[]).forEach(g=>{ if(!g) return;
+        const pa = recNum(g.pa), pb = recNum(g.pb); if(pa==null || pb==null) return;
+        rows.push({yr:+yr, ta:g.ta, pa, tb:g.tb, pb, label:''}); });
+    });
+    if(wk>=15) Object.entries(H.playoffs||{}).forEach(([yr,gs])=>
+      (gs||[]).forEach(g=>{ if(!g || +g.week!==wk || !g.ta || !g.tb) return;
+        const pa = recNum(g.pa), pb = recNum(g.pb); if(pa==null || pb==null) return;
+        rows.push({yr:+yr, ta:g.ta, pa, tb:g.tb, pb, label:String(g.label||'').toLowerCase()}); }));
+    if(!rows.length) return hide();
+    const stories = [], used = new Set();
+    const inGame = r => r.label ? ' in the '+esc(r.label) : '';
+    const hiR = [...rows].sort((a,b)=>Math.max(b.pa,b.pb)-Math.max(a.pa,a.pb))[0];
+    { const [t,pts,o] = hiR.pa>=hiR.pb ? [hiR.ta,hiR.pa,hiR.tb] : [hiR.tb,hiR.pb,hiR.ta];
+      stories.push('This week in '+hiR.yr+': <b>'+esc(t)+'</b> hung '+pts.toFixed(1)+' on '+esc(o)+inGame(hiR)+'.');
+      used.add(hiR); }
+    const loR = [...rows].sort((a,b)=>Math.min(a.pa,a.pb)-Math.min(b.pa,b.pb))[0];
+    /* told even when it is the same game as the hanging - the hangee's number is its own
+       story (the 78.5-in-a-consolation-game kind) - unless a tie leaves no low side */
+    if(!(loR===hiR && loR.pa===loR.pb)){
+      const [t,pts] = loR.pa<=loR.pb ? [loR.ta,loR.pa] : [loR.tb,loR.pb];
+      stories.push('This week in '+loR.yr+': <b>'+esc(t)+'</b> scored '+pts.toFixed(1)+inGame(loR)+'. Never forget.');
+      used.add(loR); }
+    const clR = [...rows].sort((a,b)=>Math.abs(a.pa-a.pb)-Math.abs(b.pa-b.pb))[0];
+    if(!used.has(clR) && clR.pa!==clR.pb && Math.abs(clR.pa-clR.pb)<=3){
+      const [t,o] = clR.pa>clR.pb ? [clR.ta,clR.tb] : [clR.tb,clR.ta];
+      stories.push('This week in '+clR.yr+': <b>'+esc(t)+'</b> survived '+esc(o)+' by '+Math.abs(clR.pa-clR.pb).toFixed(1)+inGame(clR)+'.'); }
+    el.innerHTML = '<h2>On This Week</h2><p class="sub" style="margin:0 0 4px">Week '+wk+', down the years.</p>'
+      + stories.map(t=>'<div class="otd-row">'+t+'</div>').join('');
+    el.style.display='block';
+  }catch(e){ hide(); }
+}
+
+/* ---- title pennants ---- */
+let _champsByMgr = null;
+function champBannersHTML(mgr){
+  mgr = String(mgr||'').trim(); if(!mgr) return '';
+  if(!_champsByMgr){
+    _champsByMgr = {};
+    try{
+      const {mgrOf} = franchiseData();
+      ((S.history||{}).champions||[]).forEach(c=>{
+        const m = mgrOf(c.year, c.team);
+        if(m) (_champsByMgr[m] = _champsByMgr[m]||[]).push(+c.year);
+      });
+    }catch(e){}
+  }
+  const yrs = (_champsByMgr[mgr]||[]).slice().sort((a,b)=>a-b);
+  if(!yrs.length) return '';
+  return '<div class="banner-row" aria-label="League titles">'
+    + yrs.map(y=>'<span class="pennant" title="League champion, '+y+'">'+y+'</span>').join('')+'</div>';
 }
 
 /* ===================== HOME V2 =====================
@@ -11503,7 +11716,7 @@ function renderTeams(){
      this is the scouting view, and a rival's hole at TE is the point of looking. */
   el.innerHTML = S.teams.map((t,i)=>{
     const picks = D.picks.filter(p=>p.teamIndex===i && !p.cut);
-    const head = `<div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>`;
+    const head = `<div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>`+champBannersHTML(liveMgrOf(t));
     if(!picks.length) return `<div class="card team-card">${head}<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p></div>`;
     const lu = ensureLineup(i);
     const row = (p, label) => `<tr><td style="width:44px">${slotTag(label, p.pos)}</td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`;
