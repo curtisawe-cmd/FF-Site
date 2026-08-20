@@ -528,6 +528,18 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .wv-money{flex:0 0 auto;min-width:52px;font-family:var(--f-mono);font-weight:700;font-size:14px;color:var(--gold)}
 .wv-spent{flex:0 0 auto;font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim)}
 .wv-row.me .wv-nm{color:var(--chalk);font-weight:700}
+/* the FAAB explainer: a label down the left, the rule itself on the right, each line its own
+   editable blurb so the commissioner can reword any single one without touching the others */
+.faab-how{display:grid;grid-template-columns:auto 1fr;gap:9px 14px;align-items:start;margin-top:4px}
+.faab-how dt{font-family:var(--f-ui);font-weight:800;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--gold);white-space:nowrap;padding-top:3px}
+.faab-how dd{margin:0;font-size:13px;line-height:1.45;color:var(--chalk-dim)}
+@media(max-width:560px){
+  /* stacked on a phone: a nowrap label and prose cannot share 375px */
+  .faab-how{grid-template-columns:1fr;gap:2px}
+  .faab-how dt{padding-top:8px}
+  .faab-how dd{padding-bottom:4px}
+}
 /* Pinned chips are only useful if a thumb can hit them. At 24px these were the smallest
    control on the page, and they are now the one you tap most while scrolling the list. */
 @media(max-width:640px){
@@ -4074,6 +4086,7 @@ function noteVars(){
     hours: h,
     teams: (S.teams||[]).length,
     roster: (typeof rosterLimit==='function') ? rosterLimit() : '',
+    budget: (typeof faabMoney==='function' && typeof faabBudget==='function') ? faabMoney(faabBudget()) : '',
     year: (typeof curDraftYear==='function') ? curDraftYear() : ''
   };
 }
@@ -11750,6 +11763,25 @@ function renderWaivers(){
           <span class="wv-spent">${faabMoney(faabSpent(r.i))} spent</span>
         </div>`).join('')}</div>
       <p class="sub" data-note="wv-faab" style="margin:10px 0 0">Every bid is sealed until the claim settles. Highest bid takes the player; a tie goes to the better waiver priority. Bid more than you have left and that claim fails, so watch your own order if you have several in.</p>
+    </div>
+    <div class="card">
+      <h2>How the bidding works</h2>
+      <dl class="faab-how">
+        <dt>The budget</dt>
+        <dd data-note="faab-budget">Every team starts the season with {budget} and it never refills. What you have left at the end is worth nothing, so there is no prize for sitting on it.</dd>
+        <dt>Sealed bids</dt>
+        <dd data-note="faab-sealed">Nobody sees what you bid until the claim settles, commissioner included. Until then you can see how many bids are in and your own number, and that is all.</dd>
+        <dt>Who wins</dt>
+        <dd data-note="faab-wins">The highest bid takes the player. Level bids go to whoever has the better waiver priority, and the winner then drops to the back of that order, so ties do not keep falling the same way all season.</dd>
+        <dt>What it costs</dt>
+        <dd data-note="faab-cost">You are only charged when you win. Losing a bid costs nothing, and a claim that fails for any other reason costs nothing either.</dd>
+        <dt>Zero is a bid</dt>
+        <dd data-note="faab-zero">A $0 bid is a real bid and it wins anyone nobody else wants. It is how you add a player who is still sitting on waivers without spending a dollar.</dd>
+        <dt>Bidding big</dt>
+        <dd data-note="faab-over">You are allowed to have more bids in than you could actually pay for. They settle in the order you rank them, and the first one your budget cannot cover fails, with the rest of your money untouched. That player then goes to the next highest bidder rather than to nobody, so put your claims in the order you actually want them.</dd>
+        <dt>Roster full</dt>
+        <dd data-note="faab-drop">Name who you would drop at the moment you bid. Claims settle on a deadline with nobody watching, so a question asked then would have nobody to answer it and the claim would simply fail.</dd>
+      </dl>
     </div>`;
 
   el.innerHTML = `
