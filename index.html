@@ -2312,8 +2312,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="Reseed the waiver order from the current standings, worst record first. Use this at the start of a season.">Waiver priority</label><button class="btn ghost" style="max-width:200px" onclick="resetWaiverOrder()">Reseed from standings</button></div>
       <div class="setrow"><label title="Blind bidding. On: every team spends a season budget and the highest sealed bid wins a claim. Off: claims are decided on waiver priority alone. This is the same switch as the Waivers rule under League Rules - flipping it here rewrites that rule, so the two can never disagree.">FAAB bidding</label><label class="cswitch"><input type="checkbox" id="setFaabOn" onchange="setFaabOn(this.checked)"><span class="track"></span><span class="lbl" id="faabOnLbl">Off</span></label></div>
       <div class="setrow"><label title="Season-long free-agent budget per team. Only spends while FAAB bidding is on; with it off this is ignored and claims are decided on priority alone. Budgets are worked out from the transaction log, so switching FAAB off and back on picks up exactly where it left off.">FAAB budget per team ($)</label><input type="number" step="1" min="1" max="10000" id="setFaabBudget" style="max-width:110px" onchange="setFaabBudget(this.value)"></div>
+      <div class="setrow"><label title="Put every team back to the full budget. Spending before this moment stops counting; the transaction log is untouched, so every bid is still on record and the reset can be lifted again.">Reset budgets</label><button class="btn ghost" style="max-width:200px" onclick="resetFaab()">Everyone back to full</button></div>
     </div>
     <p class="sub" id="waiverNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
+    <p class="sub" id="faabResetNote" style="margin:-6px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="setgrid" style="margin-bottom:12px">
       <div class="setrow"><label title="Charged to a team for every player it picks up, including players received in a trade.">Fee per add ($)</label><input type="number" step="0.25" min="0" id="setFeeAdd" style="max-width:110px" onchange="S.txFeeAdd=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
       <div class="setrow"><label title="Charged for every player a team lets go, including players sent away in a trade. Draft picks are not charged.">Fee per drop ($)</label><input type="number" step="0.25" min="0" id="setFeeDrop" style="max-width:110px" onchange="S.txFeeDrop=Math.max(0,+this.value||0);saveState();renderTxLedger()"></div>
@@ -2634,6 +2636,7 @@ const DEFAULTS = {
   waiverHours: 24,       /* how long a dropped player sits on waivers; 0 = waivers off */
   faabBudget: 100,       /* season-long free-agent budget per team; only spends when the Waivers rule is FAAB */
   waiversRulePrev: '',   /* the waiver rule FAAB was switched on from, so switching off lands back there */
+  faabResetAt: 0,        /* budgets count from this moment; 0 = the whole season counts */
   waiverOrder: [],       /* rolling priority, worst first; empty = seed from the standings */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
   tabFlashRandom: false, /* true = scatter around that number instead of landing on it exactly */
@@ -6399,7 +6402,7 @@ const SETTING_LABELS={
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
-  waiversRulePrev:'league rules',
+  waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -11538,13 +11541,22 @@ function faabBudget(){ const n=+S.faabBudget; return Number.isFinite(n) && n>0 ?
 function faabBid(c){ const n=+(c && c.bid); return Number.isFinite(n) && n>0 ? Math.round(n) : 0; }
 function faabMoney(n){ return '$'+Math.round(+n||0); }
 function faabSpent(ti){
+  /* Anything bid before the baseline is settled business and no longer counts. The log itself
+     is never touched by a reset - the same way the dues ledger works - so the receipts survive
+     and the reset can be lifted again without having lost anything. */
+  const since=+S.faabResetAt||0;
   let sum=0;
   Object.keys(txMap||{}).forEach(id=>{
     const x=txMap[id];
     if(!x || x.undone || x.type!=='add' || +x.teamIndex!==+ti) return;
+    if((+x.at||0) < since) return;
     const b=+x.bid; if(Number.isFinite(b) && b>0) sum+=b;
   });
   return sum;
+}
+/* what the whole league has spent since the baseline - what a reset would be wiping */
+function faabSpentAll(){
+  return (S.teams||[]).reduce((n,_,i)=>n+faabSpent(i), 0);
 }
 function faabLeft(ti){ return Math.max(0, faabBudget()-faabSpent(ti)); }
 /* what a team can still commit right now, ignoring bids that have not settled - a manager may
@@ -12008,6 +12020,7 @@ function renderWaivers(){
   /* what everyone has left to spend - budgets are public, individual bids are not */
   const budgetHTML = !faabOn() ? '' : `<div class="card">
       <h2>Budgets${you}</h2>
+      ${(+S.faabResetAt||0) ? `<p class="sub" style="margin:0 0 8px">Reset on ${esc(faabResetLabel())} \u2014 spending before then no longer counts.</p>` : ''}
       <div class="wv-grid">${(S.teams||[]).map((t,i)=>({i,left:faabLeft(i)}))
         .sort((a,b)=>b.left-a.left)
         .map(r=>`<div class="wv-row${r.i===mine?' me':''}">
@@ -12534,6 +12547,7 @@ function renderWaiverSetting(){
      than remembering what it was last set to */
   const fo=document.getElementById('setFaabOn'); if(fo) fo.checked=faabOn();
   const fl=document.getElementById('faabOnLbl'); if(fl) fl.textContent=faabOn()?'On':'Off';
+  try{ renderFaabReset(); }catch(e){}
   const note=document.getElementById('waiverNote'); if(!note) return;
   note.textContent = !waiversOn()
     ? 'Waivers are off. Dropped players go straight back to free agency and can be picked up immediately.'
@@ -12574,6 +12588,40 @@ function setFaabOn(on){
   try{ renderHome(); }catch(e){}
   toast(on ? `FAAB on — ${faabMoney(faabBudget())} a team, bids sealed`
            : `FAAB off — back to ${S.rules['Waivers']}`);
+}
+/* Budgets are worked out from the transaction log, which is what makes them survive a reload
+   and refund themselves when a move is undone. The cost of that is there is no counter to zero,
+   so a reset is a BASELINE: bids before it stop counting and everybody is back to full. The log
+   keeps every receipt, so this is reversible and nothing is destroyed. */
+function resetFaab(){
+  if(!requireAdmin()) return;
+  const spent=faabSpentAll();
+  if(!confirm(`Reset every team's FAAB budget?\n\nAll twelve go back to ${faabMoney(faabBudget())}. The ${faabMoney(spent)} spent so far stops counting against anybody. The transaction log is untouched, so the bids are still on record and this can be undone.`)) return;
+  S.faabResetAt=Date.now(); saveState();
+  try{ logCommish('reset the FAAB budgets', `everyone back to ${faabMoney(faabBudget())}`); }catch(e){}
+  renderFaabReset();
+  try{ if(window.currentView==='players') renderWaivers(); }catch(e){}
+  toast(`Budgets reset \u2014 everyone back to ${faabMoney(faabBudget())}`);
+}
+function clearFaabReset(){
+  if(!requireAdmin()) return;
+  if(!confirm('Count the whole season against the budgets again? Every bid in the log starts counting from the start of the season.')) return;
+  S.faabResetAt=0; saveState();
+  try{ logCommish('removed the FAAB reset', 'the whole season counts against budgets again'); }catch(e){}
+  renderFaabReset();
+  try{ if(window.currentView==='players') renderWaivers(); }catch(e){}
+  toast('Counting the whole season again');
+}
+function faabResetLabel(){
+  const at=+S.faabResetAt||0;
+  return at ? new Date(at).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : '';
+}
+function renderFaabReset(){
+  const note=document.getElementById('faabResetNote'); if(!note) return;
+  const at=+S.faabResetAt||0;
+  note.innerHTML = at
+    ? `Budgets count from <b>${esc(faabResetLabel())}</b> \u2014 anything bid before that is settled. <a href="#" onclick="clearFaabReset();return false" style="color:var(--charge)">count the whole season</a>`
+    : 'Budgets count every winning bid in the log. Resetting puts everyone back to full without touching the log.';
 }
 function setFaabBudget(v){
   const n=Math.max(1, Math.min(10000, Math.round(+v||0)));
