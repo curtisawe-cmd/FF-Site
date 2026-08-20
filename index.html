@@ -559,6 +559,30 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .sch-g.mine{color:var(--chalk);font-weight:700}
 .sch-g .pair{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sch-g .sc{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);flex:0 0 auto}
+/* the playoff picture */
+.po-row{display:grid;grid-template-columns:26px 1fr auto auto;gap:10px;align-items:center;
+  padding:7px 0;border-bottom:1px solid var(--line)}
+.po-row:last-child{border-bottom:none}
+.po-seed{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);text-align:right}
+.po-row.in .po-seed{color:var(--turf-bright);font-weight:700}
+.po-nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13.5px}
+.po-rec{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);white-space:nowrap}
+.po-st{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.po-chip{font-family:var(--f-ui);font-weight:800;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+  border-radius:4px;padding:2px 7px;white-space:nowrap}
+.po-chip.cl{background:var(--turf);color:var(--on-turf)}
+.po-chip.co{background:var(--gold);color:#14161a}
+.po-chip.wi{border:1px solid var(--turf-bright);color:var(--turf-bright)}
+.po-chip.lo{border:1px solid var(--charge);color:var(--charge)}
+.po-mag{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);white-space:nowrap}
+.po-line{display:flex;align-items:center;gap:10px;margin:4px 0;color:var(--charge);
+  font-family:var(--f-ui);font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.po-line::before,.po-line::after{content:'';flex:1;height:1px;background:var(--charge);opacity:.5}
+@media(max-width:560px){
+  .po-row{grid-template-columns:22px 1fr auto;gap:7px}
+  .po-st{grid-column:1 / -1;justify-content:flex-start;padding-left:29px}
+  .po-nm{font-size:13px}
+}
 @media(max-width:560px){
   .sch-row{grid-template-columns:40px 1fr auto;gap:7px}
   .sch-opp .nm{font-size:13px}
@@ -9539,6 +9563,99 @@ function setMatchTeam(wk,m,side,ti){
   if(!requireAdmin()) return;
   S.season.schedule[wk][m][side] = +ti; saveState(); renderMatchups();
 }
+/* ===================== THE PLAYOFF PICTURE =====================
+   Who is in, who is out, and what still has to happen. The whole draft order hangs off this
+   bracket, so both ends of the table matter: the top eight are playing for the title and the
+   bottom four are playing for the first pick, which is not a consolation prize in this league.
+
+   Everything is worked out in WINS, because that is what seasonStandings sorts on. Points-for
+   only breaks a tie, and there is no telling in advance who wins a tiebreak, so the maths never
+   counts one in anybody's favour: a team that can merely MATCH your win total is treated as a
+   live threat, and a team you can merely match is not treated as caught. That makes every
+   CLINCHED and every OUT here a statement that cannot come apart later.
+
+   It is deliberately conservative in one way. Two teams chasing you may play EACH OTHER, so
+   they cannot both win out, which sometimes means a berth is mathematically safe a week before
+   this says so. Proving that needs every remaining result played out; being a week late with
+   good news is a far better failure than telling somebody they are in when they are not. */
+function poSpots(){
+  /* the bracket is the authority when one exists: its first round names the seeds it takes,
+     and the highest of those is how many teams get in */
+  try{
+    const games = (typeof poGames==='function') ? poGames() : [];
+    if(games.length){
+      const first = Math.min(...games.map(g=>+g.week||0));
+      const seeds = games.filter(g=>+g.week===first && !/consolation/i.test(String(g.label||'')))
+                         .flatMap(g=>[+g.sa,+g.sb]).filter(n=>n>0);
+      if(seeds.length) return Math.max(...seeds);
+    }
+  }catch(e){}
+  return 8;   /* this league: eight in the playoff bracket, four in the consolation */
+}
+function poPicture(){
+  if(!(S.season && S.season.schedule)) return null;
+  let rows; try{ rows = seasonStandings(); }catch(e){ return null; }
+  if(!rows || !rows.length) return null;
+  const played = r => r.w + r.l + r.t;
+  if(!rows.some(r=>played(r)>0)) return null;          /* nothing has happened yet */
+  const rem  = r => Math.max(0, REG_WEEKS - played(r));
+  const maxW = r => r.w + rem(r);                       /* wins out */
+  const SPOTS = Math.max(1, Math.min(rows.length-1, poSpots()));
+  /* the best win total anybody outside the line can still reach - what a team inside has to
+     finish above, and the number a magic number counts down to */
+  const outside = rows.slice(SPOTS);
+  const bestOut = outside.length ? Math.max(...outside.map(maxW)) : -1;
+  const lastIn  = rows[SPOTS-1];
+  return rows.map((r, idx)=>{
+    /* anyone who could still finish level with r's floor is a threat: level goes to points-for
+       and that is not a promise */
+    const threats = rows.filter(o=>o.i!==r.i && maxW(o) >= r.w).length;
+    /* anyone whose floor is already past r's ceiling is gone for good */
+    const above   = rows.filter(o=>o.i!==r.i && o.w > maxW(r)).length;
+    const clinched = threats <= SPOTS-1;
+    const out      = above >= SPOTS;
+    const left = rem(r);
+    const winIn  = !clinched && !out && left>0 &&
+      rows.filter(o=>o.i!==r.i && maxW(o) >= r.w+1).length <= SPOTS-1;
+    const loseOut = !clinched && !out && left>0 &&
+      rows.filter(o=>o.i!==r.i && o.w > maxW(r)-1).length >= SPOTS;
+    /* magic number: own wins plus losses by the best team outside, either one counts */
+    const magic = (clinched || out || bestOut<0) ? 0 : Math.max(0, bestOut - r.w + 1);
+    /* for a team below the line, how far off the last spot they are */
+    const back = (idx>=SPOTS && lastIn) ? Math.max(0, lastIn.w - r.w) : 0;
+    return { ...r, seed: idx+1, rem: left, inNow: idx < SPOTS,
+             clinched, out, winIn, loseOut, magic, back };
+  });
+}
+function poPictureHTML(){
+  const pic = poPicture(); if(!pic) return '';
+  const SPOTS = Math.max(1, Math.min(pic.length-1, poSpots()));
+  const anyLeft = pic.some(r=>r.rem>0);
+  const rows = pic.map((r,idx)=>{
+    const chips=[];
+    if(r.clinched) chips.push('<span class="po-chip cl">In</span>');
+    else if(r.out) chips.push('<span class="po-chip co">Consolation</span>');
+    if(r.winIn)  chips.push('<span class="po-chip wi">Win and in</span>');
+    if(r.loseOut) chips.push('<span class="po-chip lo">Lose and out</span>');
+    const mag = r.clinched || r.out ? ''
+      : r.inNow ? `<span class="po-mag">magic ${r.magic}</span>`
+      : `<span class="po-mag">${r.back===0?'level with 8th':r.back+' back'}</span>`;
+    const line = idx===SPOTS ? '<div class="po-line">Playoff line</div>' : '';
+    return line + `<div class="po-row${r.inNow?' in':''}">
+      <span class="po-seed">${r.seed}</span>
+      <span class="po-nm">${esc(r.name||teamName(r.i))}</span>
+      <span class="po-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span>
+      <span class="po-st">${mag}${chips.join('')}</span>
+    </div>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:18px">
+    <h2>Playoff picture</h2>
+    <p class="sub" data-note="po-picture" style="margin:0 0 10px">Top ${SPOTS} make the bracket. The other ${pic.length-SPOTS} go to the consolation, which is not nothing here: winning it is the first pick in the draft. <b>In</b> and <b>Consolation</b> are settled, they cannot come undone. <b>Magic</b> is how many more of your wins, or losses by the best team still outside, it takes to be settled, and either one counts.</p>
+    ${rows}
+    ${anyLeft?'':'<p class="sub" style="margin:10px 0 0">Regular season complete.</p>'}
+    <p class="sub" data-note="po-tiebreak" style="margin:10px 0 0">Level records are split on points for, and there is no knowing that in advance, so anyone who can match your record counts against you here. Two teams chasing you might also play each other, which this does not try to guess at, so a spot is sometimes safe a week before it says so.</p>
+  </div>`;
+}
 function seasonStandings(){
   const rows = S.teams.map((t,i)=>({i, name:t.name, manager:t.manager, w:0,l:0,t:0, pf:0, pa:0}));
   Object.entries(S.season.schedule).forEach(([wk,games])=>{
@@ -10097,6 +10214,7 @@ function renderMatchups(){
       <p class="sub" style="margin-bottom:10px">${(+S.divisions>0?'Grouped by division. ':'') + (anyScores? 'Sorted by wins, then points for. Official tiebreaker is head-to-head \u2014 commissioner has final say on ties.' : 'Fills in as weekly scores get entered.')}</p>
       ${standingsHTML(rows, anyScores)}
     </div>
+    ${poPictureHTML()}
     ${allPlayCardHTML(rows)}`;
 }
 /* The neutral table. Ranking by all-play is the whole point - it is the order the season would
