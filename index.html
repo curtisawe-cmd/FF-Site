@@ -8179,8 +8179,14 @@ function createPoll(){
   /* the duration picker only renders for the commissioner; anyone else's polls run open-ended */
   const durMs=+((document.getElementById('pollDur')||{}).value||0);
   if(durMs>0) rec.closesAt=Date.now()+durMs;
+  /* everything has been read off the form, so let go of it: the repaint that clears the boxes
+     comes back through the Firebase listener, and the typing guard would otherwise hold it off
+     while the cursor was still sitting in an option field */
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+  window.pollDur = undefined;                 /* next poll starts from the default again */
   window.FB.dbSet(`${pollsPath()}/${id}`, rec)
-    .then(()=>toast(durMs>0?`Poll posted — voting closes in ${waiverClearLabel(rec.closesAt)} ⏱️`:'Poll posted ✅'))
+    .then(()=>{ toast(durMs>0?`Poll posted — voting closes in ${waiverClearLabel(rec.closesAt)} ⏱️`:'Poll posted ✅');
+                try{ renderPolls(true); }catch(e){} })
     .catch(()=>toast('Could not post — try again.'));
 }
 function votePoll(pollId, optId){
@@ -8215,8 +8221,24 @@ function deletePoll(id){
   window.FB.dbRemove(`${pollsPath()}/${id}`).catch(()=>toast('Could not delete — try again.'));
   window.FB.dbRemove(`${pollVotesPath()}/${id}`).catch(()=>{});   /* votes cleared (commish); orphan votes are otherwise harmless/invisible */
 }
-function renderPolls(){
+/* A render that rebuilds innerHTML takes the cursor and the half-typed word with it. Notes
+   already had their own guard for this; a form living inside a re-rendered view needs the same
+   one, so it is a helper now rather than a second special case. */
+function typingInside(el){
+  const a=document.activeElement;
+  if(!el || !a || a===document.body) return false;
+  const tag=a.tagName;
+  const typey = tag==='INPUT' || tag==='TEXTAREA' || tag==='SELECT'
+             || a.getAttribute('contenteditable')==='true';
+  return typey && el.contains(a);
+}
+function renderPolls(force){
   const el=document.getElementById('pollsView'); if(!el) return;
+  /* The create-a-poll form is inside this innerHTML, and BOTH the minute pulse and every vote
+     arriving from Firebase call this. Rebuilding it while somebody is halfway through typing a
+     question threw the question away - which is exactly what was happening. Countdowns can wait
+     the few seconds it takes to finish a sentence; the sentence cannot be got back. */
+  if(!force && typingInside(el)) return;
   const myUid=window.fbUser&&window.fbUser.uid;
   /* Creation went commissioner-only by league decision (2026-08-08); everyone still votes.
      Managers get a one-line note instead of a form that would only scold them on submit. */
@@ -8232,15 +8254,18 @@ function renderPolls(){
     </div>
     <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn ghost" onclick="addPollOption()">+ Add option</button>
-      ${isAdmin()?`<select id="pollDur" title="How long voting stays open (commissioner)" style="max-width:170px">
-        <option value="0">No time limit</option>
-        <option value="${3600000}">1 hour</option>
-        <option value="${6*3600000}">6 hours</option>
-        <option value="${24*3600000}" selected>1 day</option>
-        <option value="${48*3600000}">2 days</option>
-        <option value="${72*3600000}">3 days</option>
-        <option value="${7*24*3600000}">1 week</option>
-      </select>`:''}
+      ${isAdmin()?(()=>{
+        /* the choice is remembered rather than re-defaulted, because "1 day" was hardcoded as
+           selected: pick a week, let one repaint through, and it quietly went back to a day and
+           posted with the wrong timer */
+        const cur = String(window.pollDur ?? (24*3600000));
+        const opts = [[0,'No time limit'],[3600000,'1 hour'],[6*3600000,'6 hours'],
+                      [24*3600000,'1 day'],[48*3600000,'2 days'],[72*3600000,'3 days'],
+                      [7*24*3600000,'1 week']];
+        return `<select id="pollDur" title="How long voting stays open (commissioner)" style="max-width:170px"
+          onchange="window.pollDur=this.value">${opts.map(([v,lbl])=>
+          `<option value="${v}"${String(v)===cur?' selected':''}>${lbl}</option>`).join('')}</select>`;
+      })():''}
       <button class="btn" onclick="createPoll()">Post poll</button>
     </div>
   </div>` : `<div class="notice" style="margin-bottom:18px">Sign in to create polls and vote.</div>`;
