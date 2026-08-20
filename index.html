@@ -534,6 +534,37 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .faab-how dt{font-family:var(--f-ui);font-weight:800;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--gold);white-space:nowrap;padding-top:3px}
 .faab-how dd{margin:0;font-size:13px;line-height:1.45;color:var(--chalk-dim)}
+/* the season schedule */
+.sch-row{display:grid;grid-template-columns:46px 1fr auto;gap:10px;align-items:center;
+  padding:7px 0;border-bottom:1px solid var(--line)}
+.sch-row:last-child{border-bottom:none}
+.sch-row.now{background:var(--turf-wash);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:6px}
+.sch-wk{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);letter-spacing:.04em}
+.sch-row.now .sch-wk{color:var(--turf-bright);font-weight:700}
+.sch-opp{display:flex;align-items:center;gap:8px;min-width:0}
+.sch-opp .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13.5px}
+.sch-vs{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);flex:0 0 auto}
+.sch-res{font-family:var(--f-mono);font-size:12.5px;white-space:nowrap;text-align:right}
+.sch-res .wl{font-family:var(--f-ui);font-weight:800;font-size:11px;letter-spacing:.06em;margin-right:6px}
+.sch-res .wl.w{color:var(--turf-bright)} .sch-res .wl.l{color:var(--charge)} .sch-res .wl.t{color:var(--gold)}
+.sch-res .rec{color:var(--chalk-dim);font-size:10.5px;margin-left:7px}
+.sch-soon{color:var(--chalk-dim);font-size:11.5px;font-family:var(--f-mono)}
+/* the whole league, week by week */
+.sch-weeks{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px}
+.sch-wkbox{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--panel-2)}
+.sch-wkbox.now{border-color:var(--turf)}
+.sch-wkbox h3{margin:0 0 6px;font-family:var(--f-ui);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--chalk-dim)}
+.sch-wkbox.now h3{color:var(--turf-bright)}
+.sch-g{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px}
+.sch-g.mine{color:var(--chalk);font-weight:700}
+.sch-g .pair{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sch-g .sc{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);flex:0 0 auto}
+@media(max-width:560px){
+  .sch-row{grid-template-columns:40px 1fr auto;gap:7px}
+  .sch-opp .nm{font-size:13px}
+  .sch-res{font-size:11.5px}
+  .sch-weeks{grid-template-columns:1fr}
+}
 @media(max-width:560px){
   /* stacked on a phone: a nowrap label and prose cannot share 375px */
   .faab-how{grid-template-columns:1fr;gap:2px}
@@ -1992,10 +2023,12 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div class="row musub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="board" onclick="setMuTab('board')">Matchups</button>
     <button class="btn ghost" data-sub="gc" onclick="setMuTab('gc')">Game Center</button>
+    <button class="btn ghost" data-sub="sched" onclick="setMuTab('sched')">Schedule</button>
   </div>
   </div><!--/viewhead-->
   <div id="matchupsView"></div>
   <div id="gcView" style="display:none"></div>
+  <div id="schedView" style="display:none"></div>
 </section>
 
 <!-- ============ TEAMS ============ -->
@@ -9062,10 +9095,13 @@ function goSub(k){
 function setMuTab(t){
   window.muTab = t;
   document.querySelectorAll('.musub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
-  const board=document.getElementById('matchupsView'), gc=document.getElementById('gcView');
-  if(board) board.style.display = t==='gc' ? 'none':'block';
-  if(gc)    gc.style.display    = t==='gc' ? 'block':'none';
+  const board=document.getElementById('matchupsView'), gc=document.getElementById('gcView'),
+        sch=document.getElementById('schedView');
+  if(board) board.style.display = t==='board' ? 'block':'none';
+  if(gc)    gc.style.display    = t==='gc'    ? 'block':'none';
+  if(sch)   sch.style.display   = t==='sched' ? 'block':'none';
   if(t==='gc') renderGameCenter();
+  if(t==='sched') renderSchedule();
   updateGhost();
 }
 function gcScrollBy(dir){
@@ -9876,6 +9912,105 @@ function recapCardHTML(ctx){
     <div class="recap-body">${esc(window.muRecap)}</div>
     <p class="sub" data-note="recap-rewrite" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>
   </div>`;
+}
+/* ===================== THE SEASON SCHEDULE =====================
+   The board only ever showed one week at a time, so "who do I play in week 9" was a question
+   the app could not answer without clicking through nine weeks. This is the whole season in one
+   place: one team's fourteen weeks with the results filled in as they land, and underneath it
+   every week of the league at once. Weeks 15 to 17 are the bracket, not the schedule, so they
+   are named and pointed at rather than faked here. */
+function schedTeam(){
+  const n=(S.teams||[]).length;
+  let i=+window.schTeam;
+  if(!Number.isInteger(i) || i<0 || i>=n){
+    const mine=myTeamIdx();
+    i = (Number.isInteger(mine) && mine>=0 && mine<n) ? mine : 0;
+  }
+  return i;
+}
+function setSchedTeam(i){ window.schTeam=+i; renderSchedule(); }
+/* Which game a team plays in a given week, and how it went. Returns null when the schedule has
+   nothing for them that week rather than guessing at a bye - a 12-team league has none. */
+function schedGame(ti, wk){
+  const games=(S.season && S.season.schedule && S.season.schedule[wk])||[];
+  for(let m=0;m<games.length;m++){
+    const g=games[m]; if(!g) continue;
+    const side = (+g[0]===+ti) ? 0 : ((+g[1]===+ti) ? 1 : -1);
+    if(side<0) continue;
+    const sc=mScore(wk,m)||[null,null];
+    /* name the other side once rather than writing the flip twice - the second one came out as
+       side?1:0, which is the SAME index as mine, and every game rendered as a tie with itself */
+    const other = side===0 ? 1 : 0;
+    return { m, side, opp:+g[other], mine:sc[side], theirs:sc[other] };
+  }
+  return null;
+}
+function renderSchedule(){
+  const el=document.getElementById('schedView'); if(!el) return;
+  if(!(S.season && S.season.schedule)){
+    el.innerHTML=`<div class="card" style="max-width:620px"><h2>No schedule yet</h2>
+      <p class="sub" style="margin:0">Generate the season on the Matchups tab and it will show up here.</p></div>`;
+    return;
+  }
+  const ti=schedTeam(), now=currentNflWeek(), mine=myTeamIdx();
+  const wkLabel=w=>{ try{ return nflWeekRange(w).label; }catch(e){ return ''; } };
+  /* the record is built as the weeks are walked, so each row can show where it stood at
+     the time rather than only the season total */
+  let w=0,l=0,t=0;
+  const rows=[];
+  for(let wk=1; wk<=REG_WEEKS; wk++){
+    const g=schedGame(ti,wk);
+    if(!g){ rows.push(`<div class="sch-row"><span class="sch-wk">WK ${wk}</span>
+      <span class="sch-soon">no game scheduled</span><span></span></div>`); continue; }
+    const played = g.mine!=null && g.theirs!=null;
+    if(played){ if(g.mine>g.theirs) w++; else if(g.mine<g.theirs) l++; else t++; }
+    const res = played
+      ? `<span class="wl ${g.mine>g.theirs?'w':(g.mine<g.theirs?'l':'t')}">${g.mine>g.theirs?'W':(g.mine<g.theirs?'L':'T')}</span>${(+g.mine).toFixed(1)} \u2013 ${(+g.theirs).toFixed(1)}<span class="rec">${w}-${l}${t?'-'+t:''}</span>`
+      : `<span class="sch-soon">${wk===now?'in progress':wkLabel(wk)}</span>`;
+    rows.push(`<div class="sch-row${wk===now?' now':''}">
+      <span class="sch-wk">WK ${wk}</span>
+      <span class="sch-opp"><span class="sch-vs">vs</span>${teamMarkHTML(S.teams[g.opp],22)}<span class="nm">${esc(teamName(g.opp))}</span></span>
+      <span class="sch-res">${res}</span>
+    </div>`);
+  }
+  const po = REG_WEEKS<17 ? `<p class="sub" style="margin:12px 0 0">Weeks ${REG_WEEKS+1} to 17 are the playoffs, which come from the bracket rather than the schedule.</p>` : '';
+  const picker=`<select onchange="setSchedTeam(this.value)" style="max-width:230px">${
+    (S.teams||[]).map((tm,i)=>`<option value="${i}" ${i===ti?'selected':''}>${esc(tm.name)}${i===mine?' (you)':''}</option>`).join('')}</select>`;
+
+  /* and the whole league, week by week */
+  const weeks=[];
+  for(let wk=1; wk<=REG_WEEKS; wk++){
+    const games=S.season.schedule[wk]||[];
+    weeks.push(`<div class="sch-wkbox${wk===now?' now':''}">
+      <h3>Week ${wk} \u00B7 ${esc(wkLabel(wk))}</h3>
+      ${games.map((g,m)=>{
+        if(!g) return '';
+        const sc=mScore(wk,m)||[null,null];
+        const done=sc[0]!=null && sc[1]!=null;
+        const isMine=+g[0]===ti || +g[1]===ti;
+        return `<div class="sch-g${isMine?' mine':''}">
+          <span class="pair">${esc(teamName(+g[0]))} <span style="opacity:.55">v</span> ${esc(teamName(+g[1]))}</span>
+          <span class="sc">${done?`${(+sc[0]).toFixed(1)}\u2013${(+sc[1]).toFixed(1)}`:''}</span>
+        </div>`;
+      }).join('')}
+    </div>`);
+  }
+
+  el.innerHTML=`
+    <div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <h2 style="margin:0">Season schedule</h2>${picker}
+      </div>
+      <p class="sub" data-note="sched-team" style="margin:0 0 10px">Every week of the regular season for one team, with the record as it stood after each one. Pick any team to see who they have left.</p>
+      ${rows.join('')}
+      ${po}
+    </div>
+    <div class="card">
+      <h2>Every week</h2>
+      <p class="sub" data-note="sched-all" style="margin:0 0 12px">The whole league, week by week. The game involving the team picked above is the bold one.</p>
+      <div class="sch-weeks">${weeks.join('')}</div>
+    </div>`;
+  try{ paintNotes(); }catch(e){}
 }
 function renderMatchups(){
   const el = document.getElementById('matchupsView');
