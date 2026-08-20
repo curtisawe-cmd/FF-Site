@@ -2241,7 +2241,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="setgrid" style="margin-bottom:12px">
       <div class="setrow"><label title="How long a dropped player sits on waivers before anyone can add him outright. During that time he can only be claimed, and the best waiver priority wins. Set 0 to switch waivers off entirely.">Waiver period (hours)</label><input type="number" step="1" min="0" max="336" id="setWaiverHours" style="max-width:110px" onchange="setWaiverHours(this.value)"></div>
       <div class="setrow"><label title="Reseed the waiver order from the current standings, worst record first. Use this at the start of a season.">Waiver priority</label><button class="btn ghost" style="max-width:200px" onclick="resetWaiverOrder()">Reseed from standings</button></div>
-      <div class="setrow"><label title="Season-long free-agent budget per team. Only spends when the Waivers rule under League Rules is set to FAAB; on any other setting this is ignored and claims are decided on priority alone.">FAAB budget per team ($)</label><input type="number" step="1" min="1" max="10000" id="setFaabBudget" style="max-width:110px" onchange="setFaabBudget(this.value)"></div>
+      <div class="setrow"><label title="Blind bidding. On: every team spends a season budget and the highest sealed bid wins a claim. Off: claims are decided on waiver priority alone. This is the same switch as the Waivers rule under League Rules - flipping it here rewrites that rule, so the two can never disagree.">FAAB bidding</label><label class="cswitch"><input type="checkbox" id="setFaabOn" onchange="setFaabOn(this.checked)"><span class="track"></span><span class="lbl" id="faabOnLbl">Off</span></label></div>
+      <div class="setrow"><label title="Season-long free-agent budget per team. Only spends while FAAB bidding is on; with it off this is ignored and claims are decided on priority alone. Budgets are worked out from the transaction log, so switching FAAB off and back on picks up exactly where it left off.">FAAB budget per team ($)</label><input type="number" step="1" min="1" max="10000" id="setFaabBudget" style="max-width:110px" onchange="setFaabBudget(this.value)"></div>
     </div>
     <p class="sub" id="waiverNote" style="margin:-4px 0 12px;font-size:12px;opacity:.75"></p>
     <div class="setgrid" style="margin-bottom:12px">
@@ -2563,6 +2564,7 @@ const DEFAULTS = {
   sounds: {},            /* per-event sound: a built-in name, a URL, or an uploaded data URI */
   waiverHours: 24,       /* how long a dropped player sits on waivers; 0 = waivers off */
   faabBudget: 100,       /* season-long free-agent budget per team; only spends when the Waivers rule is FAAB */
+  waiversRulePrev: '',   /* the waiver rule FAAB was switched on from, so switching off lands back there */
   waiverOrder: [],       /* rolling priority, worst first; empty = seed from the standings */
   tabFlashEvery: 18,     /* fire on every Nth tab click (0 = off) */
   tabFlashRandom: false, /* true = scatter around that number instead of landing on it exactly */
@@ -6327,6 +6329,7 @@ const SETTING_LABELS={
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
+  waiversRulePrev:'league rules',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -12242,12 +12245,50 @@ function uploadSound(key, ev){
 function renderWaiverSetting(){
   const inp=document.getElementById('setWaiverHours'); if(inp) inp.value=String(waiverHours());
   const fb=document.getElementById('setFaabBudget'); if(fb) fb.value=String(faabBudget());
+  /* the rule can also be changed from the League Rules dropdown, so the switch reads it rather
+     than remembering what it was last set to */
+  const fo=document.getElementById('setFaabOn'); if(fo) fo.checked=faabOn();
+  const fl=document.getElementById('faabOnLbl'); if(fl) fl.textContent=faabOn()?'On':'Off';
   const note=document.getElementById('waiverNote'); if(!note) return;
   note.textContent = !waiversOn()
     ? 'Waivers are off. Dropped players go straight back to free agency and can be picked up immediately.'
     : faabOn()
     ? `FAAB is on: every team gets ${faabMoney(faabBudget())} for the season and bids blind. A dropped player can only be bid on for ${waiverHours()}h; highest bid wins, a tie goes to the better priority, and that team then drops to the back. Claims are processed by a commissioner device.`
     : `A dropped player can only be claimed for ${waiverHours()}h. Best priority wins, then that team drops to the back of the order. Claims are processed by a commissioner device. Set the Waivers rule to FAAB under League Rules to bid instead.`;
+}
+/* The switch writes the LEAGUE RULE, it does not keep a flag of its own. A separate boolean
+   would let the rules page say "1 day, inverse standings" while the app quietly ran an auction,
+   which is the exact thing that was wrong with FAAB before it was built - an option that claimed
+   one thing and did another. One source of truth, and the rules page can never be lying. */
+const FAAB_RULE = 'FAAB (free-agent budget)';
+const FAAB_OFF_FALLBACK = '1 day, resets to inverse standings';
+function setFaabOn(on){
+  const cur = String((S.rules||{})['Waivers']||'');
+  const isOn = faabOn();
+  if(!!on === isOn){ renderWaiverSetting(); return; }        /* already there */
+  /* Claims already in were bid (or not bid) under the old rule, and flipping now changes how
+     they settle. Worth stopping for - it is somebody's budget either way. */
+  const pend = (typeof claimList==='function') ? claimList().filter(c=>c.status==='pending') : [];
+  if(pend.length){
+    const msg = on
+      ? `${pend.length} claim${pend.length>1?'s are':' is'} already in with no bid. Turning FAAB on now means ${pend.length>1?'they all settle':'it settles'} as a $0 bid, decided on waiver priority. Carry on?`
+      : `${pend.length} claim${pend.length>1?'s have':' has'} a bid on ${pend.length>1?'them':'it'}. Turning FAAB off now means ${pend.length>1?'those bids are':'that bid is'} ignored and priority decides instead. Nobody is charged. Carry on?`;
+    if(!confirm(msg)){ renderWaiverSetting(); return; }
+  }
+  if(on){
+    if(cur && !/FAAB/i.test(cur)) S.waiversRulePrev = cur;   /* so switching back lands where it was */
+    S.rules['Waivers'] = FAAB_RULE;
+  } else {
+    const back = String(S.waiversRulePrev||'').trim();
+    S.rules['Waivers'] = (back && !/FAAB/i.test(back)) ? back : FAAB_OFF_FALLBACK;
+  }
+  saveState();
+  renderWaiverSetting();
+  try{ renderSettings(); }catch(e){}                          /* the League Rules dropdown must agree */
+  try{ if(window.currentView==='players') renderWaivers(); }catch(e){}
+  try{ renderHome(); }catch(e){}
+  toast(on ? `FAAB on — ${faabMoney(faabBudget())} a team, bids sealed`
+           : `FAAB off — back to ${S.rules['Waivers']}`);
 }
 function setFaabBudget(v){
   const n=Math.max(1, Math.min(10000, Math.round(+v||0)));
