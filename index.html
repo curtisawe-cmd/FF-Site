@@ -2003,7 +2003,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" id="btnStart" onclick="startDraft()">Start Draft</button>
     <button class="btn ghost" id="btnPause" onclick="togglePause()" disabled>Pause</button>
     <button class="btn ghost" id="btnUndo" onclick="undoPick()" disabled>Undo Pick</button>
-    <button class="btn danger" onclick="resetDraft()">Reset</button>
+    <button class="btn" id="btnSeason" onclick="startSeason()" style="display:none" title="Lock these picks in as the rosters for the season">Start The Season</button>
+    <button class="btn danger" id="btnReset" onclick="resetDraft()">Reset</button>
     </span>
     <span class="viewer-only" id="draftViewerNote" style="display:none;color:var(--chalk-dim);font-size:13px">Viewer mode — the commissioner runs the draft.</span>
   </div>
@@ -2673,6 +2674,7 @@ const DEFAULTS = {
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   clockLines: [],        /* what the draft room says about whoever is on the clock; empty = built-in */
+  seasonStartedAt: 0,    /* set once by Start The Season; from then on the real board cannot be reset */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
@@ -5882,6 +5884,9 @@ function afterPick(){
 }
 function undoPick(){
   if(!requireDraftControl()) return;
+  /* undoing a draft pick after kickoff would quietly rewrite a roster somebody is already
+     starting players from - the same reason Reset is shut */
+  if(boardLocked()){ toast('The season is under way \u2014 picks cannot be undone.'); return; }
   if(!D.picks.length) return;
   const last = D.picks.pop();
   D.finished = false; saveDraft();
@@ -5956,8 +5961,56 @@ function trashTalk(pair){
   document.body.appendChild(el);
   setTimeout(()=>el.remove(), 5100);
 }
+/* ===================== STARTING THE SEASON =====================
+   The moment the draft board stops being editable and becomes the rosters everyone plays with.
+
+   The flag lives in SETTINGS rather than in the draft record, and that is the whole trick:
+   resetDraft() throws the draft record away wholesale, so a lock kept in there would delete
+   itself on the very action it exists to prevent. Settings survive a reset - the reset prompt
+   has always said so - which makes them the only honest home for it.
+
+   Settings sync to every device, so this is not a lock on one phone. Once it is set, Reset and
+   Undo Pick are refused for whoever set it and for every other commissioner, everywhere.
+
+   Deliberately no unlock button. That was the request, and a button that undoes the one
+   irreversible thing in the app is not really a lock. The way back is editing seasonStartedAt in
+   the database by hand, which is exactly the amount of effort it should take, and the confirm
+   says so rather than letting anyone discover it the hard way. */
+function seasonStarted(){ return +(S.seasonStartedAt||0) > 0; }
+/* the mock board is a private sandbox and stays resettable forever - it touches no roster */
+function boardLocked(){ return draftMode==='real' && seasonStarted(); }
+function seasonStartedLabel(){
+  const at = +(S.seasonStartedAt||0);
+  return at ? new Date(at).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : '';
+}
+function startSeason(){
+  if(!requireAdmin()) return;
+  if(draftMode!=='real'){ toast('That is the mock board - there is no season to start from a sandbox.'); return; }
+  if(seasonStarted()){ toast('The season is already under way.'); return; }
+  if(!D.finished){ toast('Finish the draft first - this locks the board.'); return; }
+  const picks = (D.picks||[]).filter(x=>+x.pickIndex>=0).length;
+  if(!confirm(
+    'Start the season?\n\n'
+    + 'These ' + picks + ' picks become the rosters everyone plays with, and the draft board locks '
+    + 'for good. Reset and Undo Pick stop working - for you, and for every other commissioner, on '
+    + 'every device.\n\n'
+    + 'There is no button to undo this. Getting the board back would mean editing the league '
+    + 'database by hand.\n\n'
+    + 'From here a roster changes through adds, drops and trades.')) return;
+  S.seasonStartedAt = Date.now();
+  saveState();
+  try{ pushSettings(true); }catch(e){}   /* force: this must not sit behind the Apply bar */
+  try{ logCommish('started the season', picks + ' picks locked in, the board is closed'); }catch(e){}
+  try{ refreshDraftUI(); }catch(e){}
+  try{ renderReadyCard(); }catch(e){}
+  toast('Season started \u2014 the board is locked');
+}
 function resetDraft(){
   if(!requireDraftControl()) return;
+  if(boardLocked()){
+    toast('The season is under way \u2014 the board is locked and cannot be reset.');
+    return;
+  }
   /* Count the open offers before asking, so the confirm can say what else is about to go.
      A mock board is a private sandbox and must never touch real league trades. */
   const pend = draftMode==='real' ? pendingOfferCount() : 0;
@@ -6456,6 +6509,7 @@ const SETTING_LABELS={
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk', clockLines:'on-the-clock line',
+  seasonStartedAt:'season start',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
 };
 function settingsChangeLabels(beforeJson){
@@ -7827,10 +7881,23 @@ function refreshDraftUI(){
   const startBtn = document.getElementById('btnStart');
   startBtn.disabled = D.started && !D.finished;
   document.getElementById('btnPause').disabled = !D.started || D.finished;
-  document.getElementById('btnUndo').disabled = !D.picks.length;
+  const locked = boardLocked();
+  document.getElementById('btnUndo').disabled = !D.picks.length || locked;
+  { /* the offer to start, and the shut door once it is taken */
+    const sb = document.getElementById('btnSeason');
+    if(sb) sb.style.display = (draftMode==='real' && D.finished && !locked) ? 'inline-flex' : 'none';
+    const rb = document.getElementById('btnReset');
+    if(rb){
+      rb.disabled = locked;
+      rb.title = locked ? 'The season started on ' + seasonStartedLabel() + '. The board is locked.' : '';
+    }
+    if(locked) startBtn.disabled = true;
+  }
   if(D.finished){
-    document.getElementById('pickLabel').textContent = 'Final';
-    document.getElementById('onClockTeam').textContent = 'Draft complete';
+    document.getElementById('pickLabel').textContent = locked ? 'Season' : 'Final';
+    document.getElementById('onClockTeam').textContent = locked
+      ? 'Season under way \u00B7 rosters locked in ' + seasonStartedLabel()
+      : 'Draft complete';
   } else if(D.started){
     document.getElementById('pickLabel').textContent = pickLabel(idx);
     /* the suffixes are facts about the pick, not wording, so they survive a custom line */
