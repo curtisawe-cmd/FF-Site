@@ -591,6 +591,14 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .rd-state{font-family:var(--f-mono);font-size:11.5px;color:var(--chalk-dim);white-space:nowrap;text-align:right}
 .rd-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .rd-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
+/* live preview of a template field, so you can see the wording without running a draft */
+.tpl-prev{margin-top:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:10px 12px}
+.tpl-prev .lbl{display:block;font-family:var(--f-ui);font-size:10px;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--chalk-dim);margin-bottom:7px}
+.tpl-line{display:flex;align-items:baseline;gap:9px;padding:4px 0;font-size:13.5px;overflow-wrap:anywhere}
+.tpl-line .n{flex:0 0 auto;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);min-width:44px}
+.tpl-line .t{font-weight:600;color:var(--chalk)}
+.tpl-prev .none{font-size:13px;color:var(--chalk-dim)}
 @media(max-width:560px){
   .rd-row{grid-template-columns:20px 1fr}
   .rd-state{grid-column:2;text-align:left;padding-top:2px}
@@ -2429,10 +2437,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="card">
       <h2>On The Clock</h2>
       <p class="sub" data-note="set-clockline" style="margin-bottom:10px">What the draft room says about whoever is picking. One line per version, and it works through them by pick, so the room does not read the same sentence two hundred times. Write <b>{team}</b> for the team on the clock, <b>{mgr}</b> for their manager, <b>{round}</b> for the round and <b>{pick}</b> for the overall pick number. Your own turn always says YOUR PICK instead, because that one is there to get your attention. Leave it blank for the built-in wording.</p>
-      <textarea id="setClockLines" rows="6" placeholder="{team} is on the clock&#10;{mgr}, you are up&#10;Everyone is waiting on {mgr}&#10;{team} — pick {pick}, get on with it" onchange="saveClockLines(this.value)"></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="btn ghost" onclick="showView('draft')">See it in the draft room</button>
-      </div>
+      <textarea id="setClockLines" rows="6" placeholder="{team} is on the clock&#10;{mgr}, you are up&#10;Everyone is waiting on {mgr}&#10;{team} — pick {pick}, get on with it" oninput="renderClockPreview(this.value)" onchange="saveClockLines(this.value)"></textarea>
+      <div class="tpl-prev" id="clockPreview"></div>
+      <p class="sub" style="margin:10px 0 0;font-size:12px;opacity:.75">The draft room only says this while a draft is actually running. Before you start one it says <b>Ready when you are</b>, so the preview above is how you check the wording out of season.</p>
     </div>
 
     <div class="card">
@@ -7771,10 +7778,38 @@ function clockLineFor(idx, ti){
     .split('{round}').join(rd===0 ? 'the keeper round' : (rd==null ? '' : 'round '+rd))
     .split('{pick}').join(String((+idx||0)+1));
 }
+/* Shows what the wording will actually read like, filled in with real teams from this league,
+   without needing a draft running. It exists because the banner only speaks during a live draft:
+   type a line in the off-season, walk to the draft room, and you would see "Ready when you are"
+   and reasonably conclude the setting was broken. */
+function renderClockPreview(raw){
+  const el = document.getElementById('clockPreview'); if(!el) return;
+  const lines = (raw===undefined ? (S.clockLines||[]) : String(raw).split('\n'))
+    .map(x=>String(x||'').trim()).filter(Boolean);
+  if(!lines.length){
+    el.innerHTML = '<span class="lbl">Preview</span><span class="none">Nothing written, so the draft room uses its own wording: '
+      + '<b>' + esc((S.teams[0]||{}).name || 'Team 1') + ' is on the clock</b>.</span>';
+    return;
+  }
+  /* walk real picks so the preview shows different teams, exactly as the draft will */
+  const prev = S.clockLines;
+  S.clockLines = lines;
+  let rows = '';
+  try{
+    for(let k=0; k<lines.length; k++){
+      let ti = k; try{ ti = ownerForPick(k); }catch(e){ ti = k % Math.max(1,(S.teams||[]).length); }
+      const txt = clockLineFor(k, ti);
+      rows += '<div class="tpl-line"><span class="n">pick ' + (k+1) + '</span><span class="t">' + esc(txt||'') + '</span></div>';
+    }
+  }catch(e){ rows = '<span class="none">Could not build a preview.</span>'; }
+  S.clockLines = prev;
+  el.innerHTML = '<span class="lbl">Preview — real teams, in pick order</span>' + rows;
+}
 function saveClockLines(val){
   S.clockLines = String(val||'').split('\n').map(x=>x.trim()).filter(Boolean);
   saveState();
   try{ refreshDraftUI(); }catch(e){}
+  try{ renderClockPreview(); }catch(e){}
   toast(S.clockLines.length ? 'On-the-clock line saved' : 'Back to the built-in wording');
 }
 function refreshDraftUI(){
@@ -12742,7 +12777,8 @@ function renderSettings(){
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
-  { const cl=document.getElementById('setClockLines'); if(cl) cl.value=(S.clockLines||[]).join('\n'); }
+  { const cl=document.getElementById('setClockLines'); if(cl) cl.value=(S.clockLines||[]).join('\n');
+    try{ renderClockPreview(); }catch(e){} }
   { const kl=document.getElementById('setKeeperLines'); if(kl) kl.value=(S.keeperAlarmLines||[]).join('\n'); }
   if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
     const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
