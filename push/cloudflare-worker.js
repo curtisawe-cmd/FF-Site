@@ -1,6 +1,11 @@
 /* ============================================================
    Bitch Boy League — push relay (Cloudflare Worker)
 
+   SUPERSEDED BY push/score-watch.js, which contains everything this file does plus the
+   scheduled score watcher. Deploy that one instead unless you specifically want the relay
+   without alerts that fire while every app in the league is shut. This file is kept as the
+   smaller, simpler thing to fall back to.
+
    Why this exists: OneSignal's send API refuses browser requests, and the REST key must not
    sit in a public repo or in anyone's browser. This is the only place the key lives.
 

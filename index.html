@@ -2443,6 +2443,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
       <div class="setrow"><label title="Buzz a manager when one of their starters scores. Only starters count, and only that manager is told. Sending happens on a commissioner device, so these go out while one of them has the app open.">Player scoring alerts</label><label class="cswitch"><input type="checkbox" id="setScoreAlerts" onchange="setScoreAlerts(this.checked)"><span class="track"></span><span class="lbl" id="scoreAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="How many points a starter has to gain before it is worth a buzz. 6 is about a touchdown. Smaller gains are not thrown away - they add up until they clear this, so a quiet afternoon of catches still lands as one notification.">Buzz at (points)</label><input type="number" step="1" min="1" max="50" id="setScoreAlertMin" style="max-width:110px" onchange="setScoreAlertMin(this.value)"></div>
+      <div class="setrow"><label title="Let the relay do the watching on a schedule, so alerts arrive with every app in the league shut. Needs push/score-watch.js deployed to the worker with a KV binding named BBL and a cron trigger. With this off, alerts only go out while a commissioner has the app open.">Send from the relay</label><label class="cswitch"><input type="checkbox" id="setScoreRelay" onchange="setScoreRelay(this.checked)"><span class="track"></span><span class="lbl" id="scoreRelayLbl">Off</span></label></div>
+    </div>
+    <div class="row admin-only" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="testScoreSnapshot()">Send the relay a snapshot</button>
+      <button class="btn ghost" onclick="testRelayWatch()">Run the watcher now</button>
     </div>
     <p class="sub" id="scoreAlertNote" style="margin:8px 0 0;font-size:12px;opacity:.75"></p>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
@@ -2629,6 +2634,7 @@ const DEFAULTS = {
   pushRelay: '',         /* Cloudflare Worker URL that holds the REST key and forwards sends */
   scoreAlerts: true,     /* push a manager when one of their starters scores */
   scoreAlertMin: 6,      /* points a starter has to gain before it is worth a buzz - a TD */
+  scoreRelay: false,     /* let the relay watch on a schedule, so alerts land with every app shut */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
@@ -6409,7 +6415,7 @@ const SETTING_LABELS={
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
-  scoreAlerts:'score alerts', scoreAlertMin:'score alerts',
+  scoreAlerts:'score alerts', scoreAlertMin:'score alerts', scoreRelay:'score alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -6787,7 +6793,16 @@ async function commitMoves(){
     for(const key of ids) await window.FB.dbRemove(`${movesPath()}/${key}`).catch(()=>{});
   }catch(e){}
 }
+/* A lineup change has to reach the relay or it would keep buzzing about last week's starters.
+   Debounced: swapping three players is three writes and should still be one post. */
+let _snapDebounce = null;
+function touchScoreSnapshot(){
+  if(!scoreRelayOn() || !pushRelay() || !isAdmin()) return;
+  clearTimeout(_snapDebounce);
+  _snapDebounce = setTimeout(()=>{ try{ pushScoreSnapshot(true); }catch(e){} }, 4000);
+}
 function pushTeamData(ti){
+  try{ touchScoreSnapshot(); }catch(e){}   /* the relay's picture of the starters just moved */
   if(!fbOk() || !canEditTeam(ti)) return;
   /* the block rides in the team's own node, which its manager already owns - no new database
      rule, and it reaches everyone through the teamData listener that is already running */
@@ -9548,11 +9563,69 @@ function scoreAlertPass(stats, seen, minGain){
   });
   return { first, next, teams: out };
 }
+/* ---- letting the relay do the watching ----
+   The in-app watcher can only fire while somebody has the app open, which is not most of a
+   Sunday. The relay can run on a schedule instead, but it has no idea who is on whose roster.
+   So the app posts it a small picture of the league - the week, the scoring rules, and each
+   team's starters with the manager to tell - and the relay works from that.
+
+   Deliberately no database credential goes anywhere near the relay. It is told what it needs
+   rather than given the keys to go and read it, and a manager id only ever travels app to
+   relay over HTTPS and is never served back out.
+
+   A stale snapshot is not a problem worth solving: lineups lock at kickoff, so the last one
+   posted before the games is the one that counts anyway. */
+function scoreRelayOn(){ return !!S.scoreRelay; }
+const SNAPSHOT_EVERY_MS = 10*60*1000;
+let _snapAt = 0, _snapBusy = false;
+function buildScoreSnapshot(){
+  const wk = currentNflWeek();
+  const yr = +((S.season && S.season.year)) || (typeof curDraftYear==='function' ? curDraftYear() : 2026);
+  const teams = (S.teams||[]).map((t,ti)=>{
+    let picks=[]; try{ picks = starterPicks(ti)||[]; }catch(e){}
+    return { ti, name: t.name||('Team '+(ti+1)), uid: uidForTeam(ti) || '',
+             players: picks.map(pl=>({ id:String(pl.playerId), pos:pl.pos||'', name:pl.name||'' })) };
+  });
+  return { on: scoreAlertsOn() && scoreRelayOn(), season: yr, week: wk || 0,
+           min: scoreAlertMin(), scoring: S.scoring || {},
+           url: location.origin + location.pathname,
+           teams: teams.filter(t=>t.uid && t.players.length) };
+}
+async function pushScoreSnapshot(force){
+  if(_snapBusy) return null;
+  const relay = pushRelay(); if(!relay) return null;
+  if(!force && Date.now()-_snapAt < SNAPSHOT_EVERY_MS) return null;
+  _snapBusy = true;
+  try{
+    const snap = buildScoreSnapshot();
+    const r = await fetch(relay, { method:'POST', headers:{'Content-Type':'application/json'},
+                                   body: JSON.stringify({ snapshot: snap }) });
+    let txt=''; try{ txt = await r.text(); }catch(e){}
+    if(r.ok) _snapAt = Date.now();
+    return { ok:r.ok, status:r.status, text:txt, teams:snap.teams.length };
+  }catch(e){ return { ok:false, status:0, text:String(e&&e.message||e) }; }
+  finally{ _snapBusy = false; }
+}
+/* Settings button: post it now and say what came back, so the chain can be proved out of
+   season instead of discovered broken on a Sunday. */
+async function testScoreSnapshot(){
+  if(!pushRelay()){ toast('Set the relay URL first.'); return; }
+  toast('Sending the snapshot…');
+  const r = await pushScoreSnapshot(true);
+  if(!r){ toast('Nothing sent — no relay.'); return; }
+  if(!r.ok){ toast('Relay said '+(r.status||'nothing')+' — '+String(r.text||'').slice(0,80)); return; }
+  let info={}; try{ info=JSON.parse(r.text||'{}'); }catch(e){}
+  toast(info.stored ? `Relay has ${info.teams} teams${info.week?' for week '+info.week:''}`
+                    : 'Sent, but the relay did not confirm it stored anything');
+}
 async function checkScoreAlerts(){
   if(_scoreAlertBusy) return;
   if(!scoreAlertsOn() || !pushRelay() || !isAdmin()) return;
   if(!fbOk() || !window.fbUser) return;
   if(!(S.season && S.season.schedule)) return;
+  /* Exactly one of the two watchers may send, or every score arrives twice. When the relay is
+     doing it the app's job is only to keep the relay's picture current. */
+  if(scoreRelayOn()){ try{ await pushScoreSnapshot(); }catch(e){} return; }
   const wk = currentNflWeek(); if(!wk) return;
   if(Date.now() - _scoreAlertAt < SCORE_ALERT_EVERY_MS) return;
   _scoreAlertBusy = true;
@@ -12777,6 +12850,29 @@ function setPushApp(v){
   syncPushBtn();                       /* show the button on the App ID alone — the SDK
                                           callback that also calls this may never fire */
 }
+function setScoreRelay(on){
+  S.scoreRelay = !!on; saveState(); renderScoreAlertSetting();
+  if(on){ pushScoreSnapshot(true).then(r=>{
+    if(r && !r.ok) toast('Saved, but the relay did not take the snapshot — check the URL and the KV binding.');
+  }); }
+  toast(on ? 'The relay will watch, app open or not' : 'Back to sending only while the app is open');
+}
+/* Ask the relay to do a run right now and report what it found. The whole chain is invisible
+   until it either works or does not, and finding that out on a Sunday is too late. */
+async function testRelayWatch(){
+  if(!pushRelay()){ toast('Set the relay URL first.'); return; }
+  toast('Asking the relay to run…');
+  try{
+    const r = await fetch(pushRelay(), { method:'POST', headers:{'Content-Type':'application/json'},
+                                         body: JSON.stringify({ watchNow:true }) });
+    const txt = await r.text();
+    let j={}; try{ j=JSON.parse(txt); }catch(e){}
+    if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
+    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped); return; }
+    if(j.baseline){ toast(`Baseline set for ${j.players} players — the next run is the live one`); return; }
+    toast(j.sent ? `Relay sent ${j.sent} notification${j.sent>1?'s':''}` : 'Relay ran — nobody has scored since the last look');
+  }catch(e){ toast('Could not reach the relay.'); }
+}
 function setScoreAlerts(on){
   S.scoreAlerts = !!on; saveState(); renderScoreAlertSetting();
   toast(on ? 'Scoring alerts on' : 'Scoring alerts off');
@@ -12790,12 +12886,16 @@ function renderScoreAlertSetting(){
   const cb=document.getElementById('setScoreAlerts'); if(cb) cb.checked=scoreAlertsOn();
   const lb=document.getElementById('scoreAlertsLbl'); if(lb) lb.textContent=scoreAlertsOn()?'On':'Off';
   const mn=document.getElementById('setScoreAlertMin'); if(mn) mn.value=String(scoreAlertMin());
+  const rc=document.getElementById('setScoreRelay'); if(rc) rc.checked=scoreRelayOn();
+  const rl=document.getElementById('scoreRelayLbl'); if(rl) rl.textContent=scoreRelayOn()?'On':'Off';
   const note=document.getElementById('scoreAlertNote'); if(!note) return;
   note.textContent = !scoreAlertsOn()
     ? 'Nobody is told when their players score.'
     : !pushRelay()
     ? 'Set the relay URL above first — without it nothing can be sent.'
-    : 'Each manager is told only about their own starters, at +'+scoreAlertMin()+' points or more. Smaller gains add up until they clear that. Sent from a commissioner device, so they go out while one has the app open.';
+    : scoreRelayOn()
+    ? 'The relay watches on its own schedule, so these arrive with every app in the league shut. Each manager hears only about their own starters, at +'+scoreAlertMin()+' points or more. Needs push/score-watch.js on the worker with a KV binding named BBL and a cron trigger.'
+    : 'Each manager is told only about their own starters, at +'+scoreAlertMin()+' points or more. Smaller gains add up until they clear that. Sent from a commissioner device, so they only go out while one has the app open.';
 }
 function setPushRelay(v){
   S.pushRelay = String(v||'').trim().replace(/\/+$/,'');
