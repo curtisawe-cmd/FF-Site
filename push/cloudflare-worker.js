@@ -32,6 +32,8 @@ const SEGMENTS = ['Total Subscriptions', 'Active Subscriptions', 'Subscribed Use
    moving to a real address is one variable rather than a code edit and a redeploy. Format it
    with the scheme and no trailing slash, e.g. https://bitchboyleague.com */
 const BUILT_IN_ORIGINS = [
+  'https://bitchboyleague.com',
+  'https://www.bitchboyleague.com',
   'https://curtisawe-cmd.github.io',
   'http://127.0.0.1:8791',            /* local testing */
   'http://localhost:8791'

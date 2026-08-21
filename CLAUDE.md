@@ -6,12 +6,15 @@ in a browser to preview; that is the whole dev loop. It is also an installable P
 sends push notifications, which adds a handful of small files around it (see Layout).
 
 Repo: https://github.com/curtisawe-cmd/FF-Site (remote `origin`, branch `main`)
-Live: https://curtisawe-cmd.github.io/FF-Site/ (GitHub Pages, `main` branch, `/` root)
+Live: https://bitchboyleague.com (Netlify, auto-deploys from `main`, served from `/` root)
+Also still live at https://curtisawe-cmd.github.io/FF-Site/ - GitHub Pages was not switched
+off, so old bookmarks keep working. Both are on the Firebase authorized-domain list, which
+is what sign-in checks; a domain missing from it fails only at sign-in, never on a read.
 
 ## This folder is the only working copy
 
-`Desktop\FF Site\index.html` is the file that deploys. Push to `main` and Pages
-publishes it.
+`Desktop\FF Site\index.html` is the file that deploys. Push to `main` and Netlify
+publishes it, the same way the Bud's site works.
 
 There is an archive folder at `Desktop\Website Stuff\Fantasy FB\` holding dated
 `league.backup.*.html` snapshots and source art. **Never edit those and never copy one
@@ -24,12 +27,16 @@ making this repo authoritative. See `README.txt` in that folder.
 | Path | Tracked | What it is |
 | --- | --- | --- |
 | `index.html` | yes | The entire app. Markup, CSS, and JS all inline. |
-| `sw.js` | yes | Offline service worker, scope `/FF-Site/`. Network-first for the page. |
+| `sw.js` | yes | Offline service worker, scope `/` on the real domain. Network-first for the page. |
 | `manifest.json` | yes | PWA manifest. Standalone, portrait, navy theme, three shortcuts. |
 | `icon-192/512`, `icon-maskable-512`, `apple-touch-icon` | yes | Install icons. |
-| `push/cloudflare-worker.js` | yes | The push relay. Holds the OneSignal REST key. Deployed by hand to Cloudflare, not by CI. |
+| `push/*.js` | yes | The Cloudflare version of the relay and watcher. NOT what is deployed - `netlify/functions/` is. Kept as the alternative if the site ever leaves Netlify. |
 | `push/onesignal/OneSignalSDK*.js` | yes | OneSignal's service worker, in its own folder so it cannot evict `sw.js`. |
-| `netlify.toml` | yes | Netlify config (publish `.`, no build, SPA fallback). Pages is what actually serves the site. |
+| `netlify.toml` | yes | Netlify config: publish `.`, no build, SPA fallback, functions dir, no-cache headers on the page and `sw.js`. This is what serves the site. |
+| `netlify/functions/push.mjs` | yes | Push endpoint at `/.netlify/functions/push`. Sends, takes the score snapshot, runs the watcher on demand. Holds no key itself - the OneSignal key is a Netlify env var. |
+| `netlify/functions/score-watch.mjs` | yes | Scheduled watcher. Cron lives in the file, so it deploys with the repo. Fires score alerts with every app in the league shut. |
+| `netlify/functions/lib/score.mjs` | yes | Weekly scoring + the alert rule, shared by both functions. A PORT of `scoreWeekStats`; a harness runs 4000 random stat lines through both and fails on any drift. |
+| `package.json` | yes | Exists only so Netlify installs `@netlify/blobs` for the functions. The site itself still has no build step. |
 | `README.md` | yes | Repo readme. |
 | `.claude-plugin/marketplace.json` | yes | Unrelated. This repo doubles as a Claude Code plugin marketplace. |
 | `.claude/` | no | Gitignored. |
@@ -279,7 +286,7 @@ visible cells.
 
 - **Always commit and push when a change is done. Don't ask first.** Curtis wants work
   live, not staged. Finish the change, verify it, commit, push to `main`.
-- **End the reply with the live link** once the push lands: https://curtisawe-cmd.github.io/FF-Site/
+- **End the reply with the live link** once the push lands: https://bitchboyleague.com
 - **Every change must land in both the desktop and the mobile layout.** Never fix one and
   leave the other. Check the mobile path first - it is the one that matters here.
 - **Stage files by name, not `git add -A`.** This folder contains an unrelated project;

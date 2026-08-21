@@ -2,7 +2,8 @@
 
 **Bitch Boy League** - a single-file fantasy football app for a 14-year league.
 
-Live: https://curtisawe-cmd.github.io/FF-Site/
+Live: **https://bitchboyleague.com**  (Netlify, auto-deploys from `main`)
+The old GitHub Pages URL still serves the same app for anyone who bookmarked it.
 
 Vanilla HTML/CSS/JS in one file, no build step. Live draft room with pick clock and
 auto-pick, matchups and standings, Game Center, trades, chat, injury report, stats,
