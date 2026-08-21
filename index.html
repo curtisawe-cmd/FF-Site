@@ -2427,6 +2427,15 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     </div>
 
     <div class="card">
+      <h2>On The Clock</h2>
+      <p class="sub" data-note="set-clockline" style="margin-bottom:10px">What the draft room says about whoever is picking. One line per version, and it works through them by pick, so the room does not read the same sentence two hundred times. Write <b>{team}</b> for the team on the clock, <b>{mgr}</b> for their manager, <b>{round}</b> for the round and <b>{pick}</b> for the overall pick number. Your own turn always says YOUR PICK instead, because that one is there to get your attention. Leave it blank for the built-in wording.</p>
+      <textarea id="setClockLines" rows="6" placeholder="{team} is on the clock&#10;{mgr}, you are up&#10;Everyone is waiting on {mgr}&#10;{team} — pick {pick}, get on with it" onchange="saveClockLines(this.value)"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn ghost" onclick="showView('draft')">See it in the draft room</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Mock Draft Trash Talk</h2>
       <p class="sub" data-note="set-mockslam" style="margin-bottom:10px">The slam animation when a mock draft gets reset. One message per line. Use a <b>|</b> to split the big top line from the small subtitle, e.g. <code>DON'T BE A BITCH | use these picks, pussy</code>. Leave blank for the built-in set.</p>
       <textarea id="setMockTrash" rows="6" placeholder="BIG LINE | subtitle" onchange="saveMockTrash(this.value)"></textarea>
@@ -2656,6 +2665,7 @@ const DEFAULTS = {
   scoreRelay: false,     /* let the relay watch on a schedule, so alerts land with every app shut */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
+  clockLines: [],        /* what the draft room says about whoever is on the clock; empty = built-in */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
   mockTrash: [],         /* user-supplied mock-draft reset trash talk ("BIG | subtitle"); empty = defaults */
   tabFlash: [],          /* user-supplied full-screen flash lines; empty = feature off */
@@ -6438,7 +6448,7 @@ const SETTING_LABELS={
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
-  tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk',
+  tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk', clockLines:'on-the-clock line',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash'
 };
 function settingsChangeLabels(beforeJson){
@@ -7736,6 +7746,37 @@ function renderRosterMini(){
     (picks.map(p=>`<div class="rr"><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>${playerFace(p,22)}<b>${esc(p.name)}</b>${injById(p.playerId)}</div>`).join('') || `<span style="color:var(--chalk-dim)">No picks yet.</span>`);
 }
 
+/* ---- what the draft room says about whoever is on the clock ----
+   The banner used to be one hardcoded sentence. This lets the commissioner write their own,
+   with the real team and manager filled in, and write several so the room does not read the
+   same line 204 times.
+
+   Which line shows is keyed to the PICK, not to chance: a random pick would reshuffle on every
+   repaint, and this repaints on every clock tick. Keyed this way it holds still for as long as
+   that manager is on the clock, then changes when the pick does. */
+function clockLineList(){
+  const raw = S.clockLines;
+  const arr = Array.isArray(raw) ? raw : String(raw||'').split('\n');
+  return arr.map(x=>String(x||'').trim()).filter(Boolean);
+}
+function clockLineFor(idx, ti){
+  const lines = clockLineList();
+  if(!lines.length) return null;                       /* nothing written: built-in wording */
+  const t = (S.teams||[])[ti] || {};
+  const mgr = (()=>{ try{ return liveMgrOf(ti) || ''; }catch(e){ return t.manager||''; } })();
+  const rd = (()=>{ try{ return roundForPick(idx); }catch(e){ return null; } })();
+  return String(lines[Math.abs(+idx||0) % lines.length])
+    .split('{team}').join(t.name || ('Team '+((+ti||0)+1)))
+    .split('{mgr}').join(mgr || t.name || 'somebody')
+    .split('{round}').join(rd===0 ? 'the keeper round' : (rd==null ? '' : 'round '+rd))
+    .split('{pick}').join(String((+idx||0)+1));
+}
+function saveClockLines(val){
+  S.clockLines = String(val||'').split('\n').map(x=>x.trim()).filter(Boolean);
+  saveState();
+  try{ refreshDraftUI(); }catch(e){}
+  toast(S.clockLines.length ? 'On-the-clock line saved' : 'Back to the built-in wording');
+}
 function refreshDraftUI(){
   try{ syncClockFromShared(); }catch(e){}
   /* "you're up" fires on the EDGE, not on every redraw - refreshDraftUI runs constantly */
@@ -7757,9 +7798,16 @@ function refreshDraftUI(){
     document.getElementById('onClockTeam').textContent = 'Draft complete';
   } else if(D.started){
     document.getElementById('pickLabel').textContent = pickLabel(idx);
+    /* the suffixes are facts about the pick, not wording, so they survive a custom line */
+    const own = ownerForPick(idx);
+    const suffix = ((own!==teamForPick(idx))?` (via ${S.teams[teamForPick(idx)].name})`:'')
+                 + ((S.teams[own]||{}).auto?' \u00B7 AUTO':'')
+                 + (D.paused?' (paused)':'');
+    const custom = clockLineFor(idx, own);
     document.getElementById('onClockTeam').textContent = myTurnNow()
-      ? `YOUR PICK \u2014 ${S.teams[ownerForPick(idx)].name}`
-      : S.teams[ownerForPick(idx)].name + ((ownerForPick(idx)!==teamForPick(idx))?` (via ${S.teams[teamForPick(idx)].name})`:'') + (S.teams[ownerForPick(idx)].auto?' \u00B7 AUTO':'') + (D.paused?' (paused)':' is on the clock');
+      ? `YOUR PICK \u2014 ${S.teams[own].name}` + suffix
+      : (custom !== null ? custom + suffix
+         : S.teams[own].name + suffix + (D.paused?'':' is on the clock'));
   } else {
     document.getElementById('pickLabel').textContent = 'Pre-draft';
     document.getElementById('onClockTeam').textContent = 'Ready when you are';
@@ -12694,6 +12742,7 @@ function renderSettings(){
   { const ins=document.getElementById('setInsults'); if(ins) ins.value=(S.alarmInsults||[]).join('\n'); }
   { const tl=document.getElementById('setTradeLines'); if(tl) tl.value=(S.tradeAlarmLines||[]).join('\n'); }
   { const mt=document.getElementById('setMockTrash'); if(mt) mt.value=(S.mockTrash||[]).join('\n'); }
+  { const cl=document.getElementById('setClockLines'); if(cl) cl.value=(S.clockLines||[]).join('\n'); }
   { const kl=document.getElementById('setKeeperLines'); if(kl) kl.value=(S.keeperAlarmLines||[]).join('\n'); }
   if(tabFlashUnlocked){ const tf=document.getElementById('setTabFlash'); if(tf) tf.value=(S.tabFlash||[]).join('\n');
     const te=document.getElementById('setTabFlashEvery'); if(te) te.value=String(S.tabFlashEvery??18);
