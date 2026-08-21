@@ -578,6 +578,23 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .po-line{display:flex;align-items:center;gap:10px;margin:4px 0;color:var(--charge);
   font-family:var(--f-ui);font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 .po-line::before,.po-line::after{content:'';flex:1;height:1px;background:var(--charge);opacity:.5}
+/* draft readiness */
+.rd-row{display:grid;grid-template-columns:22px 1fr auto;gap:11px;align-items:baseline;
+  padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.rd-row:last-child{border-bottom:none}
+.rd-mark{font-family:var(--f-mono);font-weight:700;font-size:13px}
+.rd-row.ok .rd-mark{color:var(--turf-bright)}
+.rd-row.warn .rd-mark{color:var(--gold)}
+.rd-row.bad .rd-mark{color:var(--charge)}
+.rd-what{min-width:0}
+.rd-detail{display:block;font-size:12px;color:var(--chalk-dim);margin-top:2px;overflow-wrap:anywhere}
+.rd-state{font-family:var(--f-mono);font-size:11.5px;color:var(--chalk-dim);white-space:nowrap;text-align:right}
+.rd-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.rd-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
+@media(max-width:560px){
+  .rd-row{grid-template-columns:20px 1fr}
+  .rd-state{grid-column:2;text-align:left;padding-top:2px}
+}
 @media(max-width:560px){
   .po-row{grid-template-columns:22px 1fr auto;gap:7px}
   .po-st{grid-column:1 / -1;justify-content:flex-start;padding-left:29px}
@@ -2221,6 +2238,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
        scrolling past the scoring table every time. Each section is its own page now; these tabs
        jump straight to one and the button at the foot of every page walks to the next. -->
   <div class="spage-tabs" id="setTabs"></div>
+
+  <div data-spage="league" class="card admin-only" id="readyCard" style="margin-bottom:18px"></div>
 
   <div data-spage="league" class="card" style="margin-bottom:18px">
     <h2>League</h2>
@@ -12453,7 +12472,114 @@ function renderTeams(){
 /* =====================================================
    Settings
 ===================================================== */
+/* ===================== DRAFT READINESS =====================
+   Everything that has to be true before draft day, in one place, worked out from the live
+   league rather than remembered. It exists because the answers were scattered across four
+   screens and a database nobody can read without signing in: how many managers have actually
+   claimed a team, whether anybody registered and then never picked one, whether two people
+   have somehow landed on the same roster, and whether the keepers are in.
+
+   Ordered by what actually stops a draft. An unclaimed team is not a warning, it is twelve
+   people watching one man type. */
+function draftReadiness(){
+  const teams = S.teams || [];
+  const n = teams.length;
+  const m = (typeof managersMap!=='undefined' && managersMap) || {};
+  const uidOf = ti => { try{ return uidForTeam(ti) || null; }catch(e){ return null; } };
+
+  const claimed = [], unclaimed = [];
+  teams.forEach((t,i)=>{ (uidOf(i) ? claimed : unclaimed).push(t.name || ('Team '+(i+1))); });
+
+  /* an account that registered but never picked a team can neither draft nor be told anything */
+  const accounts = Object.entries(m);
+  const stranded = accounts.filter(([,a])=>!a || !Number.isInteger(a.teamIndex))
+                           .map(([uid,a])=>(a && (a.name || a.email)) || uid.slice(0,8));
+
+  /* two people on one roster fight over the lineup and both think they are drafting */
+  const byTeam = {};
+  accounts.forEach(([,a])=>{ if(a && Number.isInteger(a.teamIndex)) byTeam[a.teamIndex]=(byTeam[a.teamIndex]||0)+1; });
+  const doubled = Object.entries(byTeam).filter(([,c])=>c>1)
+                        .map(([ti,c])=>((teams[ti]||{}).name || ('Team '+(+ti+1)))+' \u00D7'+c);
+
+  /* keepers are commissioner-entered by hand and the auto-draft deliberately skips them */
+  let keeperOn = false, keepersIn = 0;
+  try{ keeperOn = !!KR(); }catch(e){}
+  try{
+    const d = realDraft();
+    keepersIn = (d.picks||[]).filter(x=>+x.pickIndex>=0 && roundForPick(+x.pickIndex)===0 && !x.cut).length;
+  }catch(e){}
+
+  let started=false, picks=0;
+  try{ const d=realDraft(); started=!!d.started; picks=(d.picks||[]).filter(x=>+x.pickIndex>=0).length; }catch(e){}
+
+  const pushOn = !!(S.pushAppId && String(S.pushAppId).trim()) && !!(S.pushRelay && String(S.pushRelay).trim());
+
+  return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks, pushOn,
+           accounts: accounts.length };
+}
+function renderReadyCard(){
+  const el = document.getElementById('readyCard'); if(!el) return;
+  if(!isAdmin()){ el.style.display='none'; return; }
+  let r; try{ r = draftReadiness(); }catch(e){ el.style.display='none'; return; }
+  el.style.display='block';
+
+  const row = (state, what, detail, right) =>
+    `<div class="rd-row ${state}"><span class="rd-mark">${state==='ok'?'\u2713':state==='warn'?'!':'\u25CB'}</span>
+      <span class="rd-what">${what}${detail?`<span class="rd-detail">${detail}</span>`:''}</span>
+      <span class="rd-state">${right||''}</span></div>`;
+
+  const rows = [];
+
+  /* the one that actually stops a draft */
+  const c = r.claimed.length;
+  rows.push(row(
+    c===r.n ? 'ok' : c===0 ? 'bad' : 'warn',
+    'Managers have claimed their team',
+    c===r.n ? 'Everyone can draft from their own phone.'
+            : 'Still to claim: ' + esc(r.unclaimed.join(', ')),
+    c + ' of ' + r.n));
+
+  if(r.doubled.length)
+    rows.push(row('bad','Two accounts on the same team',
+      esc(r.doubled.join(', ')) + ' \u2014 they will fight over the lineup, and both will think they are drafting.',
+      'fix this'));
+
+  if(r.stranded.length)
+    rows.push(row('warn','Signed in but no team picked',
+      esc(r.stranded.join(', ')) + ' \u2014 cannot draft and cannot be notified until they claim one.',
+      r.stranded.length + ''));
+
+  if(r.keeperOn)
+    rows.push(row(
+      r.keepersIn >= r.n ? 'ok' : r.keepersIn === 0 ? 'bad' : 'warn',
+      'Keepers entered',
+      r.keepersIn >= r.n ? 'The keeper round is ready.'
+        : 'The keeper round is on and auto-draft deliberately skips it, so these are typed in by hand. Missing ones mean typing while everyone waits.',
+      r.keepersIn + ' of ' + r.n));
+
+  rows.push(row(r.pushOn ? 'ok' : 'warn', 'Notifications wired up',
+    r.pushOn ? 'App ID and relay are both set.' : 'Set the App ID and relay URL under Push notifications.',
+    r.pushOn ? 'ready' : 'not set'));
+
+  rows.push(row(r.started ? 'warn' : 'ok', 'Draft board',
+    r.started ? r.picks + ' picks already made. Reset it before the real draft if this was a test.'
+              : 'Clean and waiting.',
+    r.started ? 'in progress' : 'clean'));
+
+  const blocking = r.claimed.length < r.n || r.doubled.length > 0 || (r.keeperOn && r.keepersIn < r.n);
+  let days = '';
+  try{ days = Math.max(0, Math.ceil((DRAFT_AT.getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
+
+  el.innerHTML = `<div class="rd-head"><h2 style="margin:0">Draft readiness</h2>
+      <span class="rd-count">${esc(days)}</span></div>
+    <p class="sub" data-note="ready-intro" style="margin:4px 0 12px">${blocking
+      ? 'Worked out from the live league. The items below are the ones that make draft day harder than it needs to be.'
+      : 'Worked out from the live league. Nothing is standing in the way of draft day.'}</p>
+    ${rows.join('')}`;
+  try{ paintNotes(); }catch(e){}
+}
 function renderCommishCard(){
+  try{ renderReadyCard(); }catch(e){}
   const card=document.getElementById('commishCard'); if(!card) return;
   card.style.display = isAdmin() ? 'block' : 'none';   /* settings is admin-only anyway */
   if(!isAdmin()) return;
