@@ -5996,13 +5996,19 @@ function startSeason(){
     + 'every device.\n\n'
     + 'There is no button to undo this. Getting the board back would mean editing the league '
     + 'database by hand.\n\n'
-    + 'From here a roster changes through adds, drops and trades.')) return;
+    + 'From here a roster changes through adds, drops and trades.'
+    + (pushRelay() ? '\n\nEveryone with alerts turned on gets told the draft is done.' : ''))) return;
   S.seasonStartedAt = Date.now();
   saveState();
   try{ pushSettings(true); }catch(e){}   /* force: this must not sit behind the Apply bar */
   try{ logCommish('started the season', picks + ' picks locked in, the board is closed'); }catch(e){}
   try{ refreshDraftUI(); }catch(e){}
   try{ renderReadyCard(); }catch(e){}
+  /* The whole league wants to know, and this is the one moment worth interrupting them for.
+     A broadcast rather than a targeted send: it is news for everybody, not about anyone's own
+     roster. sendPush stands down by itself when no relay is configured, and opts.mine makes
+     this device the one that announces it. */
+  try{ sendPush('The draft is done', 'Rosters are locked in. Go and look at yours.', { mine:true }); }catch(e){}
   toast('Season started \u2014 the board is locked');
 }
 function resetDraft(){
