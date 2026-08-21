@@ -12512,10 +12512,15 @@ function draftReadiness(){
   let started=false, picks=0;
   try{ const d=realDraft(); started=!!d.started; picks=(d.picks||[]).filter(x=>+x.pickIndex>=0).length; }catch(e){}
 
-  const pushOn = !!(S.pushAppId && String(S.pushAppId).trim()) && !!(S.pushRelay && String(S.pushRelay).trim());
+  /* NOT S.pushAppId: it falls back to a constant in the page, so the raw setting reads empty
+     on a league where push is working. The accessors are what the sending code actually uses. */
+  let appOk=false, relayOk=false;
+  try{ appOk = !!String(pushAppId()||'').trim(); }catch(e){}
+  try{ relayOk = !!String(pushRelay()||'').trim(); }catch(e){}
+  const pushOn = appOk && relayOk;
 
-  return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks, pushOn,
-           accounts: accounts.length };
+  return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks,
+           pushOn, appOk, relayOk, accounts: accounts.length };
 }
 function renderReadyCard(){
   const el = document.getElementById('readyCard'); if(!el) return;
@@ -12558,7 +12563,9 @@ function renderReadyCard(){
       r.keepersIn + ' of ' + r.n));
 
   rows.push(row(r.pushOn ? 'ok' : 'warn', 'Notifications wired up',
-    r.pushOn ? 'App ID and relay are both set.' : 'Set the App ID and relay URL under Push notifications.',
+    r.pushOn ? 'App ID and relay are both live. Managers still each have to allow alerts on their own phone.'
+      : (r.appOk ? 'The relay URL is missing under Push notifications.'
+                 : 'The App ID is missing under Push notifications.'),
     r.pushOn ? 'ready' : 'not set'));
 
   rows.push(row(r.started ? 'warn' : 'ok', 'Draft board',
