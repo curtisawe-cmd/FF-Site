@@ -1,12 +1,38 @@
-# Netlify configuration for FF-Site
-# Static site — a single index.html served from the repo root. No build step.
+# Netlify configuration for the Bitch Boy League site.
+#
+# The site itself is still a single static index.html with no build step - publish is the repo
+# root and the build command is empty. The only thing Netlify builds is the two push functions
+# in netlify/functions, which it bundles by itself.
 
 [build]
   publish = "."
   command = ""
 
-# Serve the SPA-style app: any unknown path falls back to index.html.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# The app is one page that routes on the hash, so any unknown path serves it rather than 404ing.
+# Functions are excluded, or /.netlify/functions/push would be swallowed by the catch-all.
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Never let the page itself be cached: a stale index.html is a stale app, and the service
+# worker is network-first for exactly the same reason.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

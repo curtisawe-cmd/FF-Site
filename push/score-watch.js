@@ -40,17 +40,25 @@
 
 const SEGMENTS = ['Total Subscriptions', 'Active Subscriptions', 'Subscribed Users', 'All'];
 
-const ALLOWED_ORIGINS = [
+/* The league's own domain goes in a Cloudflare plaintext variable named SITE_ORIGIN, so
+   moving to a real address is one variable rather than a code edit and a redeploy. Format it
+   with the scheme and no trailing slash, e.g. https://bitchboyleague.com */
+const BUILT_IN_ORIGINS = [
   'https://curtisawe-cmd.github.io',
   'http://127.0.0.1:8791',
   'http://localhost:8791',
   'http://localhost:8123'
 ];
 
-function cors(origin) {
-  const ok = ALLOWED_ORIGINS.includes(origin);
+function allowedOrigins(env) {
+  const extra = String((env && env.SITE_ORIGIN) || '').trim().replace(/\/+$/, '');
+  return extra ? [extra, ...BUILT_IN_ORIGINS] : BUILT_IN_ORIGINS;
+}
+function cors(origin, env) {
+  const list = allowedOrigins(env);
+  const ok = list.includes(origin);
   return {
-    'Access-Control-Allow-Origin': ok ? origin : ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Origin': ok ? origin : list[0],
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '86400'
@@ -217,11 +225,11 @@ export default {
 
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
-    const headers = cors(origin);
+    const headers = cors(origin, env);
 
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers });
     if (request.method !== 'POST') return new Response('POST only', { status: 405, headers });
-    if (!ALLOWED_ORIGINS.includes(origin))
+    if (!allowedOrigins(env).includes(origin))
       return new Response(JSON.stringify({ error: 'origin not allowed' }), { status: 403, headers });
 
     const APP_ID = String(env.ONESIGNAL_APP_ID || '').trim();

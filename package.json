@@ -1,0 +1,9 @@
+{
+  "name": "bitch-boy-league",
+  "private": true,
+  "type": "module",
+  "description": "The league site is a single static index.html with no build step. This file exists only so Netlify can install the one dependency the push functions need.",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
