@@ -2441,7 +2441,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="setgrid">
       <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
       <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
+      <div class="setrow"><label title="Buzz a manager when one of their starters scores. Only starters count, and only that manager is told. Sending happens on a commissioner device, so these go out while one of them has the app open.">Player scoring alerts</label><label class="cswitch"><input type="checkbox" id="setScoreAlerts" onchange="setScoreAlerts(this.checked)"><span class="track"></span><span class="lbl" id="scoreAlertsLbl">Off</span></label></div>
+      <div class="setrow"><label title="How many points a starter has to gain before it is worth a buzz. 6 is about a touchdown. Smaller gains are not thrown away - they add up until they clear this, so a quiet afternoon of catches still lands as one notification.">Buzz at (points)</label><input type="number" step="1" min="1" max="50" id="setScoreAlertMin" style="max-width:110px" onchange="setScoreAlertMin(this.value)"></div>
     </div>
+    <p class="sub" id="scoreAlertNote" style="margin:8px 0 0;font-size:12px;opacity:.75"></p>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
       <!-- admin-only: sending is commissioner-gated in sendPush, so for a manager this button
            can only ever produce a confusing failure. Force update stays visible for everyone
@@ -2624,6 +2627,8 @@ const DEFAULTS = {
   prizes: { buyIn:250, first:1500, second:500, third:250 },   /* $ buy-in per manager + podium payouts (placeholders) */
   pushAppId: '',         /* OneSignal App ID — public by design; the REST key never lives here */
   pushRelay: '',         /* Cloudflare Worker URL that holds the REST key and forwards sends */
+  scoreAlerts: true,     /* push a manager when one of their starters scores */
+  scoreAlertMin: 6,      /* points a starter has to gain before it is worth a buzz - a TD */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
   tradeAlarmLines: [],   /* user-supplied trade-accepted alarm lines; empty = built-in defaults */
@@ -4532,6 +4537,7 @@ setInterval(()=>{
   if(window.currentView==='polls') renderPolls();                  /* poll countdowns tick */
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
+  try{ checkScoreAlerts(); }catch(e){}      /* who on your team just scored */
   /* Game Center pulls fresh stats itself (5-min TTL on the live week) */
   if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
 }catch(e){} }, 60000);
@@ -6403,6 +6409,7 @@ const SETTING_LABELS={
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
+  scoreAlerts:'score alerts', scoreAlertMin:'score alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -9474,6 +9481,99 @@ async function postLiveScores(wk, season){
   await window.FB.dbSet(`${livePath()}/${wk}`, payload);
   return true;
 }
+/* ===================== SCORE ALERTS =====================
+   A buzz on your phone when one of YOUR starters scores, which is the thing you actually want
+   a fantasy app to do on a Sunday.
+
+   The plumbing was already here: OneSignal for the subscription, a Cloudflare relay holding the
+   REST key, sendPush() to reach it and uidForTeam() to aim at one manager. What was missing was
+   something watching the stat feed and deciding a buzz was earned.
+
+   Three decisions worth knowing about.
+
+   ONE DEVICE SENDS. sendPush already refuses on any device but the commissioner's, because
+   twelve open apps would otherwise fire twelve copies of the same notification. That is kept.
+   It does mean these only go out while a commissioner device has the app open - stated plainly
+   in the setting rather than left to be discovered on a quiet Sunday.
+
+   THE FIRST LOOK IS A BASELINE. Reopening the app at half time must not fire a notification for
+   every point scored while it was shut. The first pass at a week records where everybody is and
+   says nothing, exactly like the draft roasts and the record alerts.
+
+   THE MARK ONLY MOVES WHEN IT BUZZES. A catch here and a catch there should still add up to a
+   notification eventually, so the stored figure stays put until the gain clears the bar. Three
+   separate two-point gains become one "+6.0" rather than three silences. */
+const SCORE_ALERT_EVERY_MS = 90*1000;
+let _scoreAlertAt = 0, _scoreAlertBusy = false;
+function scoreAlertsOn(){ return S.scoreAlerts !== false; }
+function scoreAlertMin(){ const n=+S.scoreAlertMin; return Number.isFinite(n) && n>0 ? n : 6; }
+function scoreWatchKey(yr, wk){ return 'ffl_scorewatch_'+yr+'_'+wk; }
+function scoreWatchRead(yr, wk){
+  try{ const v=JSON.parse(store.get(scoreWatchKey(yr,wk))||'{}'); return (v && typeof v==='object') ? v : {}; }
+  catch(e){ return {}; }
+}
+function scoreWatchWrite(yr, wk, m){ try{ store.set(scoreWatchKey(yr,wk), JSON.stringify(m)); }catch(e){} }
+/* the message a team's manager gets, kept out of the async so it can be tested on its own */
+function scoreAlertText(hits, total){
+  const one = hits.length===1;
+  const list = hits.map(h=>h.name+' +'+h.gain.toFixed(1)).join(', ');
+  return {
+    title: one ? hits[0].name+' +'+hits[0].gain.toFixed(1)
+               : hits.length+' of yours just scored',
+    body:  one ? "You're on "+total.toFixed(1)
+               : list+" — you're on "+total.toFixed(1)
+  };
+}
+/* Works out who scored since the last look. Pure: hands back the buzzes to send and the new
+   marks to store, so the whole rule can be checked without a network or a notification. */
+function scoreAlertPass(stats, seen, minGain){
+  const first = !seen || !seen.__seen;
+  const next = { __seen: 1 };
+  const out = [];
+  (S.teams||[]).forEach((t, ti)=>{
+    let det; try{ det = teamWeekDetail(ti, stats); }catch(e){ return; }
+    const hits = [];
+    (det.rows||[]).forEach(r=>{
+      const pts = Math.round((+r.pts||0)*10)/10;
+      const was = (seen && seen[r.playerId]!==undefined) ? +seen[r.playerId] : 0;
+      const gain = Math.round((pts - was)*10)/10;
+      if(!first && gain >= minGain){
+        hits.push({ name:r.name, gain, pts });
+        next[r.playerId] = pts;          /* cleared the bar, so the mark moves up to here */
+      } else {
+        next[r.playerId] = first ? pts : was;   /* otherwise it stays put and small gains accrue */
+      }
+    });
+    if(hits.length) out.push({ ti, hits, total: det.total });
+  });
+  return { first, next, teams: out };
+}
+async function checkScoreAlerts(){
+  if(_scoreAlertBusy) return;
+  if(!scoreAlertsOn() || !pushRelay() || !isAdmin()) return;
+  if(!fbOk() || !window.fbUser) return;
+  if(!(S.season && S.season.schedule)) return;
+  const wk = currentNflWeek(); if(!wk) return;
+  if(Date.now() - _scoreAlertAt < SCORE_ALERT_EVERY_MS) return;
+  _scoreAlertBusy = true;
+  try{
+    const yr = +((S.season && S.season.year)) || (typeof curDraftYear==='function' ? curDraftYear() : 2026);
+    const stats = await fetchWeekStats(yr, wk);          /* its own TTL: this never hammers the feed */
+    if(!stats || !Object.keys(stats).length) return;
+    _scoreAlertAt = Date.now();
+    const pass = scoreAlertPass(stats, scoreWatchRead(yr, wk), scoreAlertMin());
+    scoreWatchWrite(yr, wk, pass.next);
+    if(pass.first) return;                                /* baseline only, nobody is told */
+    for(const b of pass.teams){
+      const uid = uidForTeam(b.ti);
+      if(!uid) continue;                                  /* an unclaimed team has nobody to tell */
+      const msg = scoreAlertText(b.hits, b.total);
+      try{ await sendPush(msg.title, msg.body, { uids:[uid] }); }catch(e){}
+    }
+  }catch(e){}
+  finally{ _scoreAlertBusy = false; }
+}
+
 /* hands-off scoring: any member's open app refreshes the live board on a throttle.
    The throttle reads the SHARED timestamp, so 12 devices don't all hammer the feed —
    whoever gets there first covers everyone. */
@@ -12447,6 +12547,7 @@ function renderSettings(){
     if(a) a.value = S.pushAppId || (ready ? pushAppId() : '');
     const rl=document.getElementById('setPushRelay');
     if(rl) rl.value = ready ? pushRelay() : (S.pushRelay || '');
+    try{ renderScoreAlertSetting(); }catch(e){}
     renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
   renderTypography();
@@ -12675,6 +12776,26 @@ function setPushApp(v){
   if(S.pushAppId) initPush();
   syncPushBtn();                       /* show the button on the App ID alone — the SDK
                                           callback that also calls this may never fire */
+}
+function setScoreAlerts(on){
+  S.scoreAlerts = !!on; saveState(); renderScoreAlertSetting();
+  toast(on ? 'Scoring alerts on' : 'Scoring alerts off');
+}
+function setScoreAlertMin(v){
+  const n = Math.max(1, Math.min(50, Math.round(+v||0)));
+  S.scoreAlertMin = n; saveState(); renderScoreAlertSetting();
+  toast('Buzzing at +'+n+' points');
+}
+function renderScoreAlertSetting(){
+  const cb=document.getElementById('setScoreAlerts'); if(cb) cb.checked=scoreAlertsOn();
+  const lb=document.getElementById('scoreAlertsLbl'); if(lb) lb.textContent=scoreAlertsOn()?'On':'Off';
+  const mn=document.getElementById('setScoreAlertMin'); if(mn) mn.value=String(scoreAlertMin());
+  const note=document.getElementById('scoreAlertNote'); if(!note) return;
+  note.textContent = !scoreAlertsOn()
+    ? 'Nobody is told when their players score.'
+    : !pushRelay()
+    ? 'Set the relay URL above first — without it nothing can be sent.'
+    : 'Each manager is told only about their own starters, at +'+scoreAlertMin()+' points or more. Smaller gains add up until they clear that. Sent from a commissioner device, so they go out while one has the app open.';
 }
 function setPushRelay(v){
   S.pushRelay = String(v||'').trim().replace(/\/+$/,'');
