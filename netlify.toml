@@ -7,6 +7,17 @@
 [build]
   publish = "."
   command = ""
+  # Netlify scans the build output for the VALUES of this site's environment variables and
+  # fails the deploy if it finds one. ONESIGNAL_APP_ID is deliberately in index.html: the
+  # OneSignal SDK needs it to initialise in the browser, so every visitor is served it anyway.
+  # It identifies the app, it does not authorise anything - it is public by design, the same way
+  # the Firebase web config is.
+  #
+  # ONESIGNAL_API_KEY - the REST key, which really is a secret - is deliberately NOT listed here.
+  # It stays scanned, so if it ever did leak into the page the build would still fail, which is
+  # the protection actually worth having.
+  [build.environment]
+    SECRETS_SCAN_OMIT_KEYS = "ONESIGNAL_APP_ID"
 
 [functions]
   directory = "netlify/functions"
