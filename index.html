@@ -7646,34 +7646,52 @@ function openKeeperPicker(ti){
   setTimeout(()=>{ const q=document.getElementById('kpSearch'); if(q) q.focus(); }, 30);
 }
 function closeKeeperPicker(){ const ov=document.getElementById('keeperModal'); if(ov) ov.style.display='none'; }
+/* Split in two on purpose. The shell - heading, the kept-player row, the search box - is drawn
+   once when the modal opens. Only the LIST redraws as you type.
+
+   Drawing the whole thing on every keystroke is what broke the search: the input lives inside
+   that innerHTML, so rebuilding it threw away the element being typed into, along with its value
+   and the caret. One character went in, the box emptied itself, and the list never filtered.
+   Exactly the bug the poll form had, for exactly the same reason. */
+function keeperCandidates(ti, q){
+  const taken = new Set((D.picks||[]).filter(x=>!x.cut && +x.pickIndex!==+ti).map(x=>String(x.playerId)));
+  q = String(q||'').toLowerCase().trim();
+  return (POOL||[])
+    .filter(pl => !taken.has(String(pl.id)))
+    .filter(pl => !q || String(pl.name||'').toLowerCase().includes(q)
+                     || String(pl.team||'').toLowerCase().includes(q)
+                     || String(pl.pos||'').toLowerCase() === q)
+    .slice(0, 60);
+}
+function renderKeeperList(){
+  const ov = document.getElementById('keeperModal'); if(!ov) return;
+  const box = document.getElementById('kpList'); if(!box) return;
+  const ti = +ov.dataset.ti;
+  const qEl = document.getElementById('kpSearch');
+  const list = keeperCandidates(ti, qEl ? qEl.value : '');
+  box.innerHTML = list.length ? list.map(pl => `<div class="kp-row">
+      <span class="postag pos-${pl.pos}" style="--pc:var(--${String(pl.pos||'').toLowerCase()})">${pl.pos}</span>
+      <span class="nm">${esc(pl.name)}</span>
+      <span class="meta">${esc(pl.team||'FA')}</span>
+      <button class="btn" style="padding:3px 14px;font-size:12px" onclick="setKeeper(${ti},'${pl.id}')">Keep</button>
+    </div>`).join('')
+    : '<p class="sub" style="margin:8px 0">No available players match.</p>';
+}
 function renderKeeperPicker(){
   const ov = document.getElementById('keeperModal'); if(!ov || ov.style.display==='none') return;
   const ti = +ov.dataset.ti;
   const t = (S.teams||[])[ti] || {};
-  const q = String((document.getElementById('kpSearch')||{}).value || '').toLowerCase().trim();
-  const taken = new Set((D.picks||[]).filter(x=>!x.cut).map(x=>String(x.playerId)));
   const has = keeperPickOf(ti);
-  const list = (POOL||[])
-    .filter(pl => !taken.has(String(pl.id)))
-    .filter(pl => !q || pl.name.toLowerCase().includes(q) || String(pl.team||'').toLowerCase().includes(q))
-    .slice(0, 60);
   ov.innerHTML = `<div class="pmodal" style="max-width:520px">
     <button class="pmodal-x" onclick="closeKeeperPicker()" aria-label="Close">\u2715</button>
     <h2 style="margin:0 0 4px">Keeper \u2014 ${esc(t.name || ('Team '+(ti+1)))}</h2>
     <p class="sub" style="margin:0 0 10px">Who are they keeping? This fills their keeper-round slot before the draft, so nobody has to sit through it live.</p>
     ${has ? `<div class="kp-has"><span><b>${esc(has.name)}</b> <span style="color:var(--chalk-dim)">${esc(has.pos||'')} ${esc(has.nfl||'')}</span></span>
       <button class="btn danger" style="padding:3px 12px;font-size:12px" onclick="clearKeeper(${ti})">Remove</button></div>` : ''}
-    <input type="text" id="kpSearch" placeholder="Search players\u2026" oninput="renderKeeperPicker()" style="width:100%;margin:12px 0 8px">
-    <div style="max-height:46vh;overflow-y:auto">${
-      list.length ? list.map(pl=>`<div class="kp-row">
-        <span class="postag pos-${pl.pos}" style="--pc:var(--${String(pl.pos||'').toLowerCase()})">${pl.pos}</span>
-        <span class="nm">${esc(pl.name)}</span>
-        <span class="meta">${esc(pl.team||'FA')}</span>
-        <button class="btn" style="padding:3px 14px;font-size:12px" onclick="setKeeper(${ti},'${pl.id}')">Keep</button>
-      </div>`).join('')
-      : '<p class="sub" style="margin:8px 0">No available players match.</p>'
-    }</div>
+    <input type="text" id="kpSearch" placeholder="Search players\u2026" autocomplete="off" oninput="renderKeeperList()" style="width:100%;margin:12px 0 8px">
+    <div id="kpList" style="max-height:46vh;overflow-y:auto"></div>
   </div>`;
+  renderKeeperList();
 }
 function renderBoard(){
   const board = document.getElementById('board');
