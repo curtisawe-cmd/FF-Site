@@ -18,6 +18,16 @@
   # the protection actually worth having.
   [build.environment]
     SECRETS_SCAN_OMIT_KEYS = "ONESIGNAL_APP_ID"
+    # Netlify also runs a HEURISTIC pass that flags anything merely shaped like a credential,
+    # regardless of whether it is one of this site's variables. index.html carries the Firebase
+    # web config, and a Firebase web apiKey looks exactly like an API key while being public by
+    # design - it identifies the project, and access is controlled by the database rules, not by
+    # keeping it hidden. It is in every visitor's copy of the page already.
+    #
+    # This switches off the guesswork, NOT the scan. The check that matters - "is one of this
+    # site's actual environment variable values sitting in the output" - still runs, and
+    # ONESIGNAL_API_KEY is still covered by it.
+    SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
 [functions]
   directory = "netlify/functions"
