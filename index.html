@@ -599,6 +599,20 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .tpl-line .n{flex:0 0 auto;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);min-width:44px}
 .tpl-line .t{font-weight:600;color:var(--chalk)}
 .tpl-prev .none{font-size:13px;color:var(--chalk-dim)}
+/* an empty keeper slot the commissioner can fill before the draft */
+.kp-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  width:100%;height:100%;min-height:52px;border:1px dashed var(--line-strong);border-radius:8px;
+  background:transparent;color:var(--chalk-dim);cursor:pointer;padding:4px;
+  transition:color .12s ease,border-color .12s ease,background .12s ease}
+.kp-add:hover{color:var(--gold);border-color:var(--gold);background:rgba(255,202,58,.06)}
+.kp-add .plus{font-size:15px;line-height:1;font-weight:700}
+.kp-add .lbl{font-family:var(--f-ui);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase}
+.kp-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.kp-row:last-child{border-bottom:none}
+.kp-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13.5px}
+.kp-row .meta{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);white-space:nowrap}
+.kp-has{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;
+  padding:10px 12px;border:1px solid var(--gold);border-radius:8px;background:var(--gold-wash,rgba(255,202,58,.08))}
 @media(max-width:560px){
   .rd-row{grid-template-columns:20px 1fr}
   .rd-state{grid-column:2;text-align:left;padding-top:2px}
@@ -7568,6 +7582,99 @@ try{
 const TEAM_COLORS = ['#ff4d5e','#45c1ff','#ffd24d','#b45cff','#33cc7a','#ff85b3',
                      '#5a6bff','#ff9430','#2ee6c8','#e858e0','#b8e33d','#cfd6e4'];
 function teamColor(ti){ return TEAM_COLORS[((+ti||0)%TEAM_COLORS.length+TEAM_COLORS.length)%TEAM_COLORS.length]; }
+/* ===================== KEEPERS, BEFORE THE DRAFT =====================
+   The keeper round is entered by hand - the auto-draft deliberately skips it - and until now
+   that meant starting the draft and picking through round zero live, with eleven people
+   watching. This lets the commissioner fill the keeper row straight off the board beforehand.
+
+   The keeper row is straight order, and teamForPick says a keeper slot's index IS the team
+   index, so the mapping needs no snake arithmetic. Writes go through the same D.picks shape a
+   real pick uses, so everything downstream - the board, rosters, the readiness panel, the
+   season lock - sees an ordinary pick and needs no special case. */
+function keeperPickOf(ti){
+  if(!KR()) return null;
+  return (D.picks||[]).find(x => +x.pickIndex === +ti && !x.cut) || null;
+}
+function keeperEditable(){
+  return KR() && draftMode==='real' && !D.started && !seasonStarted() && isAdmin();
+}
+function setKeeper(ti, pid){
+  if(!requireAdmin()) return;
+  if(!keeperEditable()){
+    toast(D.started ? 'The draft has started \u2014 pick from the board.' : 'Keepers cannot be edited now.');
+    return;
+  }
+  const pl = (typeof POOL_MAP!=='undefined' && POOL_MAP.get(String(pid)))
+          || (POOL||[]).find(x=>String(x.id)===String(pid));
+  if(!pl){ toast('Could not find that player.'); return; }
+  const already = (D.picks||[]).find(x=>String(x.playerId)===String(pl.id) && !x.cut && +x.pickIndex!==+ti);
+  if(already){ toast(pl.name+' is already kept by '+((S.teams[+already.teamIndex]||{}).name||'another team')+'.'); return; }
+  D.picks = (D.picks||[]).filter(x => +x.pickIndex !== +ti);   /* replacing, not stacking */
+  D.picks.push({ pickIndex:+ti, teamIndex:+ti, playerId:String(pl.id),
+                 name:pl.name, pos:pl.pos, nfl:pl.team, auto:false });
+  saveDraft();
+  /* the same one-year check a live keeper pick gets */
+  try{ const v = keeperViolation(pl.name, +ti);
+       if(v) keeperAlarm(pl.name, v.year, v.mgr || v.team, (S.teams[+ti]||{}).name); }catch(e){}
+  try{ logCommish('set a keeper', ((S.teams[+ti]||{}).name||'a team')+' keep '+pl.name); }catch(e){}
+  closeKeeperPicker();
+  try{ refreshDraftUI(); renderReadyCard(); }catch(e){}
+  toast(((S.teams[+ti]||{}).name||'Team')+' keep '+pl.name);
+}
+function clearKeeper(ti){
+  if(!requireAdmin()) return;
+  if(!keeperEditable()){ toast('Keepers cannot be edited now.'); return; }
+  const had = keeperPickOf(ti); if(!had) return;
+  D.picks = (D.picks||[]).filter(x => +x.pickIndex !== +ti);
+  saveDraft();
+  try{ logCommish('removed a keeper', ((S.teams[+ti]||{}).name||'a team')+' drop '+(had.name||'')); }catch(e){}
+  closeKeeperPicker();
+  try{ refreshDraftUI(); renderReadyCard(); }catch(e){}
+  toast('Keeper cleared');
+}
+function openKeeperPicker(ti){
+  if(!keeperEditable()) return;
+  let ov = document.getElementById('keeperModal');
+  if(!ov){
+    ov = document.createElement('div'); ov.id='keeperModal'; ov.className='pmodal-overlay';
+    ov.addEventListener('click', e=>{ if(e.target===ov) closeKeeperPicker(); });
+    document.body.appendChild(ov);
+  }
+  ov.dataset.ti = String(ti);
+  ov.style.display='flex';
+  renderKeeperPicker();
+  setTimeout(()=>{ const q=document.getElementById('kpSearch'); if(q) q.focus(); }, 30);
+}
+function closeKeeperPicker(){ const ov=document.getElementById('keeperModal'); if(ov) ov.style.display='none'; }
+function renderKeeperPicker(){
+  const ov = document.getElementById('keeperModal'); if(!ov || ov.style.display==='none') return;
+  const ti = +ov.dataset.ti;
+  const t = (S.teams||[])[ti] || {};
+  const q = String((document.getElementById('kpSearch')||{}).value || '').toLowerCase().trim();
+  const taken = new Set((D.picks||[]).filter(x=>!x.cut).map(x=>String(x.playerId)));
+  const has = keeperPickOf(ti);
+  const list = (POOL||[])
+    .filter(pl => !taken.has(String(pl.id)))
+    .filter(pl => !q || pl.name.toLowerCase().includes(q) || String(pl.team||'').toLowerCase().includes(q))
+    .slice(0, 60);
+  ov.innerHTML = `<div class="pmodal" style="max-width:520px">
+    <button class="pmodal-x" onclick="closeKeeperPicker()" aria-label="Close">\u2715</button>
+    <h2 style="margin:0 0 4px">Keeper \u2014 ${esc(t.name || ('Team '+(ti+1)))}</h2>
+    <p class="sub" style="margin:0 0 10px">Who are they keeping? This fills their keeper-round slot before the draft, so nobody has to sit through it live.</p>
+    ${has ? `<div class="kp-has"><span><b>${esc(has.name)}</b> <span style="color:var(--chalk-dim)">${esc(has.pos||'')} ${esc(has.nfl||'')}</span></span>
+      <button class="btn danger" style="padding:3px 12px;font-size:12px" onclick="clearKeeper(${ti})">Remove</button></div>` : ''}
+    <input type="text" id="kpSearch" placeholder="Search players\u2026" oninput="renderKeeperPicker()" style="width:100%;margin:12px 0 8px">
+    <div style="max-height:46vh;overflow-y:auto">${
+      list.length ? list.map(pl=>`<div class="kp-row">
+        <span class="postag pos-${pl.pos}" style="--pc:var(--${String(pl.pos||'').toLowerCase()})">${pl.pos}</span>
+        <span class="nm">${esc(pl.name)}</span>
+        <span class="meta">${esc(pl.team||'FA')}</span>
+        <button class="btn" style="padding:3px 14px;font-size:12px" onclick="setKeeper(${ti},'${pl.id}')">Keep</button>
+      </div>`).join('')
+      : '<p class="sub" style="margin:8px 0">No available players match.</p>'
+    }</div>
+  </div>`;
+}
 function renderBoard(){
   const board = document.getElementById('board');
   const n = N(), rounds = snakeRounds();
@@ -7624,6 +7731,9 @@ function renderBoard(){
       /* this column's own slot */
       if(p && !traded) parts.push(stickerHTML(p, idx));
       else if(p && traded) parts.push(`<div class="stk-cell gone" title="${esc(tradeTip)}"><span class="gone-note">→ <span style="color:${teamColor(own)}">${esc(S.teams[own].name)}</span></span></div>`);
+      /* an empty keeper slot the commissioner can fill in before anyone starts the draft */
+      else if(meta.keeper && !traded && keeperEditable())
+        parts.push(`<div class="stk-cell"><button class="kp-add" title="Set the keeper for ${esc((S.teams[own]||{}).name||"this team")}" onclick="openKeeperPicker(${own})"><span class="plus">+</span><span class="lbl">Keeper</span></button></div>`);
       else parts.push(`<div class="stk-cell${isNext?' next':''}">${traded?`<div class="toTeam"><span class="tt-tag">TRADE</span><span class="tt-name">→ ${esc(S.teams[own].name)}</span></div>`:''}</div>`);
       html += `<div class="slot${isNext?' next':''}${traded?' traded':''}"${traded?` style="--tc:${teamColor(own)}" title="${esc(tradeTip)}"`:''}>${parts.join('')}</div>`;
     }
