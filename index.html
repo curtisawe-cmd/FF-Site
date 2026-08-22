@@ -208,7 +208,7 @@ header.top{
    explicitly takes it to (0,3,1) so sticky wins outright regardless of source order. */
 section.view[data-ghost] > .viewhead,
 section.view > .viewhead{
-  position:sticky;top:var(--hdr-h,72px);z-index:15;background:var(--bg);
+  position:sticky;top:var(--vhead-top,var(--hdr-h,72px));z-index:15;background:var(--bg);
   padding-top:14px;margin-top:-14px;padding-bottom:6px;
   box-shadow:0 10px 14px -12px rgba(0,0,0,.45);
 }
@@ -14650,7 +14650,44 @@ function syncHeaderH(){
             && window.matchMedia('(min-width:641px)').matches;
   if(side){ document.documentElement.style.setProperty('--hdr-h','0px'); return; }
   const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px');
+  try{ _vheadLast = -1; syncViewheadTop(); }catch(e){}   /* the header just changed shape */
 }
+
+/* Every view's title bar - and the tabs that ride in it - pins directly beneath the header, at a
+   distance measured once into --hdr-h. That is only the right distance while the header is
+   actually sitting where it was measured. When it is not, the title bar stays put at the old
+   offset and the page scrolls through the band between them, which looks exactly like the tabs
+   being stuck in mid-air with content sliding behind.
+
+   Two different things cause that and both were real. On desktop the header stops sticking part
+   way down, because html,body{height:100%} caps how far a sticky child may travel; it scrolls
+   off while the title bar hangs below the hole it left. On Android the same shape turned up from
+   the other direction - the header sitting higher than its measured height.
+
+   Tracking the header's real bottom edge makes the gap impossible either way. Pinned, that IS
+   the header height and nothing moves. Gone, it falls to zero and the title bar slides up to the
+   top instead of hanging in space. It is deliberately a separate variable: --hdr-h is measured
+   once and several other things (the draft pool, Game Center anchors, the apply bar) depend on
+   it holding still. */
+let _vheadRaf = 0, _vheadLast = -1;
+function syncViewheadTop(){
+  _vheadRaf = 0;
+  const h = document.querySelector('header.top'); if(!h) return;
+  const side = document.documentElement.getAttribute('data-layout')==='side'
+            && window.matchMedia('(min-width:641px)').matches;
+  /* the rail has no bottom edge to sit under */
+  const v = side ? 0 : Math.max(0, Math.round(h.getBoundingClientRect().bottom));
+  if(v === _vheadLast) return;                 /* the common case: nothing to write */
+  _vheadLast = v;
+  document.documentElement.style.setProperty('--vhead-top', v + 'px');
+}
+/* One rect read per frame at most, and only while something is actually moving. Bound on window
+   AND on document in the capture phase for the same reason the Game Center jumper is: below
+   720px BODY is the scroll box, and its scroll event never reaches window. */
+function queueViewheadTop(){ if(!_vheadRaf) _vheadRaf = requestAnimationFrame(syncViewheadTop); }
+window.addEventListener('scroll', queueViewheadTop, {passive:true});
+document.addEventListener('scroll', queueViewheadTop, {passive:true, capture:true});
+window.addEventListener('resize', queueViewheadTop, {passive:true});
 
 /* The board is its own scroll area so the team names can stick to the top of it. Give it exactly
    the room that is left once everything pinned above and below has taken its share, measured
