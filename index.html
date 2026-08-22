@@ -2480,7 +2480,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
         <input type="number" id="setTabFlashEvery" min="0" max="200" style="max-width:62px;font-size:13px" onchange="S.tabFlashEvery=Math.max(0,+this.value||0);saveState()">
         <span class="sub" style="margin:0;font-size:12px">clicks</span>
         <label class="sub" title="Fire at unpredictable intervals instead of exactly every Nth click — still averages the number above, but nobody can count to it." style="margin:0;font-size:12px;display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="setTabFlashRandom" style="width:auto;margin:0" onchange="S.tabFlashRandom=this.checked;tabFlashNext=0;saveState()"> random</label>
-        <button class="btn ghost" style="padding:2px 10px;font-size:12px" onclick="flashTab((S.tabFlash||[])[0]||'TEST FLASH')">Test</button>
+        <button class="btn ghost" style="padding:2px 10px;font-size:12px" onclick="testTabFlash()" title="Shows the next line each time, so you can check every one of them">Test</button>
       </div>
     </div>
   </div>
@@ -5934,6 +5934,20 @@ function toggleTabFlashLock(){
   { const tr=document.getElementById('setTabFlashRandom'); if(tr) tr.checked=!!S.tabFlashRandom; }
 }
 function saveTabFlash(val){ S.tabFlash = String(val||'').split('\n').map(s=>s.trim()).filter(Boolean); saveState(); }
+/* Test used to pass line ONE every time, so a commissioner with six lines saw the first one
+   six times over and concluded the other five did nothing. The feature itself was always fine:
+   it picks at random when it fires for real. This walks the lines in order instead, so pressing
+   Test as many times as you have lines shows you every one of them, which is the question the
+   button is actually being asked. */
+let tabFlashTestAt = 0;
+function testTabFlash(){
+  const lines = (S.tabFlash||[]).filter(Boolean);
+  if(!lines.length){ flashTab('TEST FLASH'); toast('Nothing written yet \u2014 that was a sample.'); return; }
+  const i = tabFlashTestAt % lines.length;
+  tabFlashTestAt = (tabFlashTestAt + 1) % lines.length;
+  flashTab(lines[i]);
+  if(lines.length > 1) toast('Line ' + (i+1) + ' of ' + lines.length + ' \u2014 press again for the next');
+}
 function flashTab(text){
   const ov=document.getElementById('tabFlash'), el=document.getElementById('tabFlashText');
   const lines=(S.tabFlash||[]).filter(Boolean);
