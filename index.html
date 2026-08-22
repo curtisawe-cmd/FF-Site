@@ -4530,7 +4530,9 @@ function roundForPick(idx){ // 0 = keeper round
   if(KR() && idx < N()) return 0;
   return Math.floor((idx - KR()*N())/N()) + 1;
 }
-function pickLabel(idx){ const rd=roundForPick(idx); if(rd===0) return `Keeper Round · Pick ${idx+1}`; const j=idx-KR()*N(); return `Round ${rd} · Pick ${j%N()+1}  (#${idx+1} overall)`; }
+/* "overall" counts DRAFT picks. It used to count board slots, so with a keeper round switched on
+   the very first pick of Round 1 announced itself as #13 overall. */
+function pickLabel(idx){ const rd=roundForPick(idx); if(rd===0) return `Keeper Round · Pick ${idx+1}`; const j=idx-KR()*N(); return `Round ${rd} · Pick ${j%N()+1}  (#${j+1} overall)`; }
 function ownerForPick(idx){ // pick trades: slot belongs to original team, but another team may own it
   const orig = teamForPick(idx), round = roundForPick(idx);
   if(round===0) return orig; // keepers can't change hands
@@ -5460,14 +5462,20 @@ function syncClockFromShared(){
   const left=Math.max(0, Math.ceil((end-Date.now())/1000));
   if(!timerId || Math.abs(left-timeLeft)>2) armClock(left||1);
 }
-/* Next draft slot = the SMALLEST unfilled index, not the count. Counting broke the moment two
-   commissioner devices raced: a duplicated index made the count overshoot and a whole slot -
-   a whole person - got skipped, permanently. Smallest-unfilled self-heals: if a slot ever gets
-   skipped, it simply becomes the next pick. FA pickups sit at pickIndex -1 and don't count;
-   cut picks consumed their slot, so they do. */
+/* Where the draft actually begins. The keeper row occupies board indexes 0..N-1, but it is NOT
+   part of the running order. Start used to park the room on keeper slot one and sit there while
+   the commissioner typed twelve names in with eleven people watching. A keeper is a roster fact,
+   not a pick: the clock never stops on one, and they go in whenever - before the draft, during
+   it, or after it. */
+function firstDraftIndex(){ return KR()*N(); }
+/* Next draft slot = the SMALLEST unfilled index from Round 1 on, not the count. Counting broke
+   the moment two commissioner devices raced: a duplicated index made the count overshoot and a
+   whole slot - a whole person - got skipped, permanently. Smallest-unfilled self-heals: if a
+   slot ever gets skipped, it simply becomes the next pick. FA pickups sit at pickIndex -1 and
+   don't count; cut picks consumed their slot, so they do. */
 function currentPickIndex(){
   const used=new Set(D.picks.filter(p=>+p.pickIndex>=0).map(p=>+p.pickIndex));
-  let i=0; while(used.has(i)) i++;
+  let i=firstDraftIndex(); while(used.has(i)) i++;
   return i;
 }
 /* Two devices pushing whole boards can land the same slot or the same player twice. First
@@ -5909,13 +5917,24 @@ function afterPick(){
   saveDraft();
   refreshDraftUI();
 }
+/* The one entry Undo would take back: the highest REAL draft slot. Keepers sit below
+   firstDraftIndex and free-agent adds sit at -1; neither is a draft pick, and neither is what
+   Undo is for. The button's enabled state reads this same function, so it is live exactly when
+   there is something to undo. It used to count every row in D.picks, so a board holding twelve
+   keepers and no picks lit the button up and then did nothing at all when tapped. */
+function lastDraftPick(){
+  let last=null;
+  (D.picks||[]).forEach(p=>{ if(+p.pickIndex >= firstDraftIndex() && (!last || +p.pickIndex > +last.pickIndex)) last=p; });
+  return last;
+}
 function undoPick(){
   if(!requireDraftControl()) return;
   /* undoing a draft pick after kickoff would quietly rewrite a roster somebody is already
      starting players from - the same reason Reset is shut */
   if(boardLocked()){ toast('The season is under way \u2014 picks cannot be undone.'); return; }
-  if(!D.picks.length) return;
-  const last = D.picks.pop();
+  const last = lastDraftPick();
+  if(!last) return;
+  D.picks = D.picks.filter(p=>p!==last);
   D.finished = false; saveDraft();
   toast(`Undid: ${last.name}`);
   if(D.started && !D.paused) armClock();
@@ -7628,13 +7647,16 @@ function keeperPickOf(ti){
   if(!KR()) return null;
   return (D.picks||[]).find(x => +x.pickIndex === +ti && !x.cut) || null;
 }
+/* Open right up until the season locks the board. The draft no longer waits on keepers, so there
+   is no reason to shut this the moment Start is pressed - a keeper settled halfway through round
+   four still just goes in, and the row is right there on the board. */
 function keeperEditable(){
-  return KR() && draftMode==='real' && !D.started && !seasonStarted() && isAdmin();
+  return KR() && draftMode==='real' && !boardLocked() && isAdmin();
 }
 function setKeeper(ti, pid){
   if(!requireAdmin()) return;
   if(!keeperEditable()){
-    toast(D.started ? 'The draft has started \u2014 pick from the board.' : 'Keepers cannot be edited now.');
+    toast(seasonStarted() ? 'The season is under way \u2014 the board is locked.' : 'Keepers cannot be edited now.');
     return;
   }
   const pl = (typeof POOL_MAP!=='undefined' && POOL_MAP.get(String(pid)))
@@ -7997,7 +8019,10 @@ function clockLineFor(idx, ti){
     .split('{team}').join(t.name || ('Team '+((+ti||0)+1)))
     .split('{mgr}').join(mgr || t.name || 'somebody')
     .split('{round}').join(rd===0 ? 'the keeper round' : (rd==null ? '' : 'round '+rd))
-    .split('{pick}').join(String((+idx||0)+1));
+    /* the DRAFT pick number, matching pickLabel right above it in the same banner. It counted
+       board slots, so with a keeper round on, a line reading "pick {pick}" announced pick 13
+       while the label beside it read #1 overall. {round} already did the right thing. */
+    .split('{pick}').join(String(rd===0 ? (+idx||0)+1 : (+idx||0)-firstDraftIndex()+1));
 }
 /* Shows what the wording will actually read like, filled in with real teams from this league,
    without needing a draft running. It exists because the banner only speaks during a live draft:
@@ -8031,9 +8056,14 @@ function renderClockPreview(raw){
   S.clockLines = lines;
   let rows = '';
   try{
+    /* start where the draft starts. Walking from board slot 0 previewed the keeper row, so
+       every {round} read "the keeper round" and every {pick} was a full round out - the
+       commissioner tuned the wording against text the room will never see. */
+    const base = (()=>{ try{ return firstDraftIndex(); }catch(e){ return 0; } })();
     for(let k=0; k<lines.length; k++){
-      let ti = k; try{ ti = ownerForPick(k); }catch(e){ ti = k % Math.max(1,(S.teams||[]).length); }
-      const txt = clockLineFor(k, ti);
+      const idx = base + k;
+      let ti = idx; try{ ti = ownerForPick(idx); }catch(e){ ti = idx % Math.max(1,(S.teams||[]).length); }
+      const txt = clockLineFor(idx, ti);
       rows += '<div class="tpl-line"><span class="n">pick ' + (k+1) + '</span><span class="t">' + esc(txt||'') + '</span></div>';
     }
   }catch(e){ rows = '<span class="none">Could not build a preview.</span>'; }
@@ -8063,7 +8093,7 @@ function refreshDraftUI(){
   startBtn.disabled = D.started && !D.finished;
   document.getElementById('btnPause').disabled = !D.started || D.finished;
   const locked = boardLocked();
-  document.getElementById('btnUndo').disabled = !D.picks.length || locked;
+  document.getElementById('btnUndo').disabled = !lastDraftPick() || locked;
   { /* the offer to start, and the shut door once it is taken */
     const sb = document.getElementById('btnSeason');
     if(sb) sb.style.display = (draftMode==='real' && D.finished && !locked) ? 'inline-flex' : 'none';
@@ -12887,10 +12917,10 @@ function renderReadyCard(){
 
   if(r.keeperOn)
     rows.push(row(
-      r.keepersIn >= r.n ? 'ok' : r.keepersIn === 0 ? 'bad' : 'warn',
+      r.keepersIn >= r.n ? 'ok' : 'warn',
       'Keepers entered',
-      r.keepersIn >= r.n ? 'The keeper round is ready.'
-        : 'The keeper round is on and auto-draft deliberately skips it, so these are typed in by hand. Missing ones mean typing while everyone waits.',
+      r.keepersIn >= r.n ? 'Every keeper is in.'
+        : 'Typed in by hand, off the board, one team at a time. The draft does not wait on them \u2014 it opens at Round 1 either way, so the rest can go in whenever.',
       r.keepersIn + ' of ' + r.n));
 
   rows.push(row(r.pushOn ? 'ok' : 'warn', 'Notifications wired up',
@@ -12904,7 +12934,8 @@ function renderReadyCard(){
               : 'Clean and waiting.',
     r.started ? 'in progress' : 'clean'));
 
-  const blocking = r.claimed.length < r.n || r.doubled.length > 0 || (r.keeperOn && r.keepersIn < r.n);
+  /* missing keepers stopped being a blocker when the draft stopped waiting on them */
+  const blocking = r.claimed.length < r.n || r.doubled.length > 0;
   let days = '';
   try{ days = Math.max(0, Math.ceil((DRAFT_AT.getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
 
