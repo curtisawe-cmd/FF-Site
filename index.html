@@ -5425,6 +5425,18 @@ function applyInactiveFilter(){
    Draft engine
 ===================================================== */
 let timerId=null, timeLeft=0;
+/* whether a long tick CLIP is already running, so the once-per-second loop leaves it alone */
+let tickClipRunning=false;
+/* How far out a tick clip should start, so it FINISHES on the buzzer instead of trailing off
+   into silence or being cut short. A ten second clip starts at ten seconds; a three second one
+   waits until three. Ten until the browser has read the length, which primeSound arranges. */
+function tickLeadIn(){
+  try{
+    const d = (_audioCache[soundSrc('tick')] || {}).duration;
+    if(Number.isFinite(d) && d > 0) return Math.max(1, Math.min(10, Math.round(d)));
+  }catch(e){}
+  return 10;
+}
 
 function startDraft(){
   if(!requireDraftControl()) return;
@@ -5441,12 +5453,15 @@ function togglePause(){
   if(!D.started||D.finished) return;
   D.paused = !D.paused;
   document.getElementById('btnPause').textContent = D.paused ? 'Resume' : 'Pause';
-  if(D.paused){ clearInterval(timerId); timerId=null; } else { stampDriver(); armClock(timeLeft); }
+  if(D.paused){ clearInterval(timerId); timerId=null; stopSound('tick'); tickClipRunning=false; }
+  else { stampDriver(); armClock(timeLeft); }
   saveDraft();                 /* after the arm - a resume must ship the fresh deadline */
   refreshDraftUI();
 }
 function armClock(carry){
   clearInterval(timerId);
+  /* a clip left running from the previous pick must not carry on into this one */
+  stopSound('tick'); tickClipRunning = false; primeSound('tick');
   timeLeft = (carry && carry>0) ? carry : (+S.timerSec||60);
   /* The deadline rides in the shared draft record. The countdown used to be a purely local
      timer on whichever device armed it - every phone in the league watched "--" all draft
@@ -5458,10 +5473,17 @@ function armClock(carry){
     timeLeft--;
     paintClock();
     /* the tick is a countdown cue, so it belongs on EVERY device, not just the driver's */
-    if(timeLeft>0 && timeLeft<=10) playSound('tick');
+    /* The built-in tick is a blip meant to sound on each of the last ten seconds. A clip that was
+       uploaded instead could be ten seconds long on its own, and restarting it every second would
+       play its first second over and over. So a clip starts ONCE and is left to run. */
+    if(timeLeft>0 && timeLeft<=10){
+      if(!isClipSound('tick')) playSound('tick');
+      else if(!tickClipRunning && timeLeft<=tickLeadIn()){ tickClipRunning = true; playSound('tick'); }
+    }
     /* expiry fires the auto-pick on the DRIVER's device only - with three commissioners
        watching, three clocks all hit zero and three robots raced to pick */
-    if(timeLeft<=0){ clearInterval(timerId); playSound('buzzer'); if(canDriveNow()) autoPick(); }
+    if(timeLeft<=0){ clearInterval(timerId); stopSound('tick'); tickClipRunning=false;
+      playSound('buzzer'); if(canDriveNow()) autoPick(); }
   },1000);
   maybeAutoDraft();
   maybeAutoOthers();
@@ -5526,7 +5548,7 @@ function paintClock(){
    non-driver device does nothing anyway - autoPick is lease-gated. */
 function syncClockFromShared(){
   if(draftMode!=='real' || !D.started || D.finished) return;
-  if(D.paused){ clearInterval(timerId); timerId=null; paintClock(); return; }
+  if(D.paused){ clearInterval(timerId); timerId=null; stopSound('tick'); tickClipRunning=false; paintClock(); return; }
   const end=+D.clockEnd||0; if(!end) return;
   const left=Math.max(0, Math.ceil((end-Date.now())/1000));
   if(!timerId || Math.abs(left-timeLeft)>2) armClock(left||1);
@@ -5671,7 +5693,9 @@ function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').ma
 const SOUND_EVENTS = [
   ['open',   'App opened (intro)',       'fanfare'],
   ['start',  'Draft starts',             'fanfare'],
-  ['tick',   'Clock ticking (last 10s)', 'tick'],
+  ['tick',   'Clock ticking (last 10s)', 'tick',
+    'The built-in tick sounds once a second. Upload or link a clip instead and it plays once, ' +
+    'timed to finish exactly as the clock hits zero.'],
   ['buzzer', 'Pick clock expired',       'buzzer'],
   ['turn',   "You're on the clock",      'chime'],
   ['pick',   'A pick is made',           'click'],
@@ -5685,7 +5709,12 @@ const BUILT_IN_SOUNDS = ['tick','buzzer','chime','click','horn','ding','fanfare'
    names by heart and getting silence with no explanation if you mistyped one. */
 const SOUND_LABELS = { tick:'Tick', buzzer:'Buzzer', chime:'Chime', click:'Click',
                        horn:'Horn', ding:'Ding', fanfare:'Fanfare', none:'Silent' };
-const SOUND_MAX_BYTES = 150000;         /* ~150KB: a second or two of speech at a sane bitrate */
+/* 300KB. It was 150KB back when these were only ever a second or two of speech, but the clock
+   tick now takes a clip of up to ten seconds on purpose, and ten seconds of ordinary stereo MP3
+   lands somewhere around 160-240KB. The ceiling exists because the file is stored inside the
+   league state as a data URI, base64 adds about a third, and that whole blob syncs to every
+   phone - so this is a real cost, just no longer one that rules out the thing it is for. */
+const SOUND_MAX_BYTES = 300000;
 let _ac = null, _soundUnlocked = false, _audioCache = {};
 function soundsMuted(){ return store.get('ffl_mute')==='1'; }
 function audioCtx(){
@@ -5748,10 +5777,36 @@ function playBuiltIn(name){
 }
 /* Play whatever this event is set to. Never throws and never blocks: a dead URL, a browser
    that refuses, a missing context - all just mean silence, which is the right failure. */
+/* What a key will actually play: the commissioner's choice if they made one, else the default
+   from the table. */
+function soundSrc(key){
+  return ((S.sounds||{})[key] !== undefined) ? S.sounds[key] : (SOUND_EVENTS.find(e=>e[0]===key)||[])[2];
+}
+/* A built-in is a synthesised blip a few hundred milliseconds long. Anything else is a file that
+   was uploaded or linked, and can be any length at all - which is the whole difference for the
+   clock tick below. */
+function isClipSound(key){
+  const src = soundSrc(key);
+  return !!src && src !== 'none' && !BUILT_IN_SOUNDS.includes(src);
+}
+/* Built-ins are fire-and-forget oscillators with nothing to stop. A clip can still be playing
+   when the pick lands, and has to be cut off. */
+function stopSound(key){
+  try{ const a = _audioCache[soundSrc(key)]; if(a){ a.pause(); a.currentTime = 0; } }catch(e){}
+}
+/* Build the Audio object ahead of time so the browser has read the clip's length before we need
+   it to decide when to start playing. */
+function primeSound(key){
+  try{
+    if(!isClipSound(key)) return;
+    const src = soundSrc(key);
+    if(!_audioCache[src]){ const a = new Audio(src); a.preload = 'auto'; _audioCache[src] = a; }
+  }catch(e){}
+}
 function playSound(key){
   try{
     if(soundsMuted()) return;
-    const src = ((S.sounds||{})[key] !== undefined) ? S.sounds[key] : (SOUND_EVENTS.find(e=>e[0]===key)||[])[2];
+    const src = soundSrc(key);
     if(!src || src==='none') return;
     if(BUILT_IN_SOUNDS.includes(src)){ playBuiltIn(src); return; }
     let a = _audioCache[src];
@@ -5980,6 +6035,7 @@ function positionCaps(){
 function afterPick(){
   if(currentPickIndex() >= totalPicks()){
     D.finished = true; clearInterval(timerId); timerId=null;
+    stopSound('tick'); tickClipRunning=false;
     document.getElementById('clock').textContent = 'END';
     toast("That's a wrap — draft complete! 🏈");
   } else { armClock(); }
@@ -13338,7 +13394,7 @@ function renderSoundRows(){
   const el = document.getElementById('soundRows'); if(!el) return;
   const S_ = S.sounds = S.sounds || {};
   const admin = isAdmin();
-  el.innerHTML = SOUND_EVENTS.map(([key,label,dflt])=>{
+  el.innerHTML = SOUND_EVENTS.map(([key,label,dflt,hint])=>{
     const v = (S_[key]!==undefined) ? S_[key] : dflt;
     const isFile = v && !BUILT_IN_SOUNDS.includes(v);
     /* a whole data URI or a long link would stretch the row off the screen */
@@ -13348,7 +13404,7 @@ function renderSoundRows(){
     const opts = BUILT_IN_SOUNDS.map(n =>
       `<option value="${n}"${!isFile && v===n?' selected':''}>${esc(SOUND_LABELS[n]||n)}</option>`).join('');
     return `<div class="setrow" style="gap:8px;align-items:center;flex-wrap:wrap">
-      <label style="flex:1 1 190px;min-width:0">${esc(label)}</label>
+      <label style="flex:1 1 190px;min-width:0"${hint?` title="${esc(hint)}"`:''}>${esc(label)}</label>
       <select id="snd_${key}" style="flex:1 1 170px;min-width:145px" onchange="pickSound('${key}', this.value)"
         ${admin?'':'disabled title="Commissioners set the league sounds."'}>
         <optgroup label="Built in">${opts}</optgroup>
@@ -13395,7 +13451,7 @@ function uploadSound(key, ev){
   if(f) {
     if(!/^audio\//.test(f.type)){ toast('Pick an audio file (MP3, WAV, M4A).'); input.value=''; return; }
     if(f.size > SOUND_MAX_BYTES){
-      toast(`That clip is ${Math.round(f.size/1024)}KB. Keep it under ${Math.round(SOUND_MAX_BYTES/1024)}KB — it syncs to every device in the league.`);
+      toast(`That clip is ${Math.round(f.size/1024)}KB, over the ${Math.round(SOUND_MAX_BYTES/1024)}KB limit — it gets stored in the league state and synced to every phone. Save it again as mono, or at a lower bitrate, or paste a link to it instead.`);
       input.value=''; return;
     }
     const rd = new FileReader();
