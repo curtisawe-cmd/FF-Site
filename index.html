@@ -1289,8 +1289,16 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
 :root[data-role="user"] .admin-only{display:none !important}
 /* ---- settings pages ---- */
 .spage-off{display:none !important}
-.spage-tabs{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 18px}
+/* Pinned, so it swipes sideways instead of wrapping - the same treatment .subnav gets. Wrapping
+   only mattered once the row started sticking: three wrapped rows of tabs, plus the title, plus
+   the header, is most of a phone screen gone before a single setting shows. The bottom gap
+   belongs to the head now, not the row, or the bar pins an empty stripe along with it. */
+.spage-tabs{display:flex;flex-wrap:nowrap;gap:7px;margin:10px 0 0;overflow-x:auto;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.spage-tabs::-webkit-scrollbar{display:none}
+#view-settings > .viewhead{padding-bottom:14px}   /* clear the pinned row from the first card */
 .spage-tabs button{
+  flex:0 0 auto;white-space:nowrap;
   font-family:var(--f-ui);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;
   color:var(--chalk-dim);background:var(--panel);border:1px solid var(--line);
   border-radius:var(--r-chip);padding:6px 13px;transition:color .12s ease,border-color .12s ease,background .12s ease}
@@ -1300,7 +1308,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
   margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}
 .spage-count{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
 @media(max-width:560px){
-  .spage-tabs{gap:6px;margin-bottom:14px}
+  .spage-tabs{gap:6px}
   .spage-tabs button{font-size:13px;padding:7px 13px}   /* a fifth bigger, same as the other tab rows */
   .spage-pager{margin-top:18px}
   .spage-pager .btn{padding:8px 14px;font-size:14px}
@@ -2270,15 +2278,18 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 <section class="view" id="view-settings">
 <div class="viewhead">
   <h1>League Settings</h1>
+  <!-- Settings was one column about fifteen cards deep, which meant hunting for the waiver box by
+       scrolling past the scoring table every time. Each section is its own page now; these tabs
+       jump straight to one and the button at the foot of every page walks to the next.
+
+       They sit INSIDE the viewhead so they pin with the title. .viewhead is already stuck under
+       the header, so riding along costs nothing: no second offset to measure, and nothing to
+       drift out of step when the title wraps or the header changes height. -->
+  <div class="spage-tabs" id="setTabs"></div>
   </div><!--/viewhead-->
   <div class="notice viewer-note" id="settingsViewerNote" style="display:none;margin-bottom:18px">
     Read-only — this is how the league is set up. Only the commissioner can change it.
   </div>
-  <!-- Settings was one column about fifteen cards deep, which meant hunting for the waiver box by
-       scrolling past the scoring table every time. Each section is its own page now; these tabs
-       jump straight to one and the button at the foot of every page walks to the next. -->
-  <div class="spage-tabs" id="setTabs"></div>
-
   <div data-spage="league" class="card admin-only" id="readyCard" style="margin-bottom:18px"></div>
 
   <div data-spage="league" class="card" style="margin-bottom:18px">
@@ -9090,8 +9101,16 @@ function renderSetTabs(){
   const strip = document.getElementById('setTabs'), pager = document.getElementById('setPager');
   const list = setPageList();
   const cur = currentSetPage();
-  if(strip) strip.innerHTML = list.map(([k,label])=>
-    `<button class="${k===cur?'on':''}" onclick="goSetPage('${k}', true)">${esc(label)}</button>`).join('');
+  if(strip){
+    strip.innerHTML = list.map(([k,label])=>
+      `<button class="${k===cur?'on':''}" onclick="goSetPage('${k}', true)">${esc(label)}</button>`).join('');
+    /* Rebuilding the strip resets how far it is scrolled sideways, which on a phone leaves the
+       tab you just tapped off the right-hand edge of a single-row strip. Nudge the strip itself
+       rather than calling scrollIntoView, which would be free to scroll the whole page. */
+    try{ const on = strip.querySelector('button.on');
+      if(on) strip.scrollLeft = Math.max(0, on.offsetLeft - (strip.clientWidth - on.offsetWidth)/2);
+    }catch(e){}
+  }
   if(pager){
     const i = list.findIndex(p=>p[0]===cur);
     const prev = i>0 ? list[i-1] : null, next = (i>=0 && i<list.length-1) ? list[i+1] : null;
