@@ -599,6 +599,15 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 .tpl-line .n{flex:0 0 auto;font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);min-width:44px}
 .tpl-line .t{font-weight:600;color:var(--chalk)}
 .tpl-prev .none{font-size:13px;color:var(--chalk-dim)}
+/* the token chips above a template box: tap instead of typing braces */
+.tok-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 7px}
+.tok-row .tok-lbl{font-family:var(--f-ui);font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--chalk-dim);margin-right:2px}
+.tok{font-family:var(--f-mono);font-size:11.5px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--line-strong);background:var(--panel-2);color:var(--chalk-dim);
+  cursor:pointer;transition:color .12s ease,border-color .12s ease,background .12s ease}
+.tok:hover,.tok:focus-visible{color:var(--gold);border-color:var(--gold);background:rgba(255,202,58,.08)}
+.tok b{color:inherit;font-weight:700}
 /* an empty keeper slot the commissioner can fill before the draft */
 .kp-add{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   width:100%;height:100%;min-height:52px;border:1px dashed var(--line-strong);border-radius:8px;
@@ -2425,6 +2434,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="card">
       <h2>Draft Alarm Insults</h2>
       <p class="sub" data-note="set-alarms" style="margin-bottom:10px">When someone tries an illegal draft pick, one of these gets screamed at them. One line per insult — type whatever you want. Write <b>{mgr}</b> for the manager on the clock, <b>{team}</b> for their team, <b>{player}</b> for whoever they tried to draft and <b>{pos}</b> for the position; each alarm fills in the real ones, and a line with no tokens shows as-is. <b>{mgr}</b> falls back to the team name for anyone without a manager set. Leave it blank to use the built-in set.</p>
+      <div class="tok-row"><span class="tok-lbl">Tap to insert</span><button type="button" class="tok" title="The manager on the clock, or their team name if no manager is set" onclick="insertToken('setInsults','{mgr}')">{mgr}</button><button type="button" class="tok" title="Their team" onclick="insertToken('setInsults','{team}')">{team}</button><button type="button" class="tok" title="Whoever they just tried to draft" onclick="insertToken('setInsults','{player}')">{player}</button><button type="button" class="tok" title="That player’s position" onclick="insertToken('setInsults','{pos}')">{pos}</button></div>
       <textarea id="setInsults" rows="6" placeholder="Sit down, {mgr}&#10;{team} can't count to nine&#10;{player} is a {pos}, genius" onchange="saveInsults(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="testPickAlarm()">Test alarm</button>
@@ -2434,6 +2444,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="card">
       <h2>Trade Alarm Lines</h2>
       <p class="sub" data-note="set-tradehype" style="margin-bottom:10px">When a trade gets accepted, this screams across everyone's screen. One line per message — type whatever you want. Leave it blank to use the built-in set. Write <b>{a}</b> and <b>{b}</b> where the two teams' names should go (or <b>{teams}</b> for both at once) and each alarm fills in the actual teams — a line with no tokens shows as-is.</p>
+      <div class="tok-row"><span class="tok-lbl">Tap to insert</span><button type="button" class="tok" title="The team offering" onclick="insertToken('setTradeLines','{a}')">{a}</button><button type="button" class="tok" title="The team accepting" onclick="insertToken('setTradeLines','{b}')">{b}</button><button type="button" class="tok" title="Both teams at once" onclick="insertToken('setTradeLines','{teams}')">{teams}</button></div>
       <textarea id="setTradeLines" rows="6" placeholder="{a} just fleeced {b}&#10;{teams} — papers signed&#10;Somebody call the cops, {a} robbed {b}" onchange="saveTradeLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="tradeAlarm('Nut buster ↔ Prater\'s Leg — test alarm','Nut buster',&quot;Prater's Leg&quot;)">Test alarm</button>
@@ -2443,6 +2454,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="card">
       <h2>Keeper Alarm Lines</h2>
       <p class="sub" data-note="set-keepers" style="margin-bottom:10px">A manager can only keep the same player one year. If a keeper-round pick lands on somebody <b>that same manager</b> already kept last season, this screams across the screen — a different manager keeping him is fine and stays quiet. <b>The pick still goes through</b>: a name that doesn't match the imported list exactly must never be able to halt a live draft, so the alarm tells the room and the call stays yours. One line per message. Write <b>{p}</b> for the player, <b>{team}</b> for whoever kept him and <b>{y}</b> for the year. Leave blank for the built-in set.</p>
+      <div class="tok-row"><span class="tok-lbl">Tap to insert</span><button type="button" class="tok" title="The player being kept" onclick="insertToken('setKeeperLines','{p}')">{p}</button><button type="button" class="tok" title="Whoever kept him" onclick="insertToken('setKeeperLines','{team}')">{team}</button><button type="button" class="tok" title="The year he was kept" onclick="insertToken('setKeeperLines','{y}')">{y}</button></div>
       <textarea id="setKeeperLines" rows="6" placeholder="{p} was kept last year, you thief&#10;{team} already had {p} in {y}&#10;One year means one year" onchange="saveKeeperLines(this.value)"></textarea>
       <div class="row" style="margin-top:10px">
         <button class="btn ghost" onclick="keeperAlarm('Christian McCaffrey','2025','WiFi is Down','WiFi is Down')">Test alarm</button>
@@ -2452,6 +2464,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <div class="card">
       <h2>On The Clock</h2>
       <p class="sub" data-note="set-clockline" style="margin-bottom:10px">What the draft room says about whoever is picking. One line per version, and it works through them by pick, so the room does not read the same sentence two hundred times. Write <b>{team}</b> for the team on the clock, <b>{mgr}</b> for their manager, <b>{round}</b> for the round and <b>{pick}</b> for the overall pick number. Your own turn always says YOUR PICK instead, because that one is there to get your attention. Leave it blank for the built-in wording.</p>
+      <div class="tok-row"><span class="tok-lbl">Tap to insert</span><button type="button" class="tok" title="The team on the clock" onclick="insertToken('setClockLines','{team}')">{team}</button><button type="button" class="tok" title="Their manager" onclick="insertToken('setClockLines','{mgr}')">{mgr}</button><button type="button" class="tok" title="The round" onclick="insertToken('setClockLines','{round}')">{round}</button><button type="button" class="tok" title="The overall pick number" onclick="insertToken('setClockLines','{pick}')">{pick}</button></div>
       <textarea id="setClockLines" rows="6" placeholder="{team} is on the clock&#10;{mgr}, you are up&#10;Everyone is waiting on {mgr}&#10;{team} — pick {pick}, get on with it" oninput="renderClockPreview(this.value)" onchange="saveClockLines(this.value)"></textarea>
       <div class="tpl-prev" id="clockPreview"></div>
       <p class="sub" style="margin:10px 0 0;font-size:12px;opacity:.75">The draft room only says this while a draft is actually running. Before you start one it says <b>Ready when you are</b>, so the preview above is how you check the wording out of season.</p>
@@ -7990,6 +8003,20 @@ function clockLineFor(idx, ti){
    without needing a draft running. It exists because the banner only speaks during a live draft:
    type a line in the off-season, walk to the draft room, and you would see "Ready when you are"
    and reasonably conclude the setting was broken. */
+/* Drops a token in at the cursor instead of making anyone type braces by hand. Puts the caret
+   after it and fires input AND change, so whatever the box already does - the live preview on
+   the on-the-clock field, the save on all of them - runs exactly as if it had been typed. */
+function insertToken(id, token){
+  const el = document.getElementById(id); if(!el) return;
+  const a = (el.selectionStart==null) ? el.value.length : el.selectionStart;
+  const b = (el.selectionEnd==null) ? a : el.selectionEnd;
+  el.value = el.value.slice(0, a) + token + el.value.slice(b);
+  const at = a + token.length;
+  el.focus();
+  try{ el.setSelectionRange(at, at); }catch(e){}
+  el.dispatchEvent(new Event('input',  { bubbles:true }));
+  el.dispatchEvent(new Event('change', { bubbles:true }));
+}
 function renderClockPreview(raw){
   const el = document.getElementById('clockPreview'); if(!el) return;
   const lines = (raw===undefined ? (S.clockLines||[]) : String(raw).split('\n'))
