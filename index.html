@@ -11994,10 +11994,35 @@ window.faQuery=''; window.faPos='ALL';
    back to the pool); only FA pickups (pickIndex -1, never on the board) actually leave. */
 /* `d` defaults to the loaded board for the draft room's own use; roster edits pass the real
    board explicitly so a running mock can never absorb or lose a real player. */
+/* A keeper is not a pick somebody spent, he is carried over, and the league rule is that he
+   stays on that roster. Bench him, start him, put him on IR - all fine. He just cannot be let
+   go. Keeper slots are the board rows below firstDraftIndex, and with the keeper round switched
+   off firstDraftIndex is 0, so this is simply never true. */
+function isKeeperPick(p){ return !!p && +p.pickIndex >= 0 && +p.pickIndex < firstDraftIndex(); }
+function keeperOnRoster(ti, pid, d){
+  d = d || D;
+  return ((d && d.picks) || []).some(x => +x.teamIndex === +ti && String(x.playerId) === String(pid)
+                                       && !x.cut && isKeeperPick(x));
+}
+/* Same shape as lockGuard: says why, and says no. There IS a way to take a keeper off a roster,
+   it is just not this one - the commissioner clears the keeper on the draft board, which puts
+   the slot back rather than leaving a hole nobody can explain in November. */
+function keeperGuard(ti, pid){
+  if(!keeperOnRoster(ti, pid, realDraft())) return true;
+  const p = (realDraft().picks || []).find(x => +x.teamIndex === +ti
+                                             && String(x.playerId) === String(pid) && !x.cut) || {};
+  const nm = p.name || 'That player';
+  toast(isAdmin()
+    ? nm + ' is a keeper. Bench or IR him freely \u2014 to take him off the roster, clear the keeper on the draft board.'
+    : nm + ' is your keeper \u2014 he stays on your roster. Bench him or put him on IR, but he cannot be dropped.');
+  return false;
+}
 function cutPick(ti, pid, d){
   d = d || D;
   const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return null;
+  /* the backstop under every drop path, including a drop replayed from another phone */
+  if(isKeeperPick(p)) return null;
   if(+p.pickIndex>=0) p.cut = true;                    /* board picks stay on the board, marked cut */
   else d.picks = d.picks.filter(x=>x!==p);             /* free-agent adds just disappear */
   if(S.lineups && S.lineups[ti]) delete S.lineups[ti][pid];
@@ -12005,6 +12030,7 @@ function cutPick(ti, pid, d){
 }
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
+  if(!keeperGuard(ti, pid)) return;
   if(!lockGuard(pid, 'drop him')) return;
   const d = realDraft();
   const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
@@ -12047,7 +12073,10 @@ function addWithDrop(ti, pid){
   const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
   if(!p){ toast("Player not found."); return; }
   if(rosterCount(ti) < rosterLimit()){ addPlayer(ti, pid); return; }
-  const roster = D.picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR');
+  /* keepers are not on the table, so they are not in the list */
+  const roster = D.picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR'
+                                && !isKeeperPick(x));
+  if(!roster.length){ toast('Roster is full and everyone droppable is a keeper \u2014 nothing to make room with.'); return; }
   let ov=document.getElementById('swapModal');
   if(!ov){ ov=document.createElement('div'); ov.id='swapModal'; ov.className='pmodal-overlay';
     ov.addEventListener('click',e=>{ if(e.target===ov) ov.style.display='none'; }); document.body.appendChild(ov); }
@@ -12066,9 +12095,16 @@ function addWithDrop(ti, pid){
 }
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
+  if(!keeperGuard(ti, dropPid)) return;
   if(!lockGuard(dropPid, 'drop him')) return;
   const d = realDraft();
   const dropped = cutPick(ti, dropPid, d);
+  /* no drop, no add. The add went through regardless, so a refused drop - or one somebody else
+     had already made - left the roster a player over the limit. */
+  if(!dropped){
+    const ov0=document.getElementById('swapModal'); if(ov0) ov0.style.display='none';
+    toast('Could not drop him \u2014 nothing was added.'); renderTeams(); return;
+  }
   const p = POOL.find(x=>x.id===addPid) || POOL_MAP.get(addPid);
   if(p) d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveRealDraft(d); saveState(); pushTeamData(ti);
@@ -12403,8 +12439,11 @@ function maybeProcessWaivers(){
 function openClaimModal(pid){
   const ti=addTargetTeam(); if(ti===null) return;
   const w=wireEntry(pid); if(!w) return;
-  const roster=realDraft().picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR');
+  /* keepers are not on the table, so they are not in the list */
+  const roster=realDraft().picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR'
+                                        && !isKeeperPick(x));
   const full=rosterCount(ti) >= rosterLimit();
+  if(full && !roster.length){ toast('Roster is full and everyone droppable is a keeper \u2014 no room to claim into.'); return; }
   const money=faabOn(), left=money?faabLeft(ti):0;
   let ov=document.getElementById('claimModal');
   if(!ov){ ov=document.createElement('div'); ov.id='claimModal'; ov.className='pmodal-overlay';
@@ -12724,16 +12763,17 @@ function renderMyTeam(){
        the commissioner keeps live ones because lockGuard asks instead of refusing. */
     const locked = playerLocked(p.playerId);
     const dead = locked && !isAdmin();
+    const keep = keeperOnRoster(mi, p.playerId, realDraft());
     const lockChip = locked ? ` <span class="inj q" title="His game has started \u2014 locked until next week">\uD83D\uDD12</span>` : '';
     /* every player carries his bye week, so you can see a stack of them coming; the one that is
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
-      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${dead?' disabled':''} title="${dead?'Locked \u2014 his game has started':'Drop to free agents'}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
+      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${(dead||keep)?' disabled':''} title="${dead?'Locked \u2014 his game has started':(keep?'Keeper \u2014 he stays on this roster. Bench or IR him instead.':'Drop to free agents')}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   /* every unfilled slot renders as an Empty row with an Add button that jumps to the
      Players tab, pre-filtered to the position the hole is for — except IR, see below */
