@@ -895,6 +895,13 @@ nav.tabs button{position:relative}
   padding:11px 20px;font-size:14px;font-weight:500;z-index:50;display:none;box-shadow:var(--sh-2);
 }
 
+.toast .t-act{
+  margin-left:14px;font-family:var(--f-ui);font-size:12px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--charge);background:none;border:0;padding:2px 0;cursor:pointer;
+  border-bottom:1px solid transparent;
+}
+.toast .t-act:hover,.toast .t-act:focus-visible{border-bottom-color:var(--charge)}
+
 /* ---------- avatars + manager master list (photo-inspired) ---------- */
 .avatar{
   flex:none;display:inline-grid;place-items:center;border-radius:50%;color:#fff;
@@ -2026,6 +2033,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <button class="btn" id="btnStart" onclick="startDraft()">Start Draft</button>
     <button class="btn ghost" id="btnPause" onclick="togglePause()" disabled>Pause</button>
     <button class="btn ghost" id="btnUndo" onclick="undoPick()" disabled>Undo Pick</button>
+    <button class="btn ghost" id="btnUndoKeeper" onclick="undoKeeper()" style="display:none">Undo Keeper</button>
     <button class="btn" id="btnSeason" onclick="startSeason()" style="display:none" title="Lock these picks in as the rosters for the season">Start The Season</button>
     <button class="btn danger" id="btnReset" onclick="resetDraft()">Reset</button>
     </span>
@@ -7653,6 +7661,48 @@ function keeperPickOf(ti){
 function keeperEditable(){
   return KR() && draftMode==='real' && !boardLocked() && isAdmin();
 }
+/* Setting a keeper REPLACES whatever was in that slot, so Remove is not an undo: overwrite the
+   wrong name onto a team that already had one and Remove leaves them with nobody. This records
+   what the slot held BEFORE each edit, so undo puts back exactly that - the previous keeper, or
+   an empty slot if there wasn't one.
+
+   Device-local and not saved, on purpose. Two commissioners entering keepers at once each have
+   their own history of their own edits, so before undoing anything we check the slot still holds
+   what we put there. If somebody else has changed it since, undo refuses rather than reaching
+   across and overwriting a change it knows nothing about. */
+let keeperUndo = [];
+function pushKeeperUndo(ti, before, after){
+  keeperUndo.push({ ti:+ti, before: before ? {...before} : null, after: after ? {...after} : null });
+  if(keeperUndo.length > 24) keeperUndo.shift();
+}
+function poss(n){ n = String(n||''); return n + (/s$/i.test(n) ? "'" : "'s"); }
+function keeperUndoLabel(){
+  const u = keeperUndo[keeperUndo.length-1]; if(!u) return '';
+  const team = (S.teams[u.ti]||{}).name || ('Team '+(u.ti+1));
+  /* say what the press will actually do, which depends on what the slot held before */
+  if(!u.after)  return 'Put ' + poss(team) + ' keeper back';     /* undoing a removal */
+  if(u.before)  return 'Put ' + team + ' back to ' + u.before.name;
+  return 'Take ' + poss(team) + ' keeper back off';
+}
+function undoKeeper(){
+  if(!requireAdmin()) return;
+  if(!keeperEditable()){ toast('Keepers cannot be edited now.'); return; }
+  const u = keeperUndo.pop();
+  if(!u){ toast('Nothing to undo.'); return; }
+  const team = (S.teams[u.ti]||{}).name || ('Team '+(u.ti+1));
+  const now = keeperPickOf(u.ti);
+  const same = (a,b) => (!a && !b) || (!!a && !!b && String(a.playerId) === String(b.playerId));
+  if(!same(now, u.after)){
+    toast(poss(team) + ' keeper has changed since \u2014 undo left it alone.');
+    return;
+  }
+  D.picks = (D.picks||[]).filter(x => +x.pickIndex !== +u.ti);
+  if(u.before) D.picks.push({...u.before});
+  saveDraft();
+  try{ logCommish('undid a keeper', team + (u.before ? ' back to ' + u.before.name : ' cleared')); }catch(e){}
+  try{ refreshDraftUI(); renderReadyCard(); renderKeeperPicker(); }catch(e){}
+  toast(u.before ? team + ' back to ' + u.before.name : poss(team) + ' keeper cleared again');
+}
 function setKeeper(ti, pid){
   if(!requireAdmin()) return;
   if(!keeperEditable()){
@@ -7664,9 +7714,12 @@ function setKeeper(ti, pid){
   if(!pl){ toast('Could not find that player.'); return; }
   const already = (D.picks||[]).find(x=>String(x.playerId)===String(pl.id) && !x.cut && +x.pickIndex!==+ti);
   if(already){ toast(pl.name+' is already kept by '+((S.teams[+already.teamIndex]||{}).name||'another team')+'.'); return; }
+  const before = keeperPickOf(+ti);                            /* for undo: what was there */
+  const entry = { pickIndex:+ti, teamIndex:+ti, playerId:String(pl.id),
+                  name:pl.name, pos:pl.pos, nfl:pl.team, auto:false };
   D.picks = (D.picks||[]).filter(x => +x.pickIndex !== +ti);   /* replacing, not stacking */
-  D.picks.push({ pickIndex:+ti, teamIndex:+ti, playerId:String(pl.id),
-                 name:pl.name, pos:pl.pos, nfl:pl.team, auto:false });
+  D.picks.push(entry);
+  pushKeeperUndo(ti, before, entry);
   saveDraft();
   /* the same one-year check a live keeper pick gets */
   try{ const v = keeperViolation(pl.name, +ti);
@@ -7674,18 +7727,19 @@ function setKeeper(ti, pid){
   try{ logCommish('set a keeper', ((S.teams[+ti]||{}).name||'a team')+' keep '+pl.name); }catch(e){}
   closeKeeperPicker();
   try{ refreshDraftUI(); renderReadyCard(); }catch(e){}
-  toast(((S.teams[+ti]||{}).name||'Team')+' keep '+pl.name);
+  toastAction(((S.teams[+ti]||{}).name||'Team')+' keep '+pl.name, 'Undo', undoKeeper);
 }
 function clearKeeper(ti){
   if(!requireAdmin()) return;
   if(!keeperEditable()){ toast('Keepers cannot be edited now.'); return; }
   const had = keeperPickOf(ti); if(!had) return;
   D.picks = (D.picks||[]).filter(x => +x.pickIndex !== +ti);
+  pushKeeperUndo(ti, had, null);
   saveDraft();
   try{ logCommish('removed a keeper', ((S.teams[+ti]||{}).name||'a team')+' drop '+(had.name||'')); }catch(e){}
   closeKeeperPicker();
   try{ refreshDraftUI(); renderReadyCard(); }catch(e){}
-  toast('Keeper cleared');
+  toastAction('Keeper cleared', 'Undo', undoKeeper);
 }
 function openKeeperPicker(ti){
   if(!keeperEditable()) return;
@@ -8094,6 +8148,14 @@ function refreshDraftUI(){
   document.getElementById('btnPause').disabled = !D.started || D.finished;
   const locked = boardLocked();
   document.getElementById('btnUndo').disabled = !lastDraftPick() || locked;
+  { /* the toast is gone in nine seconds; this is here for as long as there is an edit to take back */
+    const kb = document.getElementById('btnUndoKeeper');
+    if(kb){
+      const can = keeperEditable() && keeperUndo.length > 0;
+      kb.style.display = can ? 'inline-flex' : 'none';
+      kb.title = can ? keeperUndoLabel() : '';
+    }
+  }
   { /* the offer to start, and the shut door once it is taken */
     const sb = document.getElementById('btnSeason');
     if(sb) sb.style.display = (draftMode==='real' && D.finished && !locked) ? 'inline-flex' : 'none';
@@ -13879,10 +13941,31 @@ function importLeague(ev){
 ===================================================== */
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let toastTimer=null;
+let toastActFn = null;
 function toast(msg){
   const t = document.getElementById('toast');
+  toastActFn = null;                 /* a plain toast replaces whatever was offered before */
   t.textContent = msg; t.style.display='block';
   clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.style.display='none', 2600);
+}
+/* A toast with something to press. Deliberately a separate function so the couple of hundred
+   plain toasts are untouched, and given a lot longer on screen: an undo you cannot reach in
+   two and a half seconds is not an undo. */
+function toastAction(msg, label, fn){
+  const t = document.getElementById('toast');
+  toastActFn = fn;
+  t.innerHTML = '<span class="t-msg"></span><button type="button" class="t-act" onclick="runToastAction()"></button>';
+  t.querySelector('.t-msg').textContent = msg;
+  t.querySelector('.t-act').textContent = label;
+  t.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.style.display='none'; toastActFn=null; }, 9000);
+}
+function runToastAction(){
+  const fn = toastActFn; toastActFn = null;
+  const t = document.getElementById('toast'); if(t) t.style.display='none';
+  clearTimeout(toastTimer);
+  if(typeof fn === 'function') fn();
 }
 
 /* =====================================================
