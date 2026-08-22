@@ -243,6 +243,13 @@ section.view > .viewhead{
 .subnav{gap:8px;margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .subnav::-webkit-scrollbar{display:none}
+/* These bars are markup="row subnav", and .row is the same specificity but lands a hundred
+   lines later in the sheet, so its flex-wrap:wrap has been quietly beating the nowrap above
+   ever since. They have wrapped all along - four rows of tabs on a phone, which is most of the
+   screen now that the bar is pinned and something pins beneath it. Doubling the selector takes
+   it to (0,2,0) and the single swipeable row the rest of this block was written for actually
+   happens. */
+.row.subnav{flex-wrap:nowrap}
 .subnav button{flex:0 0 auto;white-space:nowrap}
 @media(max-width:640px){ .subnav{gap:6px;margin-bottom:12px} .subnav button{font-size:15px;padding:7px 13px} }   /* a fifth taller (26px -> 32) for thumbs */
 /* Kickoff chip, top right of the header. Hidden until renderKickoff() decides there is
@@ -519,6 +526,17 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
    underline so the rows read as passing beneath them rather than through them. */
 #faList .posfilters{position:sticky;top:0;z-index:2;margin:0 0 6px;padding:2px 0 7px;
   background:var(--panel);box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
+/* The players list runs to nine hundred rows, so the position chips scrolled out of reach
+   within one flick and changing filter meant going back to the top for them. Pinned directly
+   beneath the page title and its tabs - which are themselves pinned - by tracking where that
+   bar actually ends rather than by a height written in here that would go stale the moment the
+   header wrapped to another row.
+
+   The negative margins pull the background out to the card edges, so rows pass BENEATH the
+   chips instead of through the gutters either side of them. */
+#plPosFilters{position:sticky;top:var(--vhead-bottom,var(--hdr-h,72px));z-index:4;
+  margin:0 -20px 8px;padding:7px 20px;background:var(--panel);
+  box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
 .posfilters button{
   font-family:var(--f-ui);font-weight:600;font-size:13px;letter-spacing:.04em;
   padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--chalk-dim);
@@ -1435,6 +1453,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:18px;padding:8px 14px}
   main{padding:12px calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l))}
   .card{padding:16px 14px}
+  #plPosFilters{margin:0 -14px 8px;padding:6px 14px}   /* match the card padding it pulls out to */
   .hero{padding:30px 20px}
   h1{font-size:clamp(30px,9vw,40px)}
 }
@@ -2099,7 +2118,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       </select>
       <label style="white-space:nowrap;color:var(--chalk-dim);font-size:14px"><input type="checkbox" id="plInj" onchange="window.plInjOnly=this.checked;renderPlayers()" style="width:auto"> injured only</label>
     </div>
-    <div class="posfilters" id="plPosFilters" style="margin-bottom:8px"></div>
+    <div class="posfilters" id="plPosFilters"></div>
     <div id="plStatus" style="font-size:13px;color:var(--chalk-dim);margin-bottom:10px">Loading players…</div>
     <div id="plList"></div>
   </div>
@@ -7159,6 +7178,7 @@ function showView(v){
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
   document.getElementById('view-'+domView).classList.add('active');
+  try{ queueViewheadTop(); }catch(e){}     /* another view, possibly another title bar height */
   /* Players and Trades live under the Teams tab now, the same way Recaps/History sit under
      Stats — separate sections sharing one nav tab and a sub-tab bar. */
   const navV = (v==='recaps'||v==='history') ? 'stats'
@@ -14650,7 +14670,7 @@ function syncHeaderH(){
             && window.matchMedia('(min-width:641px)').matches;
   if(side){ document.documentElement.style.setProperty('--hdr-h','0px'); return; }
   const h=document.querySelector('header.top'); if(h) document.documentElement.style.setProperty('--hdr-h', Math.round(h.getBoundingClientRect().height)+'px');
-  try{ _vheadLast = -1; syncViewheadTop(); }catch(e){}   /* the header just changed shape */
+  try{ _vheadLast = -1; _vheadBotLast = -1; syncViewheadTop(); }catch(e){}   /* header changed shape */
 }
 
 /* Every view's title bar - and the tabs that ride in it - pins directly beneath the header, at a
@@ -14669,17 +14689,23 @@ function syncHeaderH(){
    top instead of hanging in space. It is deliberately a separate variable: --hdr-h is measured
    once and several other things (the draft pool, Game Center anchors, the apply bar) depend on
    it holding still. */
-let _vheadRaf = 0, _vheadLast = -1;
+let _vheadRaf = 0, _vheadLast = -1, _vheadBotLast = -1;
 function syncViewheadTop(){
   _vheadRaf = 0;
   const h = document.querySelector('header.top'); if(!h) return;
   const side = document.documentElement.getAttribute('data-layout')==='side'
             && window.matchMedia('(min-width:641px)').matches;
   /* the rail has no bottom edge to sit under */
+  const de = document.documentElement;
   const v = side ? 0 : Math.max(0, Math.round(h.getBoundingClientRect().bottom));
-  if(v === _vheadLast) return;                 /* the common case: nothing to write */
-  _vheadLast = v;
-  document.documentElement.style.setProperty('--vhead-top', v + 'px');
+  if(v !== _vheadLast){ _vheadLast = v; de.style.setProperty('--vhead-top', v + 'px'); }
+  /* ...and where that leaves the BOTTOM of whichever title bar is on screen, so anything else
+     that wants to pin under it - the players filter chips - can do so without a height typed in
+     by hand that goes stale the moment the header wraps to another row. Read after the write
+     above so it reflects the offset just set. */
+  const vh = document.querySelector('section.view.active > .viewhead');
+  const b = vh ? Math.max(0, Math.round(vh.getBoundingClientRect().bottom)) : v;
+  if(b !== _vheadBotLast){ _vheadBotLast = b; de.style.setProperty('--vhead-bottom', b + 'px'); }
 }
 /* One rect read per frame at most, and only while something is actually moving. Bound on window
    AND on document in the capture phase for the same reason the Game Center jumper is: below
