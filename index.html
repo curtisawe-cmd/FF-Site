@@ -526,17 +526,20 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
    underline so the rows read as passing beneath them rather than through them. */
 #faList .posfilters{position:sticky;top:0;z-index:2;margin:0 0 6px;padding:2px 0 7px;
   background:var(--panel);box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
-/* The players list runs to nine hundred rows, so the position chips scrolled out of reach
-   within one flick and changing filter meant going back to the top for them. Pinned directly
-   beneath the page title and its tabs - which are themselves pinned - by tracking where that
-   bar actually ends rather than by a height written in here that would go stale the moment the
-   header wrapped to another row.
+/* The players list runs to nine hundred rows, so the search box and the position chips scrolled
+   out of reach within one flick, and filtering meant going back to the top to reach the controls
+   that do it. The whole toolbar pins instead - search, filters and the count - directly beneath
+   the page title and its tabs, which are themselves pinned. The offset tracks where that bar
+   actually ends rather than being a height written in here that goes stale the moment the header
+   wraps to another row.
 
    The negative margins pull the background out to the card edges, so rows pass BENEATH the
-   chips instead of through the gutters either side of them. */
-#plPosFilters{position:sticky;top:var(--vhead-bottom,var(--hdr-h,72px));z-index:4;
-  margin:0 -20px 8px;padding:7px 20px;background:var(--panel);
+   toolbar instead of through the gutters either side of it. */
+#plCard .pltools{position:sticky;top:var(--vhead-bottom,var(--hdr-h,72px));z-index:4;
+  margin:0 -20px 10px;padding:4px 20px 9px;background:var(--panel);
   box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
+#plPosFilters{margin:0 0 8px}
+#plSearch{flex:1;min-width:180px;max-width:360px}
 .posfilters button{
   font-family:var(--f-ui);font-weight:600;font-size:13px;letter-spacing:.04em;
   padding:3px 10px;border-radius:20px;border:1px solid var(--line);color:var(--chalk-dim);
@@ -1453,7 +1456,22 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:18px;padding:8px 14px}
   main{padding:12px calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l))}
   .card{padding:16px 14px}
-  #plPosFilters{margin:0 -14px 8px;padding:6px 14px}   /* match the card padding it pulls out to */
+  #plCard .pltools{margin:0 -14px 10px;padding:3px 14px 8px}   /* match the card padding it pulls out to */
+  /* every row of the pinned block costs list, so the toolbar is tighter on a phone */
+  #plCard .pltools .row{gap:6px;margin-bottom:6px}
+  /* Search gets its own line so the two selects are readable instead of the 55px stubs they were
+     squeezed into, and they share the next line with the tickbox. Every line of a PINNED bar is
+     a line of players you cannot see, so it is two lines and no more. */
+  #plSearch{flex:1 1 100%;min-width:0;max-width:none}
+  #plCard #plTeam,#plCard #plSort{flex:1 1 0;min-width:0;font-size:12px;padding:5px 6px}
+  #plCard .pltools .row > label{flex:0 0 auto;font-size:12px}
+  /* All eight chips on one line and still worth a thumb: 34px is the same floor the free-agent
+     list uses. min-height buys the height without widening them, which is what keeps them on one
+     row - and one row of tappable chips beats two rows, or eight hidden behind a sideways swipe. */
+  #plPosFilters{margin:0 0 6px;gap:4px}
+  #plPosFilters button{padding:5px 9px;font-size:12px;min-height:34px;
+    display:inline-flex;align-items:center}
+  #plStatus{font-size:11px;line-height:1.3}
   .hero{padding:30px 20px}
   h1{font-size:clamp(30px,9vw,40px)}
 }
@@ -2107,8 +2125,12 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   <div id="newsView" style="display:none"></div>
   <div id="wvView" style="display:none"></div>
   <div class="card" id="plCard">
+    <!-- Search, filters and the count pin together as one block: filtering a 900-row list is
+         useless if you have to scroll back to the top to do it. One sticky wrapper rather than
+         three sticky children, so they cannot drift apart or need offsets of their own. -->
+    <div class="pltools">
     <div class="row" style="gap:10px;align-items:center;margin-bottom:10px">
-      <input type="text" id="plSearch" placeholder="Search player, team, or college…" style="flex:1;min-width:180px;max-width:360px" oninput="window.plQuery=this.value;renderPlayers()">
+      <input type="text" id="plSearch" placeholder="Search player, team, or college…" oninput="window.plQuery=this.value;renderPlayers()">
       <select id="plTeam" onchange="window.plTeam=this.value;renderPlayers()"><option value="ALL">All teams</option></select>
       <select id="plSort" onchange="window.plSort=this.value;renderPlayers()">
         <option value="rank">Sort: Relevance</option>
@@ -2119,7 +2141,8 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       <label style="white-space:nowrap;color:var(--chalk-dim);font-size:14px"><input type="checkbox" id="plInj" onchange="window.plInjOnly=this.checked;renderPlayers()" style="width:auto"> injured only</label>
     </div>
     <div class="posfilters" id="plPosFilters"></div>
-    <div id="plStatus" style="font-size:13px;color:var(--chalk-dim);margin-bottom:10px">Loading players…</div>
+    <div id="plStatus" style="font-size:13px;color:var(--chalk-dim)">Loading players…</div>
+    </div><!--/pltools-->
     <div id="plList"></div>
   </div>
 </section>
