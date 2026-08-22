@@ -4386,6 +4386,7 @@ function startLeagueSync(){
     applyingRemote = true;
     let healed = 0;
     const picksBefore = (D.picks||[]).filter(p=>+p.pickIndex>=0).length;
+    const startedBefore = !!D.started;
     try{ const raw=(typeof remote==='string')?remote:JSON.stringify(remote); store.set('ffl_draft', raw); D = loadDraft(); if(!Array.isArray(D.picks)) D.picks=[];
       /* two admin devices racing can land duplicate slots or duplicate players on the shared
          board - scrub every snapshot, and if this device is an admin, push the healed board
@@ -4398,6 +4399,12 @@ function startLeagueSync(){
        made it. The first sync is skipped - loading a board mid-draft is not twenty picks. */
     try{ const now=(D.picks||[]).filter(p=>+p.pickIndex>=0).length;
       if(window._draftSynced && now>picksBefore && D.started && !D.finished) playSound('pick');
+      /* the draft just opened on the commissioner's phone. Everyone else hears it here, the
+         same way they hear somebody else's pick - a sound only the person who pressed the
+         button can hear is a strange thing to put in a league setting. Skipped on the first
+         sync for the same reason picks are: loading a board that is already running is not
+         the draft starting. */
+      if(window._draftSynced && !startedBefore && D.started && !D.finished) playSound('start');
       window._draftSynced = true;
     }catch(e){}
     /* the turn just advanced - the next manager's queued request may be ready to apply */
@@ -5370,6 +5377,7 @@ function startDraft(){
   if(!requireDraftControl()) return;
   if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
   D.started = true; D.paused = false;
+  playSound('start');          /* the moment the whole year points at - say so out loud */
   stampDriver();               /* starting the draft takes the wheel */
   armClock();                  /* arm BEFORE saving so the shared record carries the deadline */
   saveDraft();
@@ -5609,6 +5617,7 @@ function saveTradeLines(val){ S.tradeAlarmLines = String(val||'').split('\n').ma
    which is a browser rule, not a choice. */
 const SOUND_EVENTS = [
   ['open',   'App opened (intro)',       'fanfare'],
+  ['start',  'Draft starts',             'fanfare'],
   ['tick',   'Clock ticking (last 10s)', 'tick'],
   ['buzzer', 'Pick clock expired',       'buzzer'],
   ['turn',   "You're on the clock",      'chime'],
