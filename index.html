@@ -1545,11 +1545,15 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
    50 - 34 - 2 = 14px of usable room on a notched iPhone and crushes the two score rows out of
    sight — a mobile-only break, invisible on desktop where the inset is 0. body.has-ticker
    already reserves this same total. */
-.ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;
+.ticker{position:fixed;left:0;right:0;z-index:80;display:none;align-items:stretch;
+  /* Sits ABOVE the home-indicator inset rather than reaching down into it, so the page stays
+     visible in the strip below the bottom edge instead of the bar's own background filling it.
+     Where there is no inset - every desktop, most Android - this is bottom:0 and nothing moves. */
+  bottom:var(--sa-b);
   /* 54 = 50 of room + the 2px border top and bottom. box-sizing is border-box globally, so the
      borders eat into the height rather than adding to it, and the two score rows are already
      tight - see the note above. */
-  height:calc(54px + var(--sa-b));
+  height:54px;
   background:var(--panel-2);
   /* A bar the page passes UNDER rather than stops at. Solid, it read as a footer welded to the
      bottom; slightly through-see-able with a blur behind it, you can watch the page move beneath
@@ -1559,14 +1563,14 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   -webkit-backdrop-filter:blur(12px) saturate(130%);
   backdrop-filter:blur(12px) saturate(130%);
   border-top:2px solid var(--charge);
-  box-shadow:0 -6px 18px rgba(0,0,0,.28);
-  padding-bottom:var(--sa-b)}   /* clear the iPhone home indicator */
+  /* shadow both ways: it is a bar with page above it AND page below it now */
+  box-shadow:0 -6px 18px rgba(0,0,0,.28), 0 5px 14px rgba(0,0,0,.22)}
 /* The bottom edge, drawn at the foot of the CONTENT rather than the foot of the element.
    As a border-bottom it sat under the home-indicator padding, which on a phone with a gesture
    bar left a strip of empty bar between the red label box and the line - the line floating well
    below everything it was supposed to close off. Sitting at bottom:var(--sa-b) it lands exactly
    on the underside of that red box, and the inset below it stays filled but unruled. */
-.ticker::after{content:'';position:absolute;left:0;right:0;bottom:var(--sa-b);height:2px;
+.ticker::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;
   background:var(--charge);pointer-events:none}
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
@@ -14822,12 +14826,17 @@ window.addEventListener('resize', queueViewheadTop, {passive:true});
 function syncBoardMax(){
   const bs=document.querySelector('#view-draft .boardscroll'); if(!bs) return;
   const seen=el=>el && el.getClientRects().length ? el.getBoundingClientRect().height : 0;
+  /* The ticker floats clear of the home-indicator inset, so what it actually costs the board is
+     its top edge to the bottom of the screen - its own height would miss the gap underneath. */
+  const tickerCost=()=>{ const el=document.querySelector('.ticker');
+    if(!el || !el.getClientRects().length) return 0;
+    return Math.max(0, innerHeight - el.getBoundingClientRect().top); };
   const side = document.documentElement.getAttribute('data-layout')==='side'
             && window.matchMedia('(min-width:641px)').matches;
   const used = (side?0:seen(document.querySelector('header.top')))
              + seen(document.querySelector('#view-draft .viewhead'))
              + seen(document.querySelector('#view-draft .roundnow'))
-             + seen(document.querySelector('.ticker'))
+             + tickerCost()
              + 18;                                  /* board border, padding and a little air */
   /* Never collapse to a sliver: below this a pinned name row costs more than it gives, and the
      page can just scroll normally instead. */
