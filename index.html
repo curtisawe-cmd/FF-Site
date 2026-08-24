@@ -1546,8 +1546,20 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
    sight — a mobile-only break, invisible on desktop where the inset is 0. body.has-ticker
    already reserves this same total. */
 .ticker{position:fixed;left:0;right:0;bottom:0;z-index:80;display:none;align-items:stretch;
-  height:calc(50px + var(--sa-b));
-  background:var(--panel-2);border-top:2px solid var(--charge);box-shadow:0 -6px 18px rgba(0,0,0,.28);
+  /* 54 = 50 of room + the 2px border top and bottom. box-sizing is border-box globally, so the
+     borders eat into the height rather than adding to it, and the two score rows are already
+     tight - see the note above. */
+  height:calc(54px + var(--sa-b));
+  background:var(--panel-2);
+  /* A bar the page passes UNDER rather than stops at. Solid, it read as a footer welded to the
+     bottom; slightly through-see-able with a blur behind it, you can watch the page move beneath
+     as you scroll. The opaque line above stays as the fallback: browsers without color-mix drop
+     the whole declaration and keep the solid panel rather than rendering unreadable text. */
+  background:color-mix(in srgb, var(--panel-2) 88%, transparent);
+  -webkit-backdrop-filter:blur(12px) saturate(130%);
+  backdrop-filter:blur(12px) saturate(130%);
+  border-top:2px solid var(--charge);border-bottom:2px solid var(--charge);
+  box-shadow:0 -6px 18px rgba(0,0,0,.28);
   padding-bottom:var(--sa-b)}   /* clear the iPhone home indicator */
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
@@ -1572,7 +1584,9 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .ticker-x{flex:0 0 auto;background:none;border:none;border-left:1px solid var(--line);color:var(--chalk-dim);
   padding:0 12px;font-size:14px;cursor:pointer}
 .ticker-x:hover{color:var(--chalk)}
-body.has-ticker{padding-bottom:calc(50px + var(--sa-b))}
+/* Room for the bar, plus a little air so the last card stops short of it instead of butting
+   against the border. Without this the page ends flush against the ticker at exactly 0px. */
+body.has-ticker{padding-bottom:calc(54px + var(--sa-b) + 12px)}
 /* ---- the team crest ----
    An overlay ON TOP of the page, not a background behind it. Behind it was the obvious place and
    the wrong one: .card is opaque, main runs to 1800px, so on a desktop every card covered the
