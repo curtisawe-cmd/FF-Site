@@ -1558,9 +1558,16 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   background:color-mix(in srgb, var(--panel-2) 88%, transparent);
   -webkit-backdrop-filter:blur(12px) saturate(130%);
   backdrop-filter:blur(12px) saturate(130%);
-  border-top:2px solid var(--charge);border-bottom:2px solid var(--charge);
+  border-top:2px solid var(--charge);
   box-shadow:0 -6px 18px rgba(0,0,0,.28);
   padding-bottom:var(--sa-b)}   /* clear the iPhone home indicator */
+/* The bottom edge, drawn at the foot of the CONTENT rather than the foot of the element.
+   As a border-bottom it sat under the home-indicator padding, which on a phone with a gesture
+   bar left a strip of empty bar between the red label box and the line - the line floating well
+   below everything it was supposed to close off. Sitting at bottom:var(--sa-b) it lands exactly
+   on the underside of that red box, and the inset below it stays filled but unruled. */
+.ticker::after{content:'';position:absolute;left:0;right:0;bottom:var(--sa-b);height:2px;
+  background:var(--charge);pointer-events:none}
 .ticker.on{display:flex}
 .ticker-label{flex:0 0 auto;display:flex;align-items:center;padding:0 12px;background:var(--charge);color:var(--on-charge);
   font-family:var(--f-display);font-size:13px;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
