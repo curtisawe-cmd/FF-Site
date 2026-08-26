@@ -7172,6 +7172,40 @@ function managerNameFor(uid, fallback){
   }
   return fallback || 'Manager';
 }
+/* One account per team, and no more. Signing in wrote a registry record unconditionally, so
+   anyone with the link could park an account in the league permanently: the readiness panel
+   would list them forever as "signed in but no team picked" and there was nothing to be done
+   about it. Twelve teams now means twelve places.
+
+   An account already on the list always gets back in - this only ever turns away a NEW one, and
+   only once the list is as long as the team sheet. Changing the number of teams changes the
+   number of places with it. */
+function managerCap(){
+  try{ const n = (S.teams||[]).length; return n > 0 ? n : 12; }catch(e){ return 12; }
+}
+function managerCount(){
+  try{ return Object.keys(managersMap||{}).length; }catch(e){ return 0; }
+}
+/* Read the list from the server rather than the streamed copy: this runs the instant an account
+   signs in, which is usually before the managers subscription has delivered anything, and an
+   empty local copy would wave everybody through. */
+async function leagueIsFullFor(uid){
+  /* the owner is never turned away, or a full league locks the commissioner out of their own
+     site with no way back in */
+  if(isOwner()) return false;
+  const list = (await window.FB.dbGet('managers')) || {};
+  if(Object.prototype.hasOwnProperty.call(list, uid)) return false;   /* already one of ours */
+  return Object.keys(list).length >= managerCap();
+}
+/* Signed out rather than left in a half-state: an account with no registry record can still see
+   the league and would look signed in while nothing worked. */
+async function refuseAsFull(){
+  const cap = managerCap();
+  try{ await window.FB.logout(); }catch(e){}
+  try{ openAuth(); }catch(e){}
+  try{ setAuthErr('This league is full \u2014 all ' + cap + ' places are taken. '
+    + 'Ask the commissioner to free one up in Settings, then sign in again.'); }catch(e){}
+}
 function initClaims(){
   if(!fbOk() || !window.fbUser) return;
   if(!claimsStarted){ claimsStarted = true;
@@ -7184,9 +7218,20 @@ function initClaims(){
       updateClaimBadge();
     });
   }
-  /* upsert a lightweight registry record so every signed-in account is listed (promotable) */
-  try{ window.FB.dbUpdate('managers/'+myUid(), { email: window.fbUser.email||'', name:(window.fbUser.displayName||(window.fbUser.email||'').split('@')[0]||'Manager'), lastSeen: window.FB.now() }).catch(()=>{}); }catch(e){}
-  startPresence();
+  /* upsert a lightweight registry record so every signed-in account is listed (promotable),
+     but only once there is a place for it - see managerCap above */
+  const uid = myUid();
+  const enrol = ()=>{
+    try{ window.FB.dbUpdate('managers/'+uid, { email: window.fbUser.email||'', name:(window.fbUser.displayName||(window.fbUser.email||'').split('@')[0]||'Manager'), lastSeen: window.FB.now() }).catch(()=>{}); }catch(e){}
+    startPresence();
+    finishClaims();
+  };
+  /* A network blip must not lock the league out of itself, so a failed read lets them in. The
+     cap is a house rule about who joins, not a security boundary - that lives in the database
+     rules, which is also the only place a determined person could not talk their way past. */
+  leagueIsFullFor(uid).then(full => { if(full) refuseAsFull(); else enrol(); }).catch(()=>enrol());
+}
+function finishClaims(){
   window.FB.dbGet('managers/'+myUid()).then(rec=>{
     window.myClaim = rec || null;
     /* colour choice follows the account onto a new device */
@@ -13181,7 +13226,8 @@ function draftReadiness(){
   const pushOn = appOk && relayOk;
 
   return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks,
-           pushOn, appOk, relayOk, accounts: accounts.length };
+           pushOn, appOk, relayOk, accounts: accounts.length,
+           cap: (()=>{ try{ return managerCap(); }catch(e){ return n; } })() };
 }
 function renderReadyCard(){
   const el = document.getElementById('readyCard'); if(!el) return;
@@ -13222,6 +13268,17 @@ function renderReadyCard(){
       r.keepersIn >= r.n ? 'Every keeper is in.'
         : 'Typed in by hand, off the board, one team at a time. The draft does not wait on them \u2014 it opens at Round 1 either way, so the rest can go in whenever.',
       r.keepersIn + ' of ' + r.n));
+
+  rows.push(row(
+    r.accounts > r.cap ? 'bad' : r.accounts === r.cap ? 'ok' : 'warn',
+    'Places taken',
+    r.accounts > r.cap
+      ? 'More accounts than teams. The extras were let in before the limit existed \u2014 remove '
+        + 'the ones you do not recognise with the \u2715 beside them.'
+      : r.accounts === r.cap
+        ? 'Full. A new email cannot sign in until you free a place with the \u2715 beside an account.'
+        : (r.cap - r.accounts) + ' still open. Anyone with the link can take one until they are gone.',
+    r.accounts + ' of ' + r.cap));
 
   rows.push(row(r.pushOn ? 'ok' : 'warn', 'Notifications wired up',
     r.pushOn ? 'App ID and relay are both live. Managers still each have to allow alerts on their own phone.'
