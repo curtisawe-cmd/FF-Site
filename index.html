@@ -2643,6 +2643,10 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
 .auth-primary:hover{filter:brightness(1.08)}
 .auth-primary.danger{background:var(--charge,#c60c30)}
 .auth-err{color:var(--charge,#c60c30);font-size:13px;min-height:18px;margin:2px 0 6px;font-weight:600}
+/* The same line, said in green. A reset link that HAS been sent was being reported in the red
+   the failures use, so the one message meaning "it worked" looked exactly like the ones meaning
+   it did not - and the natural answer to that is to tap again, straight into the rate limit. */
+.auth-err.ok{color:var(--rb,#1fa463)}
 .auth-toggle{text-align:center;font-size:13px;color:var(--muted,#8a94a6);margin-top:14px}
 .auth-toggle a{color:var(--turf,#3d7bff);font-weight:700;text-decoration:none}
 .auth-me{font-size:16px;font-weight:800;color:var(--ink,#0b1526);word-break:break-all}
@@ -6363,7 +6367,10 @@ function openAuth(){
   if(!u) requestAnimationFrame(()=>{ try{ document.getElementById('authEmail').focus({preventScroll:false}); }catch(e){} });
 }
 function closeAuth(){ const ov=document.getElementById('authOverlay'); if(ov) ov.classList.remove('on'); }
-function setAuthErr(m){ const e=document.getElementById('authErr'); if(e) e.textContent=m||''; }
+function setAuthErr(m){ const e=document.getElementById('authErr'); if(!e) return;
+  e.classList.remove('ok'); e.textContent=m||''; }
+function setAuthNote(m){ const e=document.getElementById('authErr'); if(!e) return;
+  e.textContent=m||''; e.classList.add('ok'); }
 function toggleAuthMode(){
   authMode = authMode==='login' ? 'signup':'login';
   document.getElementById('authTitle').textContent = authMode==='login'?'Sign in':'Create account';
@@ -6441,11 +6448,19 @@ async function doGoogle(){
 window.onAuthRedirectErr = err => { try{ openAuth(); authErr(err); }catch(e){} };
 async function authForgot(){
   if(!fbReady()){ setAuthErr('Still connecting to the league server…'); return; }
-  const email=(document.getElementById('authEmail').value||'').trim();
-  if(!email){ setAuthErr('Type your email above first, then tap Forgot password.'); return; }
+  const box = document.getElementById('authEmail');
+  const email = ((box && box.value) || '').trim();
+  /* the box is what the link needs, so put the cursor in it rather than only complaining */
+  if(!email){ setAuthErr('Type your email above first, then tap Forgot password.');
+    try{ box.focus(); }catch(e){} return; }
+  setAuthNote('Sending…');
   try{
     await window.FB.resetPass(email);
-    setAuthErr(`Reset link sent to ${email} — check spam too.`);
+    /* Google accounts have no password to reset, and Firebase will not say which kind an address
+       is - a modern project refuses to confirm whether an email exists at all - so the message
+       covers both rather than guessing and being confidently wrong. */
+    setAuthNote('Reset link sent to ' + email + '. Check spam too. Signed up with Google? '
+      + 'There is no password to reset — use Continue with Google instead.');
   }catch(err){ authErr(err); }
 }
 async function doLogout(){ if(fbReady()) try{ await window.FB.logout(); }catch(e){} closeAuth(); }
