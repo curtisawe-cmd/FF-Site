@@ -240,6 +240,9 @@ section.view > .viewhead{
 /* The shared Teams/Players/Trades sub-nav. nowrap is the point: it must occupy exactly one
    line on every page so the content below never shifts vertically between them. Too narrow to
    fit becomes a sideways scroll, the same as the main tabs. */
+/* a page that needs an account: still there, visibly not available yet */
+nav.tabs button.locked{opacity:.4}
+nav.tabs button.locked:hover{opacity:.6}
 .subnav{gap:8px;margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .subnav::-webkit-scrollbar{display:none}
@@ -2647,6 +2650,9 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
    the failures use, so the one message meaning "it worked" looked exactly like the ones meaning
    it did not - and the natural answer to that is to tap again, straight into the rate limit. */
 .auth-err.ok{color:var(--rb,#1fa463)}
+/* and a third, for the prompts that are neither: "sign in to see this" is not an error the way
+   a wrong password is, and shouting it in red reads like something broke */
+.auth-err.info{color:var(--muted,#8a94a6)}
 .auth-toggle{text-align:center;font-size:13px;color:var(--muted,#8a94a6);margin-top:14px}
 .auth-toggle a{color:var(--turf,#3d7bff);font-weight:700;text-decoration:none}
 .auth-me{font-size:16px;font-weight:800;color:var(--ink,#0b1526);word-break:break-all}
@@ -6368,9 +6374,11 @@ function openAuth(){
 }
 function closeAuth(){ const ov=document.getElementById('authOverlay'); if(ov) ov.classList.remove('on'); }
 function setAuthErr(m){ const e=document.getElementById('authErr'); if(!e) return;
-  e.classList.remove('ok'); e.textContent=m||''; }
+  e.classList.remove('ok'); e.classList.remove('info'); e.textContent=m||''; }
 function setAuthNote(m){ const e=document.getElementById('authErr'); if(!e) return;
-  e.textContent=m||''; e.classList.add('ok'); }
+  e.classList.remove('info'); e.textContent=m||''; e.classList.add('ok'); }
+function setAuthInfo(m){ const e=document.getElementById('authErr'); if(!e) return;
+  e.classList.remove('ok'); e.textContent=m||''; e.classList.add('info'); }
 function toggleAuthMode(){
   authMode = authMode==='login' ? 'signup':'login';
   document.getElementById('authTitle').textContent = authMode==='login'?'Sign in':'Create account';
@@ -6477,6 +6485,9 @@ function onFbUser(user){
   if(user){ startLeagueSync(); initClaims(); setTimeout(()=>{ try{ maybeAutoScore(); }catch(e){} }, 2500); }
   else { window.myClaim = null; }
   try{ updateChatBadge(); updateTradeBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
+  try{ syncNavLocks(); }catch(e){}
+  /* signing out while standing on a page that needs an account must not leave it on screen */
+  try{ if(!viewIsOpen(window.currentView)) showView('home'); }catch(e){}
 }
 window.onFbUser = onFbUser;
 
@@ -7330,7 +7341,37 @@ function stageViewBlocks(v){
     }
   });
 }
+/* The league needs an account. Everything except the front page - the board, the rosters, the
+   chat, the trades, the settings - used to be readable by anyone who had the link.
+
+   One gate, and it lives inside showView because that is the only door: the top nav, the phone
+   drawer, the tiles on the front page and three dozen showView() calls scattered through the
+   rest of the file all arrive here. There is no hash routing to slip past it either.
+
+   Worth being honest about what this is: a curtain, not a lock. The live league - who owns which
+   team, the rosters, the chat - is behind database rules and genuinely unreadable without an
+   account. The team names and the history back to 2012 are baked into this page as its starting
+   data, and this page is served to everybody by definition, so View Source still shows them. */
+const PUBLIC_VIEWS = ["home"];
+function viewIsOpen(v){ return PUBLIC_VIEWS.indexOf(v) >= 0 || !!window.fbUser; }
+/* Dim what needs an account rather than hiding it, so the nav reads as "there is more here"
+   instead of as buttons that mysteriously bounce you. */
+function syncNavLocks(){
+  try{
+    document.querySelectorAll('nav.tabs button[data-view]').forEach(b=>{
+      const locked = !viewIsOpen(b.dataset.view);
+      b.classList.toggle('locked', locked);
+      b.title = locked ? 'Sign in to open this' : '';
+    });
+  }catch(e){}
+}
 function showView(v){
+  if(!viewIsOpen(v)){
+    try{ openAuth(); setAuthInfo('Sign in to see the rest of the league.'); }catch(e){}
+    /* home is public, so this cannot loop */
+    if(window.currentView !== 'home') showView('home');
+    return;
+  }
   const prevView = window.currentView;
   if(prevView==='settings' && v!=='settings' && window.settingsDirty){
     if(confirm('You changed some settings — apply them to the league?\n\nOK = apply · Cancel = discard')) applySettings();
@@ -15044,6 +15085,9 @@ bootStep('ensureDraftYear', ensureDraftYear);                    /* set S.draftY
 bootStep('fixPlayoffs2025', fixPlayoffs2025);
 bootStep('autoDraft', ()=>{ autoDraftOn = store.get('ffl_autodraft')==='1'; });
 bootStep('applyRole', applyRole);
+/* the page loads with Home already active in the markup, so nothing has ever called showView
+   by this point and the locks would sit unset until the first auth event */
+bootStep('navLocks', ()=>{ window.currentView = window.currentView || 'home'; syncNavLocks(); });
 bootStep('renderPosFilters', renderPosFilters);
 bootStep('renderSettings', renderSettings);
 bootStep('settingsDirtyListener', ()=>{ const _sv=document.getElementById('view-settings'); if(_sv){ _sv.addEventListener('change', markSettingsDirty); _sv.addEventListener('input', markSettingsDirty); } });
