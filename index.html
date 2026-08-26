@@ -2363,6 +2363,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
     <h2>League</h2>
     <div class="setgrid">
       <div class="setrow"><label>League name</label><input type="text" id="setLeagueName" style="max-width:220px" onchange="saveFromInputs()"></div>
+      <div class="setrow"><label title="When the draft starts. The home page countdown, the season pulse and the readiness panel all work from this one date.">Draft day</label><input type="datetime-local" id="setDraftAt" style="max-width:220px" onchange="saveFromInputs()"></div>
       <div class="setrow"><label>Pick clock</label><select id="setTimer" onchange="saveFromInputs()"><option value="60">1 min</option><option value="180">3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
       <div class="setrow"><label>Draft rounds</label><input type="number" id="setRounds" min="1" max="30" onchange="saveFromInputs()"></div>
       <div class="setrow"><label>Keeper round</label><input type="checkbox" id="setKeeper" onchange="saveFromInputs()" style="width:auto"></div>
@@ -6716,7 +6717,7 @@ function logTx(entry, stableId){
 const SETTING_LABELS={
   leagueName:'league name', teams:'teams', roster:'roster slots', scoring:'scoring',
   rules:'league rules', draftCfg:'draft setup', divisions:'divisions', prizes:'prize money',
-  timerSec:'pick clock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
+  timerSec:'pick clock', draftAt:'draft day', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
@@ -7722,8 +7723,8 @@ function renderHeroCount(){
     html = `<div class="hc"><b>WK ${wk}</b><span>Season live</span></div>`
          + (weekHasScores(wk) ? `<div class="hc"><b>LIVE</b><span>Scores in</span></div>` : '');
   } else if(!D.finished){
-    const ms = DRAFT_AT.getTime() - Date.now();
-    if(ms > 0) html = tiles(ms, 'DRAFT DAY', 'Aug 30 · 12 PM');
+    const ms = draftAt().getTime() - Date.now();
+    if(ms > 0) html = tiles(ms, 'DRAFT DAY', draftAtShort());
     else { live = true;
       html = `<div class="hc"><b>DRAFT</b><span>${D.started?'Live now':"It's draft day"}</span></div>`; }
   } else {
@@ -7762,7 +7763,7 @@ function renderHomePulse(){
   el.innerHTML = `
     <div class="pulse-row"><span class="k">The draft</span>
       <span class="v">${D.finished?'complete':(D.started? done+' / '+total+' picks'
-        : 'Aug 30, 12:00 PM · in '+Math.max(0,Math.ceil((DRAFT_AT.getTime()-Date.now())/86400000))+' days')}</span></div>
+        : draftAtLong()+' \u00B7 in '+Math.max(0,Math.ceil((draftAt().getTime()-Date.now())/86400000))+' days')}</span></div>
     <div class="pulse-bar" role="img" aria-label="Draft ${pct}% done"><div class="pulse-fill" style="width:${pct}%"></div></div>
     <div class="pulse-row"><span class="k">Kickoff</span>
       <span class="v">${wk>=1? 'Week '+wk+' underway' : 'Sep 10 · in '+days+' day'+(days===1?'':'s')}</span></div>
@@ -9603,9 +9604,54 @@ function poNewBracket(){
 const REG_WEEKS = 14;
 /* NFL 2026 season: Week 1 kicks off Thu Sep 10, 2026 (Thu after Labor Day). Each week runs Thu–Mon. */
 const NFL_2026_WEEK1 = new Date(2026, 8, 10);
-/* Draft day, straight from the commissioner: August 30, 2026 at noon. Local-time constructor,
-   the same convention as the kickoff date above. */
-const DRAFT_AT = new Date(2026, 7, 30, 12, 0, 0);
+/* Draft day. The commissioner sets it in Settings, because it moves every year and the old
+   version of this was a constant in the page - which meant next August somebody had to edit the
+   source to stop the countdown insisting the draft was eleven months ago.
+
+   The constant below is only the fallback for a league that has never set one. Stored as the
+   exact string a datetime-local input hands over, YYYY-MM-DDTHH:MM, and rebuilt with the
+   component constructor rather than Date.parse: a draft happens at noon where the league is,
+   not at noon UTC, and the two are a different day for anyone west of London. */
+const DRAFT_AT_FALLBACK = new Date(2026, 7, 29, 12, 0, 0);
+function parseLocalStamp(raw){
+  const m = String(raw||'').trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(!m) return null;
+  const y=+m[1], mo=+m[2], da=+m[3], h=+m[4], mi=+m[5];
+  /* Every out-of-range component rolls over silently: month 13 is January of the next year,
+     day 45 is the middle of February, hour 99 is four days on again. Left alone a typo becomes
+     a real date nobody chose, and the countdown quietly counts down to it. */
+  if(mo<1 || mo>12 || da<1 || da>31 || h>23 || mi>59) return null;
+  const d = new Date(y, mo-1, da, h, mi, 0, 0);
+  if(isNaN(d.getTime())) return null;
+  /* catches the 31st of a thirty-day month, and the 30th of February */
+  if(d.getMonth() !== mo-1 || d.getDate() !== da) return null;
+  /* the HOUR is deliberately not re-checked: on the morning the clocks go forward the time
+     asked for genuinely does not exist and the browser shifts it an hour, which is right
+     rather than a bad value to throw away. */
+  return d;
+}
+function draftAt(){
+  try{ return parseLocalStamp(S.draftAt) || DRAFT_AT_FALLBACK; }
+  catch(e){ return DRAFT_AT_FALLBACK; }
+}
+/* Both labels come from the date, so the words can never disagree with the number of days
+   printed beside them - which is what the hardcoded 'Aug 30' strings were doing the moment the
+   date they described was wrong. */
+function draftAtShort(){   /* Aug 29 \u00B7 12 PM, for the countdown tile */
+  const d = draftAt();
+  return d.toLocaleString('en-US',{month:'short',day:'numeric'})
+       + ' \u00B7 ' + d.toLocaleString('en-US',{hour:'numeric',hour12:true});
+}
+function draftAtLong(){    /* Aug 29, 12:00 PM, for the season pulse */
+  const d = draftAt();
+  return d.toLocaleString('en-US',{month:'short',day:'numeric'})
+       + ', ' + d.toLocaleString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+}
+function draftAtInputValue(){
+  const d = draftAt(), p2 = n => String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())
+       + 'T'+p2(d.getHours())+':'+p2(d.getMinutes());
+}
 function nflWeekRange(w){
   const start = new Date(NFL_2026_WEEK1); start.setDate(start.getDate() + (w-1)*7);
   const end = new Date(start); end.setDate(end.getDate() + 4);           /* Thu -> Mon */
@@ -13191,7 +13237,7 @@ function renderReadyCard(){
   /* missing keepers stopped being a blocker when the draft stopped waiting on them */
   const blocking = r.claimed.length < r.n || r.doubled.length > 0;
   let days = '';
-  try{ days = Math.max(0, Math.ceil((DRAFT_AT.getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
+  try{ days = Math.max(0, Math.ceil((draftAt().getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
 
   el.innerHTML = `<div class="rd-head"><h2 style="margin:0">Draft readiness</h2>
       <span class="rd-count">${esc(days)}</span></div>
@@ -13296,6 +13342,7 @@ function renderSettings(){
   try{ goSetPage(currentSetPage(), false); }catch(e){}
   document.getElementById('setLeagueName').value = S.leagueName;
   document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
+  { const da=document.getElementById('setDraftAt'); if(da) da.value = draftAtInputValue(); }
   document.getElementById('setRounds').value = snakeRounds();
   document.getElementById('setKeeper').checked = !!KR();
   document.getElementById('setMaxPicks').value = maxPicks() || '';
@@ -13923,6 +13970,9 @@ function startNextSeason(){
 }
 function saveFromInputs(){
   S.leagueName = document.getElementById('setLeagueName').value || 'Bitch Boy League';
+  /* an unreadable or cleared box leaves the date alone rather than wiping it */
+  { const raw = (document.getElementById('setDraftAt')||{}).value;
+    if(parseLocalStamp(raw)) S.draftAt = String(raw).slice(0,16); }
   S.timerSec = +document.getElementById('setTimer').value || 60;
   S.draftCfg = S.draftCfg||{};
   S.draftCfg.rounds = Math.max(1, +document.getElementById('setRounds').value || 16);
