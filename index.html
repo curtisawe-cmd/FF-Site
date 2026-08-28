@@ -13478,13 +13478,20 @@ function renderSettings(){
     const tr=document.getElementById('setTabFlashRandom'); if(tr) tr.checked=!!S.tabFlashRandom; }
   // teams
   { const tc=document.getElementById('teamCount'); if(tc) tc.value=String(S.teams.length); }
-  document.getElementById('teamInputs').innerHTML = S.teams.map((t,i)=>`
+  /* The suggestions for the box below. It was a dropdown of every name the league has ever used,
+     72 of them, with the one option that let you type a NEW name sitting dead last - so renaming
+     a team to something it had never been called meant scrolling past seventy-two things you did
+     not want. Typing is the common case, so typing is what the control does; the old names are
+     still there, as autocomplete, which is what they were always for. */
+  document.getElementById('teamInputs').innerHTML = teamNameDatalist() + S.teams.map((t,i)=>`
     <div class="teamcard"><span class="num">${i+1}</span>
       <label class="team-logo-up" title="${t.logo?'Change':'Upload'} team logo (JPG/PNG)">
         ${t.logo?`<img src="${t.logo}" alt="">`:`<span class="ph">LOGO</span>`}
         <input type="file" accept="image/*" onchange="setTeamLogo(${i}, event)">
       </label>${t.logo?`<button class="logo-rm" title="Remove logo" onclick="clearTeamLogo(${i})">✕</button>`:''}
-      <select class="tnamesel" title="Team name" onchange="setTeamName(${i}, this.value)">${teamNameOptions(t.name, i)}</select>
+      <input class="tnamesel" type="text" list="teamNamePast" maxlength="28" value="${esc(t.name||'')}"
+        placeholder="Team name" title="Type a new name, or start typing to pick a past one"
+        onchange="setTeamName(${i}, this.value)">
       ${(+S.divisions>0) ? `<select class="divsel" title="Division" onchange="S.teams[${i}].div=+this.value;saveState();renderHome();if(window.currentView==='teams')renderTeams()">${Array.from({length:+S.divisions},(_,d)=>`<option value="${d+1}"${(+t.div||1)===d+1?' selected':''}>Div ${d+1}</option>`).join('')}</select>` : ''}
       <select style="max-width:150px" title="Assign manager (each person once)" onchange="setTeamManager(${i}, this.value)">${managerOptions(t.manager)}</select>
       <label style="color:${t.auto?'var(--turf)':'var(--chalk-dim)'};font-size:12px;white-space:nowrap"><input type="checkbox" ${t.auto?'checked':''} onchange="S.teams[${i}].auto=this.checked;saveState();renderSettings();refreshDraftUI();maybeAutoFlagged()" style="width:auto"> auto</label>
@@ -14718,19 +14725,16 @@ function latestTeamNameFor(mgr){
   }
   return '';
 }
-function teamNameOptions(cur, self){
-  cur = String(cur||'');
-  const curL = cur.toLowerCase();
-  const taken = new Set((S.teams||[]).map((t,j)=> j!==self ? String(t.name||'').trim().toLowerCase() : '').filter(Boolean));
-  const names = allTeamNames();
-  let html = `<option value=""${cur?'':' selected'}>— team name —</option>`;
-  html += names.map(n=>{
-    const nL=n.toLowerCase(), isCur=nL===curL, isTaken=taken.has(nL)&&!isCur;
-    return `<option value="${esc(n)}"${isCur?' selected':''}${isTaken?' disabled':''}>${esc(n)}${isTaken?' — taken':''}</option>`;
-  }).join('');
-  if(cur && !names.some(n=>n.toLowerCase()===curL)) html += `<option value="${esc(cur)}" selected>${esc(cur)}</option>`;
-  html += `<option value="__custom__">Custom…</option>`;
-  return html;
+/* Every name the league has used, minus the ones a team is called right now: a suggestion you
+   cannot accept is not a suggestion. A datalist cannot grey an entry out the way the old select
+   did, so leaving them out is how "taken" gets expressed - and setTeamName still refuses a
+   duplicate typed in by hand, with a message saying whose it is. */
+function teamNameDatalist(){
+  const inUse = new Set((S.teams||[]).map(t=>String(t.name||'').trim().toLowerCase()).filter(Boolean));
+  const free = allTeamNames().filter(n=>!inUse.has(n.toLowerCase()));
+  return `<datalist id="teamNamePast">`
+       + free.map(n=>`<option value="${esc(n)}"></option>`).join('')
+       + `</datalist>`;
 }
 /* Traded picks reference teams BY NAME (pickTrades from/to), so every rename must carry those
    records along or the picks silently revert to their original owner - ownsPick simply stops
@@ -14748,12 +14752,9 @@ function teamNamesLocked(){
   const n=Date.now(); return n>=start && n<end;
 }
 function setTeamName(i, val){
-  if(val==='__custom__'){
-    const v = window.prompt('Team name:', S.teams[i].name||'');
-    if(v===null){ renderSettings(); return; }
-    val = v.trim();
-  }
-  val = String(val||'').trim();
+  /* renameTeam, the other way in, caps at 28 - a name only one of them would accept is worse
+     than either limit */
+  val = String(val||'').trim().slice(0, 28);
   if(val && (S.teams||[]).some((t,j)=>j!==i && String(t.name||'').trim().toLowerCase()===val.toLowerCase())){
     toast(`"${val}" is already another team's name.`);
     renderSettings(); return;
