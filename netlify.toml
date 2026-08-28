@@ -57,3 +57,22 @@
   for = "/sw.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+
+# Only production costs anything.
+#
+# Netlify builds a preview for every pull request and, if branch deploys are on, for every
+# branch push. Both spend from the same monthly build allowance as the live site. For a repo
+# where the whole app is one static file and a couple of functions, a preview is rarely worth
+# a build - and a run of failed ones can quietly eat the month.
+#
+# The ignore command decides whether a build proceeds, and its exit code reads backwards from
+# the way it looks: 0 means SKIP, non-zero means go ahead. So `exit 0` is "never build this
+# context". Production is untouched and still builds on every push to main.
+#
+# The cost of this: no preview URL to click around on before merging. Delete these two blocks
+# for a while if that trade stops being worth it.
+[context.deploy-preview]
+  ignore = "exit 0"
+
+[context.branch-deploy]
+  ignore = "exit 0"
