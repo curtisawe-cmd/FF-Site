@@ -2422,6 +2422,11 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
       </select>
       <span class="sub" style="margin:0">Adding a team creates an open slot; removing trims from the bottom.</span>
     </div>
+    <div class="row" style="margin:0 0 14px;gap:10px;align-items:center;flex-wrap:wrap">
+      <label style="font-weight:600" title="While this is on, only a commissioner can rename a team or change its logo. Managers keep every other control over their own team.">Lock names &amp; logos</label>
+      <input type="checkbox" id="setLockBranding" style="width:auto" onchange="setLockBranding(this.checked)">
+      <span class="sub" id="lockBrandingNote" style="margin:0"></span>
+    </div>
     <div class="teamgrid" id="teamInputs"></div>
     <div class="row" style="margin-top:12px">
       <button class="btn ghost" onclick="randomizeOrder()">Randomize Draft Order</button>
@@ -6743,7 +6748,7 @@ function logTx(entry, stableId){
 const SETTING_LABELS={
   leagueName:'league name', teams:'teams', roster:'roster slots', scoring:'scoring',
   rules:'league rules', draftCfg:'draft setup', divisions:'divisions', prizes:'prize money',
-  timerSec:'pick clock', draftAt:'draft day', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
+  timerSec:'pick clock', draftAt:'draft day', lockBranding:'name and logo lock', season:'schedule', pickTrades:'traded picks', lineups:'lineups',
   tradeReviewMs:'trade review window', tradeDeadlineWk:'trade deadline',
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
@@ -13170,7 +13175,7 @@ function renderMyTeam(){
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,72)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
-        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px"><label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · ${(teamNamesLocked()&&!isAdmin())?`<span title="Team names are locked during the season" style="color:var(--chalk-dim)">Rename 🔒</span>`:`<a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px">${(brandingLocked()&&!isAdmin())?`<span title="${S.lockBranding?'The commissioner has locked team names and logos':'Names and logos are locked while the season runs'}" style="color:var(--chalk-dim)">Name &amp; logo locked 🔒</span>`:`<label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · <a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
         ${sel}
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:14px">
@@ -13456,6 +13461,13 @@ function renderSettings(){
   document.getElementById('setLeagueName').value = S.leagueName;
   document.getElementById('setTimer').value = String([60,180,300,600].includes(+S.timerSec)? S.timerSec : 60);
   { const da=document.getElementById('setDraftAt'); if(da) da.value = draftAtInputValue(); }
+  { const lb=document.getElementById('setLockBranding'); if(lb) lb.checked = !!S.lockBranding;
+    const ln=document.getElementById('lockBrandingNote');
+    /* the seasonal rule can be locking things while the switch is off, and a note saying so is
+       the difference between a setting that looks broken and one that is explained */
+    if(ln) ln.textContent = S.lockBranding ? 'Only commissioners can rename a team or change its logo.'
+      : (teamNamesLocked() ? 'Off, but the season is running so they are locked anyway until it ends.'
+                           : 'Managers can rename their own team and change its logo.'); }
   document.getElementById('setRounds').value = snakeRounds();
   document.getElementById('setKeeper').checked = !!KR();
   document.getElementById('setMaxPicks').value = maxPicks() || '';
@@ -14746,10 +14758,41 @@ function remapPickTradeNames(oldName, newName){
 /* Names are frozen while the season runs - week 1 kickoff through the end of week 18, playoffs
    included. Records, trash talk and the transaction log all read better when "WiFi is Down"
    still means the same team in December that it did in September. */
+/* Two locks, one question. The seasonal one has always been here: names freeze once the season
+   is running, so the record book cannot be rewritten around a bad week. The commissioner's
+   switch is new, and covers the stretch the seasonal rule does not - the run-up to the draft,
+   where a team renaming itself halfway through the board is just noise.
+
+   Logos were never locked at all: any manager could change their own at any moment, including
+   mid-draft. They go through the same gate now.
+
+   The commissioner is never locked out by either. */
+function brandingLocked(){
+  try{ if(S.lockBranding) return true; }catch(e){}
+  return teamNamesLocked();
+}
+function requireUnlockedBranding(ti){
+  if(!brandingLocked() || isAdmin()) return true;
+  toast(S.lockBranding
+    ? "Names and logos are locked " + "—" + " ask the commissioner."
+    : "Names and logos are locked during the season " + "—" + " new one next year.");
+  return false;
+}
 function teamNamesLocked(){
   const start=NFL_2026_WEEK1.getTime();
   const end=(()=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+18*7); return d.getTime(); })();
   const n=Date.now(); return n>=start && n<end;
+}
+function setLockBranding(on){
+  if(!requireAdmin()){ renderSettings(); return; }
+  S.lockBranding = !!on;
+  saveState();
+  /* every place a name or logo is offered has to stop offering it, on this device now and on
+     everyone else's when the settings land */
+  renderSettings(); renderHome();
+  try{ if(window.currentView==='teams') renderTeams(); }catch(e){}
+  toast(on ? 'Names and logos locked \u2014 commissioner only'
+           : 'Names and logos unlocked \u2014 managers can change their own');
 }
 function setTeamName(i, val){
   /* renameTeam, the other way in, caps at 28 - a name only one of them would accept is worse
@@ -14769,7 +14812,7 @@ function setTeamName(i, val){
    managers while the season runs - the commissioner can always fix a name. */
 function renameTeam(ti){
   if(!requireTeam(ti)) return;
-  if(teamNamesLocked() && !isAdmin()){ toast('Team names are locked during the season — new name next year.'); return; }
+  if(!requireUnlockedBranding(ti)) return;
   const cur=(S.teams[ti]||{}).name||'';
   const v=window.prompt('Team name (max 28 characters):', cur);
   if(v===null) return;
@@ -14829,6 +14872,7 @@ function teamMarkHTML(t, size){
 /* upload + downscale a team logo so localStorage stays small */
 function setTeamLogo(i, ev){
   if(!requireTeam(i)){ if(ev&&ev.target) ev.target.value=''; return; }
+  if(!requireUnlockedBranding(i)){ if(ev&&ev.target) ev.target.value=''; return; }
   const f = ev.target.files && ev.target.files[0]; if(!f) return;
   if(!/^image\//.test(f.type)){ toast('Pick an image file (JPG or PNG).'); ev.target.value=''; return; }
   const rd = new FileReader();
@@ -14856,6 +14900,7 @@ function setTeamLogo(i, ev){
 }
 function clearTeamLogo(i){
   if(!requireTeam(i)) return;
+  if(!requireUnlockedBranding(i)) return;
   delete S.teams[i].logo; saveState(); pushTeamData(i);
   renderSettings(); renderHome(); if(window.currentView==='teams') renderTeams(); if(window.currentView==='matchups') renderMatchups();
 }
