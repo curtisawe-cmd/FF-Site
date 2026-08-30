@@ -10785,12 +10785,54 @@ function poProjected(){
                   tag: cur[i].tag + '/' + cur[i+1].tag });
     cur = next;
   }
-  return { rounds, rows, N, weeks: poWeeks(), wksPlayed, missed: wksPlayed ? rows.slice(N) : [] };
+  return { rounds, rows, N, weeks: poWeeks(), wksPlayed, missed: rows.slice(N) };
 }
 function poRoundLabel(i, total, weeks){
   const nm = ['Fantasy Super Bowl','Semifinal','Quarterfinal','Round of 16'][total-1-i] || ('Round ' + (i+1));
   const wk = weeks[i];
   return wk ? `${nm} · Wk ${wk}` : nm;
+}
+/* ---- the consolation, which in this league is its own tournament ----
+   The teams who miss the playoffs sit out the first playoff week, then play the rest of them for
+   the first pick of next year's draft - poApplyDraftOrder builds the order that way, consolation
+   winner first and champion last. So four teams here are not playing for nothing, they are
+   playing for picks 1 to 4, which is worth drawing rather than listing.
+
+   Same machinery as the main bracket, seeded off the same standings. The seed numbers shown are
+   the LEAGUE seeds (9 through 12), not 1 through 4 - the whole point is which four missed. */
+function poConsolation(P){
+  const teams = P.missed;
+  if(!P || teams.length < 2) return null;
+  let size = 2; while(size < teams.length) size *= 2;
+  const seat = k => k > teams.length ? null
+    : { seed: P.N + k, row: P.wksPlayed ? teams[k-1] : null };
+  let cur = seedPairs(size).map(([a,b])=>({
+    a: seat(a), b: seat(b),
+    tag: [a,b].filter(x=>x<=teams.length).map(x=>P.N+x).join('/') }));
+  const rounds = [];
+  for(;;){
+    rounds.push(cur);
+    if(cur.length === 1) break;
+    const won = g => (g.a && !g.b) ? g.a : ((g.b && !g.a) ? g.b : null);
+    const next = [];
+    for(let i=0;i<cur.length;i+=2)
+      next.push({ a: won(cur[i])   || {tbd:true, from:cur[i].tag},
+                  b: won(cur[i+1]) || {tbd:true, from:cur[i+1].tag},
+                  tag: cur[i].tag + '/' + cur[i+1].tag });
+    cur = next;
+  }
+  /* it takes the LAST of the playoff weeks, so the bye falls at the front - four teams needing
+     two rounds out of three playoff weeks sit out week 15 and play 16 and 17 */
+  const cut   = Math.max(0, P.weeks.length - rounds.length);
+  const weeks = P.weeks.slice(cut);
+  const bye   = P.weeks.slice(0, cut);
+  /* the two beaten semifinalists play off for the next two picks. Only when both semifinals are
+     real games: with three teams one of them is a bye, and a bye has no loser. */
+  const semis = rounds.length >= 2 ? rounds[rounds.length-2] : null;
+  const third = (semis && semis.length === 2 && semis.every(g=>g.a && g.b))
+    ? { a:{tbd:true, lost:true, from:semis[0].tag}, b:{tbd:true, lost:true, from:semis[1].tag} }
+    : null;
+  return { teams, rounds, weeks, bye, third, count: teams.length };
 }
 function renderPlayoffs(){
   const el = document.getElementById('poView'); if(!el) return;
@@ -10803,7 +10845,7 @@ function renderPlayoffs(){
          after the first, four the round after that - sorted, so "Winner 1/4/5/8" reads as the
          half of the bracket it actually is instead of a running list of who beat whom. */
       const parts = String(sd.from||'').split('/').filter(Boolean).map(Number).sort((x,y)=>x-y);
-      const lab = parts.length ? `Winner ${parts.join('/')}` : 'To be decided';
+      const lab = parts.length ? `${sd.lost?'Loser':'Winner'} ${parts.join('/')}` : 'To be decided';
       return `<div class="brow"><span class="bteam"><span class="bseed">·</span>${lab}</span><span class="bpts"></span></div>`;
     }
     const r = sd.row;
@@ -10817,11 +10859,13 @@ function renderPlayoffs(){
   const gcard = g => (g.a && !g.b)
     ? `<div class="bgame bye">${side(g.a)}<div class="brow"><span class="byetag">Bye</span><span class="bpts"></span></div></div>`
     : `<div class="bgame">${side(g.a)}${side(g.b)}</div>`;
-  const bracket = `<div class="bracket po-proj">` + P.rounds.map((games,i)=>{
+  /* one drawing routine, two brackets - they only differ in what the rounds are called */
+  const bracketOf = (rounds, labelFn) => `<div class="bracket po-proj">` + rounds.map((games,i)=>{
     const pairs=[]; for(let k=0;k<games.length;k+=2) pairs.push(games.slice(k,k+2));
-    return `<div class="bround"><div class="rlabel">${esc(poRoundLabel(i, P.rounds.length, P.weeks))}</div>` +
+    return `<div class="bround"><div class="rlabel">${esc(labelFn(i, rounds.length))}</div>` +
       `<div class="bpairs">${pairs.map(pr=>`<div class="bpair ${pr.length>1?'linked':''}">${pr.map(gcard).join('')}</div>`).join('')}</div></div>`;
   }).join('') + `</div>`;
+  const bracket = bracketOf(P.rounds, (i,total)=>poRoundLabel(i, total, P.weeks));
   /* Playoff teams and Playoff weeks are two separate settings and nothing stops them disagreeing.
      Rendering four rounds into three weeks silently would be the wrong kind of quiet. */
   const short = P.rounds.length > P.weeks.length
@@ -10833,13 +10877,33 @@ function renderPlayoffs(){
     : left > 0
       ? `Through week ${P.wksPlayed} of ${REG_WEEKS} · ${left} still to play. This re-seeds itself every time a score lands.`
       : 'Regular season complete. This is the bracket.';
-  const cons = P.missed.length ? `<div class="card" style="margin-top:18px">
-    <h2>Consolation</h2>
-    <p class="sub" style="margin:0 0 10px">The ${P.missed.length} who miss out play their own tournament. Winning it is the first pick of next year's draft, so it is not nothing.</p>
-    ${P.missed.map((r,k)=>`<div class="po-row"><span class="po-seed">${P.N+k+1}</span>` +
-      `<span class="po-nm">${esc(r.name||teamName(r.i))}</span>` +
-      `<span class="po-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span><span class="po-st"></span></div>`).join('')}
-  </div>` : '';
+  const wkList = ws => !ws.length ? ''
+    : ws.length === 1 ? `week ${ws[0]}`
+    : `weeks ${ws.slice(0,-1).join(', ')} and ${ws[ws.length-1]}`;
+  const C = poConsolation(P);
+  const cons = C ? (()=>{
+    const when = C.bye.length
+      ? `sit out ${wkList(C.bye)}, then play ${wkList(C.weeks)}`
+      : `play ${wkList(C.weeks)}`;
+    const lastWk = C.weeks[C.weeks.length-1];
+    const third = C.third ? `<div class="eyebrow" style="margin:16px 0 8px">Picks 3 &amp; 4${lastWk?` · Wk ${lastWk}`:''}</div>
+      <div class="consgrid">${gcard(C.third)}</div>` : '';
+    return `<div class="card" style="margin-top:18px">
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0">Consolation</h2>
+        <span class="sub" style="margin:0">Picks 1 to ${C.count}</span>
+      </div>
+      <p class="sub" style="margin:4px 0 14px">The ${C.count} who miss the playoffs ${when} for the first pick of next year's draft. Winning it picks first, so nobody here is playing for nothing.</p>
+      ${bracketOf(C.rounds, (i,total)=>{
+        const back = total-1-i, wk = C.weeks[i];
+        /* a plain ampersand: bracketOf runs every label through esc(), so writing the entity here
+           would come out as &amp;amp; on the page */
+        const nm = back===0 ? 'Picks 1 & 2' : back===1 ? 'Semifinal' : back===2 ? 'Quarterfinal' : `Round ${i+1}`;
+        return wk ? `${nm} · Wk ${wk}` : nm;
+      })}
+      ${third}
+    </div>`;
+  })() : '';
   el.innerHTML = `<div class="card">
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
       <h2 style="margin:0">If the season ended today</h2>
