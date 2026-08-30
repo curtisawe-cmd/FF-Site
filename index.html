@@ -10197,7 +10197,7 @@ async function renderGameCenter(){
     /* On every section, not just the first: table-layout is fixed so all three line up, but a
        column with no starters set would otherwise leave the bench unlabelled. */
     const hrow = showProj
-      ? `<tr class="gc-hrow"><td></td><td></td><td class="gc-proj">Proj</td><td class="gc-pts">Pts</td></tr>`
+      ? `<tr class="gc-hrow"><td class="gc-slot"></td><td></td><td class="gc-proj">Proj</td><td class="gc-pts">Pts</td></tr>`
       : '';
     const { starters, bench, ir } = teamLists(ti);   /* shared with the head-to-head layout */
     return `<div class="gc-col">
