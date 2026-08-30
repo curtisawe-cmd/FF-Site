@@ -822,6 +822,13 @@ nav.tabs button{position:relative}
 .bgame .brow .bseed{color:var(--chalk-dim);font-family:var(--f-mono);font-size:11px;font-weight:400;margin-right:5px}
 .bgame .brow .bpts{font-family:var(--f-mono);font-weight:500}
 .consgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+/* The projected bracket. Nothing has been played, so no row is a winner: a seeded team simply
+   reads brighter than a slot still waiting on a result. */
+.po-proj .brow.seeded{color:var(--chalk);font-weight:600}
+.po-proj .brow .bteam{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.po-proj .brow{gap:8px}
+.po-proj .bpts{font-size:11px}
+.po-proj .byetag{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
 .consgrid .bgame .clabel{font-size:11px;color:var(--chalk-dim);padding:5px 10px 0;font-family:var(--f-mono);letter-spacing:.08em;text-transform:uppercase}
 
 /* home */
@@ -2216,11 +2223,13 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button class="btn" data-sub="board" onclick="setMuTab('board')">Matchups</button>
     <button class="btn ghost" data-sub="gc" onclick="setMuTab('gc')">Game Center</button>
     <button class="btn ghost" data-sub="sched" onclick="setMuTab('sched')">Schedule</button>
+    <button class="btn ghost" data-sub="po" onclick="setMuTab('po')">Playoffs</button>
   </div>
   </div><!--/viewhead-->
   <div id="matchupsView"></div>
   <div id="gcView" style="display:none"></div>
   <div id="schedView" style="display:none"></div>
+  <div id="poView" style="display:none"></div>
 </section>
 
 <!-- ============ TEAMS ============ -->
@@ -9995,12 +10004,14 @@ function setMuTab(t){
   window.muTab = t;
   document.querySelectorAll('.musub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
   const board=document.getElementById('matchupsView'), gc=document.getElementById('gcView'),
-        sch=document.getElementById('schedView');
+        sch=document.getElementById('schedView'), po=document.getElementById('poView');
   if(board) board.style.display = t==='board' ? 'block':'none';
   if(gc)    gc.style.display    = t==='gc'    ? 'block':'none';
   if(sch)   sch.style.display   = t==='sched' ? 'block':'none';
+  if(po)    po.style.display    = t==='po'    ? 'block':'none';
   if(t==='gc') renderGameCenter();
   if(t==='sched') renderSchedule();
+  if(t==='po') renderPlayoffs();
   updateGhost();
 }
 function gcScrollBy(dir){
@@ -10679,6 +10690,10 @@ function poSpots(){
       if(seeds.length) return Math.max(...seeds);
     }
   }catch(e){}
+  /* no bracket to read yet - the league setting is the next best authority, and it is what the
+     commissioner actually edits. The literal below is only the floor if that is missing too. */
+  const rule = parseInt(String((S.rules||{})['Playoff teams']||''), 10);
+  if(rule >= 2) return rule;
   return 8;   /* this league: eight in the playoff bracket, four in the consolation */
 }
 function poPicture(){
@@ -10715,6 +10730,127 @@ function poPicture(){
     return { ...r, seed: idx+1, rem: left, inNow: idx < SPOTS,
              clinched, out, winIn, loseOut, magic, back };
   });
+}
+/* ============ the bracket if the season ended today ============
+   Seeded off seasonStandings() - the same order and the same tiebreak the standings table uses,
+   so the two cannot part company. Nothing is stored: it is rebuilt on every render, which is what
+   makes it re-seed itself the moment a score lands.
+
+   It is a projection, not a result. Nobody has won anything, so no row is ever marked a winner
+   here the way the History bracket marks them. */
+function poWeeks(){
+  /* "15, 16 & 17 (1 week per matchup)" -> [15,16,17]. The parenthetical carries a number of its
+     own, so it goes before the digits are read. */
+  const raw = String((S.rules||{})['Playoff weeks']||'');
+  const nums = (raw.replace(/\([^)]*\)/g,'').match(/\d+/g)||[])
+    .map(Number).filter(n=>n>=1 && n<=25);
+  return nums.length ? [...new Set(nums)].sort((a,b)=>a-b)
+                     : [REG_WEEKS+1, REG_WEEKS+2, REG_WEEKS+3];
+}
+/* Standard bracket order, built by reflection: the 1 draws the lowest seed, and the halves fall
+   out so the top two can only meet in the final. The bottom half's games are then listed the way
+   this league's own brackets have always shown them - 1v8, 4v5, 3v6, 2v7. */
+function seedPairs(size){
+  let o=[1];
+  for(let s=2; s<=size; s*=2){ const n=[]; o.forEach(x=>n.push(x, s+1-x)); o=n; }
+  const pairs=[]; for(let i=0;i<o.length;i+=2) pairs.push([o[i], o[i+1]]);
+  if(pairs.length < 2) return pairs;
+  const half = pairs.length/2;
+  return [...pairs.slice(0,half), ...pairs.slice(half).reverse()];
+}
+function poProjected(){
+  let rows; try{ rows = seasonStandings(); }catch(e){ return null; }
+  if(!rows || rows.length < 2) return null;
+  const N = Math.max(2, Math.min(rows.length, poSpots()));
+  let size = 2; while(size < N) size *= 2;          /* byes fill the gap up to a power of two */
+  const wksPlayed = Math.max(0, ...rows.map(r=>r.w + r.l + r.t));
+  /* before a ball is kicked every record is 0-0, so the sort order means nothing. Show the seed
+     lines with nobody on them rather than a bracket that looks decided and is not. */
+  const seat = s => s > N ? null : { seed:s, row: wksPlayed ? rows[s-1] : null };
+  /* the tag names who can still arrive in a slot, so it lists only seeds that exist. In a six
+     team bracket the 1 and 2 have byes, and a slot fed by the 1 is tagged 1 - not 1/8. */
+  let cur = seedPairs(size).map(([a,b])=>({
+    a: seat(a), b: seat(b),
+    tag: [a,b].filter(x=>x<=N).join('/') }));
+  const rounds = [];
+  for(;;){
+    rounds.push(cur);
+    if(cur.length === 1) break;
+    /* a bye is already through; a real game is not, and its slot stays unresolved */
+    const won = g => (g.a && !g.b) ? g.a : ((g.b && !g.a) ? g.b : null);
+    const next = [];
+    for(let i=0;i<cur.length;i+=2)
+      next.push({ a: won(cur[i])   || {tbd:true, from:cur[i].tag},
+                  b: won(cur[i+1]) || {tbd:true, from:cur[i+1].tag},
+                  tag: cur[i].tag + '/' + cur[i+1].tag });
+    cur = next;
+  }
+  return { rounds, rows, N, weeks: poWeeks(), wksPlayed, missed: wksPlayed ? rows.slice(N) : [] };
+}
+function poRoundLabel(i, total, weeks){
+  const nm = ['Fantasy Super Bowl','Semifinal','Quarterfinal','Round of 16'][total-1-i] || ('Round ' + (i+1));
+  const wk = weeks[i];
+  return wk ? `${nm} · Wk ${wk}` : nm;
+}
+function renderPlayoffs(){
+  const el = document.getElementById('poView'); if(!el) return;
+  const P = poProjected();
+  if(!P){ el.innerHTML = `<div class="card"><p class="sub" style="margin:0">No teams set up yet.</p></div>`; return; }
+  const side = (sd) => {
+    if(!sd) return '';
+    if(sd.tbd){
+      /* Name the seeds that feed the slot rather than saying nothing. Two of them in the round
+         after the first, four the round after that - sorted, so "Winner 1/4/5/8" reads as the
+         half of the bracket it actually is instead of a running list of who beat whom. */
+      const parts = String(sd.from||'').split('/').filter(Boolean).map(Number).sort((x,y)=>x-y);
+      const lab = parts.length ? `Winner ${parts.join('/')}` : 'To be decided';
+      return `<div class="brow"><span class="bteam"><span class="bseed">·</span>${lab}</span><span class="bpts"></span></div>`;
+    }
+    const r = sd.row;
+    const nm = r ? (r.name || teamName(r.i)) : 'To be decided';
+    const rec = r ? `${r.w}-${r.l}${r.t?'-'+r.t:''}` : '';
+    const tip = r ? `${r.name||teamName(r.i)} · ${r.pf.toFixed(1)} points for` : '';
+    return `<div class="brow${r?' seeded':''}"${tip?` title="${esc(tip)}"`:''}>` +
+      `<span class="bteam"><span class="bseed">${sd.seed}</span>${esc(nm)}</span>` +
+      `<span class="bpts">${rec}</span></div>`;
+  };
+  const gcard = g => (g.a && !g.b)
+    ? `<div class="bgame bye">${side(g.a)}<div class="brow"><span class="byetag">Bye</span><span class="bpts"></span></div></div>`
+    : `<div class="bgame">${side(g.a)}${side(g.b)}</div>`;
+  const bracket = `<div class="bracket po-proj">` + P.rounds.map((games,i)=>{
+    const pairs=[]; for(let k=0;k<games.length;k+=2) pairs.push(games.slice(k,k+2));
+    return `<div class="bround"><div class="rlabel">${esc(poRoundLabel(i, P.rounds.length, P.weeks))}</div>` +
+      `<div class="bpairs">${pairs.map(pr=>`<div class="bpair ${pr.length>1?'linked':''}">${pr.map(gcard).join('')}</div>`).join('')}</div></div>`;
+  }).join('') + `</div>`;
+  /* Playoff teams and Playoff weeks are two separate settings and nothing stops them disagreeing.
+     Rendering four rounds into three weeks silently would be the wrong kind of quiet. */
+  const short = P.rounds.length > P.weeks.length
+    ? `<p class="sub" style="margin:10px 0 0;color:var(--charge)">This bracket needs ${P.rounds.length} rounds but only ${P.weeks.length} playoff week${P.weeks.length===1?' is':'s are'} set. Check <b>Playoff teams</b> and <b>Playoff weeks</b> in Settings.</p>`
+    : '';
+  const left = Math.max(0, REG_WEEKS - P.wksPlayed);
+  const state = !P.wksPlayed
+    ? 'Nothing scored yet, so the seed lines are still empty. They fill in from week 1.'
+    : left > 0
+      ? `Through week ${P.wksPlayed} of ${REG_WEEKS} · ${left} still to play. This re-seeds itself every time a score lands.`
+      : 'Regular season complete. This is the bracket.';
+  const cons = P.missed.length ? `<div class="card" style="margin-top:18px">
+    <h2>Consolation</h2>
+    <p class="sub" style="margin:0 0 10px">The ${P.missed.length} who miss out play their own tournament. Winning it is the first pick of next year's draft, so it is not nothing.</p>
+    ${P.missed.map((r,k)=>`<div class="po-row"><span class="po-seed">${P.N+k+1}</span>` +
+      `<span class="po-nm">${esc(r.name||teamName(r.i))}</span>` +
+      `<span class="po-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span><span class="po-st"></span></div>`).join('')}
+  </div>` : '';
+  el.innerHTML = `<div class="card">
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">If the season ended today</h2>
+      <span class="sub" style="margin:0">Top ${P.N} of ${P.rows.length} get in</span>
+    </div>
+    <p class="sub" style="margin:4px 0 14px">${state}</p>
+    ${bracket}
+    ${short}
+  </div>
+  ${P.wksPlayed ? poPictureHTML() : ''}
+  ${cons}`;
 }
 function poPictureHTML(){
   const pic = poPicture(); if(!pic) return '';
@@ -11305,6 +11441,9 @@ function renderMatchups(){
     </div>
     ${poPictureHTML()}
     ${allPlayCardHTML(rows)}`;
+  /* every path that changes a score already calls this one, so the bracket rides along rather
+     than needing a hook of its own on each of them */
+  try{ if(window.muTab==='po') renderPlayoffs(); }catch(e){}
 }
 /* The neutral table. Ranking by all-play is the whole point - it is the order the season would
    have if nobody drew an easy week, and putting the real record beside it is what turns a
