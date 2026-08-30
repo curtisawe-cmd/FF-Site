@@ -1088,6 +1088,10 @@ nav.tabs button{position:relative}
   line-height:1.3;overflow-wrap:anywhere}
 /* the block already sits clear of the close button, so the name stops reserving room for it */
 .pmodal-head.has-act .pmodal-name{padding-right:0}
+/* the commissioner escape hatch: present, and deliberately not shaped like the button above it */
+.pm-force{font-size:11px;font-family:var(--f-mono);color:var(--chalk-dim);text-decoration:underline;
+  text-underline-offset:2px;letter-spacing:.02em}
+.pm-force:hover{color:var(--charge)}
 .pm-taken{display:inline-block;padding:6px 14px;border:1px solid var(--line-strong);border-radius:var(--r-ctrl);
   font-family:var(--f-ui);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
 @media(max-width:640px){
@@ -5327,9 +5331,11 @@ function addFromPlayers(pid, ev){
   if(ev){ ev.stopPropagation(); }
   const ti = addTargetTeam();
   if(ti===null){ toast(window.fbUser? 'Claim your team first to add players.' : 'Sign in and claim your team to add players.'); return; }
-  /* on waivers he cannot be added, only claimed - so send the button where it can actually work
-     rather than bouncing it off the guard with a toast */
-  if(onWaivers(pid) && !isAdmin()){ claimWaiver(pid); return; }
+  /* On waivers he is claimed, not added - so send the button where it can actually work rather
+     than bouncing it off the guard with a toast. No exception for the commissioner: this is the
+     function behind every Claim button on the site, and one of them saying Claim while doing a
+     plain add was the whole problem. The deliberate force-through goes through addWithDrop. */
+  if(onWaivers(pid)){ claimWaiver(pid); return; }
   addWithDrop(ti, pid);
 }
 /* key stat columns per position for the season table */
@@ -5379,7 +5385,7 @@ function posRankOf(id, pos, yr){
 function pmRosterActionHTML(id, m){
   try{
     if(window.currentView==='draft') return '';
-    const box = (btn, hint) => `<div class="pm-act">${btn}<span class="pm-hint">${hint}</span></div>`;
+    const box = (btn, hint, extra) => `<div class="pm-act">${btn}<span class="pm-hint">${hint}</span>${extra||''}</div>`;
     const btn = (label, call) => call
       ? `<button class="btn" onclick="${call}">${label}</button>`
       : `<button class="btn" disabled>${label}</button>`;
@@ -5396,11 +5402,22 @@ function pmRosterActionHTML(id, m){
     if(ti===null) return box(btn('Add', null),
       window.fbUser ? 'Claim your team to add players' : 'Sign in to add players');
 
-    /* on the wire he is claimed, not grabbed - so the button says what it will actually do */
-    if(onWaivers(id) && !isAdmin()){
+    /* On the wire he is claimed, not grabbed. This used to carve out the commissioner, who was
+       shown a plain Add instead - which walked straight past the wire and every bid already in
+       on the player, and made the one person who runs the league the only one who could not see
+       what the button was going to do. A commissioner is a manager too and bids like everyone
+       else; the force-through is still here, but it is now something you choose rather than the
+       default you land on. */
+    if(onWaivers(id)){
       const w = wireEntry(id);
-      return box(btn('Claim', `closePlayer();addFromPlayers('${id}')`),
-        `On waivers · clears in ${esc(waiverClearLabel(w && w.until))}`);
+      const clears = esc(waiverClearLabel(w && w.until));
+      /* say that a bid is coming, so the modal that opens is not a surprise */
+      const hint = faabOn() ? `Sealed bid · clears in ${clears}`
+                            : `On waivers · clears in ${clears}`;
+      const force = isAdmin()
+        ? `<a href="#" class="pm-force" title="Commissioner only. Skips the wire and every claim already in on him." onclick="closePlayer();addWithDrop(${ti},'${id}');return false">Force add</a>`
+        : '';
+      return box(btn('Claim', `closePlayer();addFromPlayers('${id}')`), hint, force);
     }
 
     const n = rosterCount(ti), lim = rosterLimit();
