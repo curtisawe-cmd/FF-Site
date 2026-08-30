@@ -1924,6 +1924,15 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .h2h-pts{font-family:var(--f-mono);font-weight:700;font-size:13px;text-align:center;
   font-variant-numeric:tabular-nums;color:var(--chalk-dim)}
 .h2h-pts.win{color:var(--turf-bright)}
+/* The projection sits under the live score inside the same 46px column, dimmer and smaller, so
+   the row still reads as one number with a footnote rather than two numbers competing. It stays
+   dim even on the winning side - the point of the pair is what he DID against what was expected,
+   and colouring both would flatten that. One caption per card names it; repeating "proj" on
+   every row does not fit 46px and would be noise. */
+.h2h-proj{display:block;font-weight:400;font-size:9.5px;line-height:1.3;color:var(--chalk-dim);opacity:.85}
+.h2h-pts.win .h2h-proj{color:var(--chalk-dim)}
+.h2h-key{font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--chalk-dim);text-align:center;padding:6px 8px 0}
 .h2h-slot{display:flex;align-items:center;justify-content:center}
 @media(max-width:360px){
   .h2h-row{grid-template-columns:minmax(0,1fr) 38px 34px 38px minmax(0,1fr);gap:3px;padding:6px 5px}
@@ -1940,6 +1949,13 @@ table.gc-tbl tr:last-child td{border-bottom:none}
    and it was leaking in here, dotting every row and forcing them twice as high as they need. */
 table.gc-tbl .gc-slot{width:38px}
 table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Desktop has the width for a real column, so the projection gets one with a heading rather than
+   being tucked under the score - side by side is easier to compare down a roster than stacked.
+   Not bold: the number that happened outranks the number that was guessed. */
+table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
+  font-variant-numeric:tabular-nums;color:var(--chalk-dim);white-space:nowrap}
+.gc-hrow td{font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--chalk-dim);padding-top:0;padding-bottom:2px;border-bottom:1px solid var(--line)}
 .gc-pl{font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gc-meta{color:var(--chalk-dim);font-size:10px;line-height:1.25}
 .gc-stat{color:var(--chalk-dim);font-size:10px;font-family:var(--f-mono);line-height:1.3;margin-top:1px}
@@ -1966,6 +1982,7 @@ table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-
   table.gc-tbl .gc-slot{width:25px}
   .gc-tbl .postag{min-width:21px;font-size:8.5px;padding:1px 2px;letter-spacing:0}
   table.gc-tbl .gc-pts{width:38px;font-size:10.5px}
+  table.gc-tbl .gc-proj{width:32px;font-size:10px}
   /* keep the thumbnails, just shrink them. playerFace() writes width/height as an inline
      style, so these have to out-rank it. */
   .gc-tbl .pface{width:19px !important;height:19px !important}
@@ -5041,6 +5058,10 @@ const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
    list is stripped by slimSeason before season scoring ever sees it, so changing a formula
    without adding the field here does nothing at all to season totals. */
 const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_tgt','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpa','xpmiss','fgm','fga','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
+/* Sleeper publishes a single season-long projection file. Everything that shows a projected
+   number is reading THIS year, so the year lives in one place - the fetch below and the Game
+   Center gate both read it, and they cannot drift apart when it rolls over. */
+const PROJ_SEASON = 2026;
 let STAT_CACHE={}, statsLoading=false, statsLoaded=false;
 function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue; if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm||p.st_td)) continue; const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; } m[id]=o; } return m; }
 async function loadCareerStats(){
@@ -5048,7 +5069,7 @@ async function loadCareerStats(){
   statsLoading=true;
   try{
     const jobs=CAREER_YEARS.map(y=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${y}`).then(r=>r.json()).then(d=>[String(y),slimSeason(d)]));
-    jobs.push(fetch('https://api.sleeper.app/v1/projections/nfl/regular/2026').then(r=>r.json()).then(d=>['proj',slimSeason(d)]));
+    jobs.push(fetch(`https://api.sleeper.app/v1/projections/nfl/regular/${PROJ_SEASON}`).then(r=>r.json()).then(d=>['proj',slimSeason(d)]));
     (await Promise.all(jobs)).forEach(([k,m])=>STAT_CACHE[k]=m);
     RANK_CACHE={};                       /* ranks are derived from the cache they just replaced */
     statsLoaded=true;
@@ -9989,6 +10010,21 @@ if(!window._gcJumpBound){
   window.addEventListener('scroll', onGcScroll, {passive:true});
   document.addEventListener('scroll', onGcScroll, {passive:true, capture:true});
 }
+/* Game Center draws before the season projections have arrived, so it has to redraw when they
+   do. It cannot just chain off loadCareerStats(): that returns an ALREADY-RESOLVED promise when
+   another caller is mid-fetch, so re-rendering from its .then() while a fetch is in flight would
+   spin - render, resolve, render. Watch the flag instead, and arm this only once. */
+function gcWaitForProj(){
+  if(statsLoaded || window._gcProjWait) return;
+  window._gcProjWait = true;
+  const done = ()=>{ window._gcProjWait = false;
+    if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter(); };
+  const tick = ()=>{
+    if(statsLoaded || !statsLoading) return done();   /* arrived, or the fetch failed - redraw once either way */
+    setTimeout(tick, 250);
+  };
+  loadCareerStats().then(tick, tick);
+}
 /* force a fresh pull even if the cache is still warm */
 async function refreshGameCenter(){
   const wk=+(window.muWeek||1), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
@@ -10065,6 +10101,16 @@ async function renderGameCenter(){
   };
   const ptsOf = p => { if(!p) return null; const st=stats[p.playerId];
     return st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null); };
+  /* A projection is a PROJ_SEASON season total divided by games - the same per-week number the
+     matchups page adds up into a team total. Beside a 2024 box score it would be meaningless, so
+     the column is simply not offered when an older season is selected. Sleeper publishes none for
+     team defences, and those rows show a dash rather than a fabricated zero. */
+  const showProj = (season === PROJ_SEASON);
+  if(showProj && !statsLoaded) gcWaitForProj();
+  const projTxt = p => { if(!p) return '';
+    if(!statsLoaded) return '\u2026';
+    const v = projWeekPoints(p.playerId, p.pos);
+    return v==null ? '\u2014' : v.toFixed(1); };
   /* "Jayden Daniels" -> "J. Daniels". Team defences keep their full name; initialising them
      produces nonsense like "C. Bengals D/ST". */
   const shortName = p => { if(!p) return '';
@@ -10083,9 +10129,9 @@ async function renderGameCenter(){
       : `<span class="h2h-side ${s} empty">—</span>`;
     return `<div class="h2h-row">
       ${side(a,'l')}
-      <span class="h2h-pts${lead==='l'?' win':''}">${pa==null?'—':pa.toFixed(1)}</span>
+      <span class="h2h-pts${lead==='l'?' win':''}">${pa==null?'—':pa.toFixed(1)}${(showProj&&a)?`<span class="h2h-proj">${projTxt(a)}</span>`:''}</span>
       <span class="h2h-slot">${slotTag(slot, slot)}</span>
-      <span class="h2h-pts${lead==='r'?' win':''}">${pb==null?'—':pb.toFixed(1)}</span>
+      <span class="h2h-pts${lead==='r'?' win':''}">${pb==null?'—':pb.toFixed(1)}${(showProj&&b)?`<span class="h2h-proj">${projTxt(b)}</span>`:''}</span>
       ${side(b,'r')}
     </div>`;
   };
@@ -10116,7 +10162,9 @@ async function renderGameCenter(){
   };
   const h2hBlock = (ax, bx, A_, B_) => {
     const A = teamLists(ax), B = teamLists(bx);
-    let out = h2hHead(ax, bx, A_, B_) + `<div class="gc-band">Starters</div>`;
+    let out = h2hHead(ax, bx, A_, B_)
+      + (showProj ? `<div class="h2h-key">Score · projection below</div>` : '')
+      + `<div class="gc-band">Starters</div>`;
     starterSlotSeq.forEach((s,i)=>{ out += h2hRow(s, A.starters[i], B.starters[i]); });
     const bn = Math.max(A.bench.length, B.bench.length);
     if(bn){ out += `<div class="gc-band">Bench</div>`;
@@ -10143,15 +10191,21 @@ async function renderGameCenter(){
               <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}</div>
               ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">did not play</div>`)}
             </div></div></td>
+        ${showProj?`<td class="gc-proj">${projTxt(p)}</td>`:''}
         <td class="gc-pts">${pts==null?'—':pts.toFixed(1)}</td></tr>`;
     }).join('');
+    /* On every section, not just the first: table-layout is fixed so all three line up, but a
+       column with no starters set would otherwise leave the bench unlabelled. */
+    const hrow = showProj
+      ? `<tr class="gc-hrow"><td></td><td></td><td class="gc-proj">Proj</td><td class="gc-pts">Pts</td></tr>`
+      : '';
     const { starters, bench, ir } = teamLists(ti);   /* shared with the head-to-head layout */
     return `<div class="gc-col">
       <div class="gc-band">Starters</div>
-      ${starters.length?`<table class="gc-tbl">${rowsFor(starters)}</table>`:`<div class="gc-none">No starters set.</div>`}
-      ${bench.length?`<div class="gc-band">Bench</div><table class="gc-tbl">${rowsFor(bench)}</table>`:''}
+      ${starters.length?`<table class="gc-tbl">${hrow}${rowsFor(starters)}</table>`:`<div class="gc-none">No starters set.</div>`}
+      ${bench.length?`<div class="gc-band">Bench</div><table class="gc-tbl">${hrow}${rowsFor(bench)}</table>`:''}
       ${benchLeftHTML(ti, stats, noStats)}
-      ${ir.length?`<div class="gc-band">Reserve (IR)</div><table class="gc-tbl">${rowsFor(ir)}</table>`:''}
+      ${ir.length?`<div class="gc-band">Reserve (IR)</div><table class="gc-tbl">${hrow}${rowsFor(ir)}</table>`:''}
     </div>`;
   };
   const cards = games.map((g,m)=>{
