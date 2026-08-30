@@ -5312,6 +5312,47 @@ function posRankOf(id, pos, yr){
    a live Draft button when the pick is yours to make, the same button disabled with the
    reason when it is not, and a plain DRAFTED chip once he is gone. Silence would read as
    a broken button, and the reason is the useful half anyway. */
+/* Outside the draft room the same header slot answers a different question: is he on a roster,
+   and can I have him. The Players list has had an Add button in its last column for a while, but
+   the popup you land on when you tap a name had nothing at all - so reading a free agent's stats
+   was a dead end. You closed it, found the row again, and hit the little Add.
+
+   The button does not go away when the roster is full. It goes to the drop picker, which is the
+   only place that choice can honestly be made: a disabled button would just say no without
+   telling you what to do about it. */
+function pmRosterActionHTML(id, m){
+  try{
+    if(window.currentView==='draft') return '';
+    const box = (btn, hint) => `<div class="pm-act">${btn}<span class="pm-hint">${hint}</span></div>`;
+    const btn = (label, call) => call
+      ? `<button class="btn" onclick="${call}">${label}</button>`
+      : `<button class="btn" disabled>${label}</button>`;
+
+    /* already on a roster: say whose, and let the rows further down offer the trade or the
+       lineup move. Two ways to act on the same player in one header would just crowd it. */
+    const own = (realDraft().picks||[]).find(x=>x.playerId===id && !x.cut);
+    if(own){
+      const mine = own.teamIndex===myTeamIdx();
+      return `<div class="pm-act"><span class="pm-taken">${mine?'On your team':'Rostered'}</span><span class="pm-hint">${esc(teamName(own.teamIndex))}</span></div>`;
+    }
+
+    const ti = addTargetTeam();
+    if(ti===null) return box(btn('Add', null),
+      window.fbUser ? 'Claim your team to add players' : 'Sign in to add players');
+
+    /* on the wire he is claimed, not grabbed - so the button says what it will actually do */
+    if(onWaivers(id) && !isAdmin()){
+      const w = wireEntry(id);
+      return box(btn('Claim', `closePlayer();addFromPlayers('${id}')`),
+        `On waivers · clears in ${esc(waiverClearLabel(w && w.until))}`);
+    }
+
+    const n = rosterCount(ti), lim = rosterLimit();
+    return box(btn('Add to my team', `closePlayer();addFromPlayers('${id}')`),
+      n < lim ? `${esc(teamName(ti))} · ${n}/${lim}`
+              : `Roster full — pick someone to drop`);
+  }catch(e){ return ''; }
+}
 function pmDraftActionHTML(id, m){
   try{
     if(window.currentView!=='draft') return '';
@@ -5336,7 +5377,8 @@ function pmDraftActionHTML(id, m){
 function renderPlayerModal(id){
   const ov=document.getElementById('playerModal'); if(!ov) return;
   const m=findPlayerMeta(id)||{name:'Player',pos:'',team:''}; const pos=m.pos||'';
-  const act=pmDraftActionHTML(id, m);
+  /* the draft room keeps its own button; everywhere else the roster one takes the slot */
+  const act=pmDraftActionHTML(id, m) || pmRosterActionHTML(id, m);
   const head=`<div class="pmodal-head${act?' has-act':''}">${playerFace(m,66)}<div style="min-width:0">
     <div class="pmodal-name">${esc(m.name)}</div>
     <div class="pmodal-meta"><span class="postag pos-${pos}" style="--pc:var(--${pos.toLowerCase()||'wr'})">${pos||'?'}</span> ${esc(m.team||'FA')}${m.num!=null?` · #${m.num}`:''}${m.age?` · ${m.age} yo`:''}${m.exp!=null?` · ${m.exp===0?'Rookie':m.exp+' yr'+(m.exp>1?'s':'')}`:''}${m.inj?injBadge(m.inj,m.injBody):''}${byeTagHTML(id, m.team)}</div>
