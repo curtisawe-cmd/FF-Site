@@ -1127,6 +1127,44 @@ nav.tabs button{position:relative}
    the same block rather than the top of the next one */
 .wv-item{border-bottom:1px solid var(--line)}
 .wv-item .faRow{border-bottom:none}
+/* A waiver row on a phone was one nowrap line 471px wide inside a 310px card. Two things were
+   broken by that, not one: the Claim button sat at x=465, entirely off screen, and the card
+   clips its overflow so there was no scrolling to it either; and pmeta had no min-width, so it
+   refused to shrink and squeezed the player name to a width of ZERO - which is also what you
+   tap to open his stats, so that was gone too.
+
+   Grid rather than flex-wrap. The children are known and fixed here, and asking flexbox to break
+   this line in the one place it should means fighting its basis arithmetic; naming the two rows
+   just says what goes where. Who and when on top, the detail and the button underneath. */
+@media(max-width:640px){
+  #wvView .wv-item .faRow{
+    display:grid;
+    grid-template-columns:auto auto minmax(0,1fr) auto;
+    grid-template-areas:"face pos name pill" "meta meta meta btn";
+    align-items:center;gap:6px 9px;padding:8px 4px;
+  }
+  #wvView .wv-item .faRow .pface{grid-area:face}
+  #wvView .wv-item .faRow .postag{grid-area:pos}
+  #wvView .wv-item .faRow .wv-rank{grid-area:pos}
+  /* wraps rather than ellipsizing: the name cell is 135px and the bye chip rides inside it, so
+     "Jonathan Taylor BYE 13" was being cut to "Jonathan Tayl..." - and the name is the one thing
+     on the row you cannot do without */
+  #wvView .wv-item .faRow .faName{grid-area:name;min-width:0;
+    white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
+  #wvView .wv-item .faRow .statpill{grid-area:pill;justify-self:end}
+  /* the line that would not shrink. It wraps now instead of pushing everything sideways. */
+  #wvView .wv-item .faRow .pmeta{grid-area:meta;min-width:0;white-space:normal;line-height:1.35}
+  #wvView .wv-item .faRow .pick,
+  #wvView .wv-item .faRow > .btn,
+  #wvView .wv-item .faRow .wv-move{grid-area:btn;justify-self:end}
+  /* Claim and Withdraw are the point of the page, so they get a real tap target rather than the
+     11px-padded chip they inherit from the desktop table. */
+  #wvView .wv-item .faRow .pick,
+  #wvView .wv-item .faRow > .btn{min-height:38px;padding-left:20px;padding-right:20px;font-size:14px}
+  /* the settled list has no face or pill - it only needs its meta to stop shoving the row wide */
+  #wvView .faRow{flex-wrap:wrap}
+  #wvView .faRow .pmeta{min-width:0}
+}
 .wv-claimants{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 4px 8px 45px;font-size:12px}
 .wv-lbl{color:var(--chalk-dim);letter-spacing:.03em;text-transform:uppercase;font-size:11px;font-weight:700}
 .wv-cl{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--chalk-dim);
