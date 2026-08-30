@@ -1911,14 +1911,26 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .mu-wp{flex:0 0 100%;width:100%;order:10}
 .mu-wp .wp{background:transparent;border-bottom:none;padding:4px 0 0}
 @media(max-width:640px){ .mu-wp{grid-column:1/-1} }
-.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) 46px 40px 46px minmax(0,1fr);
-  align-items:center;gap:4px;padding:7px 8px;border-bottom:1px solid var(--line)}
+.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 36px 42px minmax(0,1fr);
+  align-items:center;gap:4px;padding:7px 6px;border-bottom:1px solid var(--line)}
 .h2h-row:last-child{border-bottom:none}
-.h2h-side{display:flex;flex-direction:column;min-width:0;gap:1px}
-.h2h-side.r{align-items:flex-end;text-align:right}
+/* thumbnail on the outside edge, text stacked beside it, mirrored on the right-hand side */
+.h2h-side{display:flex;align-items:flex-start;gap:5px;min-width:0}
+.h2h-side.r{flex-direction:row-reverse;text-align:right}
+.h2h-side .pface{flex:0 0 auto}
+.h2h-txt{display:flex;flex-direction:column;min-width:0;gap:1px;flex:1}
+.h2h-side.r .h2h-txt{align-items:flex-end}
+/* spans the name AND the score beside it - roughly 140px a side instead of 93, which is the
+   difference between a two-line stat line and a six-line one */
+.h2h-det{font-size:9px;color:var(--chalk-dim);font-family:var(--f-mono);line-height:1.35;
+  min-width:0;overflow-wrap:anywhere}
+.h2h-det.l{grid-column:1/3}
+.h2h-det.r{grid-column:4/6;text-align:right}
 .h2h-side.empty{color:var(--chalk-dim);font-family:var(--f-mono);font-size:12px}
-.h2h-nm{font-weight:700;font-size:13px;color:var(--chalk);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;cursor:pointer}
+/* Wraps rather than truncating. The side column is barely 100px once the thumbnail is in, and
+   a name cut to "B. Robi..." is worse than the same name on two lines. */
+.h2h-nm{font-weight:700;font-size:13px;line-height:1.2;color:var(--chalk);
+  overflow-wrap:anywhere;max-width:100%;cursor:pointer}
 .h2h-meta{font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .h2h-pts{font-family:var(--f-mono);font-weight:700;font-size:13px;text-align:center;
@@ -1935,8 +1947,12 @@ section.view[data-ghost] > *{position:relative;z-index:1}
   color:var(--chalk-dim);text-align:center;padding:6px 8px 0}
 .h2h-slot{display:flex;align-items:center;justify-content:center}
 @media(max-width:360px){
-  .h2h-row{grid-template-columns:minmax(0,1fr) 38px 34px 38px minmax(0,1fr);gap:3px;padding:6px 5px}
+  .h2h-row{grid-template-columns:minmax(0,1fr) 36px 30px 36px minmax(0,1fr);gap:3px;padding:6px 4px}
   .h2h-nm{font-size:12px} .h2h-pts{font-size:12px}
+  .h2h-side{gap:4px} .h2h-det{font-size:8.5px}
+  /* playerFace writes its size inline, so this has to out-rank it */
+  .h2h-side .pface{width:18px !important;height:18px !important}
+  .h2h-side .pface .pface-i{font-size:8px !important}
 }
 .gc-col{min-width:0;padding:2px 0}
 .gc-col + .gc-col{border-left:1px solid var(--line)}
@@ -10092,10 +10108,21 @@ async function renderGameCenter(){
   /* one source of truth for a team's three lists, shared by both layouts */
   const teamLists = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
-    const starters = [];
-    slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; let n=0;
-      roster.forEach(p=>{ if(l[p.playerId]===s && n<cap){ starters.push(p); n++; } }); });
-    return { starters,
+    /* Two views of the same starters, and the difference matters. bySlot runs parallel to
+       starterSlotSeq - one entry per slot, null where nobody is in it. starters is the same
+       list with the holes closed.
+
+       The head-to-head layout faces row i on the left against row i on the right and prints
+       the slot between them, so it has to read bySlot. Reading the closed-up list meant that
+       the moment a team left a starting slot empty, every player below the hole slid up under
+       somebody else's position chip - a kicker labelled TE, a defence labelled FLEX - while
+       the blank rows collected at the bottom instead of sitting in the gap. A team with a full
+       lineup looked perfect, which is why it went unnoticed. */
+    const bySlot = [];
+    slotOrder.forEach(s=>{ const cap=+S.roster[s]||0;
+      const inSlot = roster.filter(p=>l[p.playerId]===s).slice(0, cap);
+      for(let k=0;k<cap;k++) bySlot.push(inSlot[k] || null); });
+    return { bySlot, starters: bySlot.filter(Boolean),
       bench: roster.filter(p=>l[p.playerId]==='BN'),
       ir:    roster.filter(p=>l[p.playerId]==='IR') };
   };
@@ -10124,15 +10151,34 @@ async function renderGameCenter(){
   const h2hRow = (slot, a, b) => {
     const pa = ptsOf(a), pb = ptsOf(b);
     const lead = (pa!=null && pb!=null) ? (pa>pb ? 'l' : (pb>pa ? 'r' : '')) : '';
-    const side = (p, s) => p
-      ? `<span class="h2h-side ${s}"><span class="h2h-nm pstat" onclick="openPlayer('${p.playerId}')">${esc(shortName(p))}</span><span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}</span></span>`
-      : `<span class="h2h-side ${s} empty">—</span>`;
+    /* The thumbnail and the stat line are the two things the phone could not see. The line is
+       the same one the desktop column prints, including "did not play" - which is the whole
+       difference between a nought that happened and a nought that means nobody turned up. */
+    const side = (p, s) => {
+      if(!p) return `<span class="h2h-side ${s} empty">—</span>`;
+      return `<span class="h2h-side ${s}">${playerFace(p,20)}<span class="h2h-txt">`
+        + `<span class="h2h-nm pstat" onclick="openPlayer('${p.playerId}')">${esc(shortName(p))}</span>`
+        + `<span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}</span>`
+        + `</span></span>`;
+    };
+    /* Same line the desktop column prints, "did not play" included - that is the difference
+       between a nought that happened and a nought that means nobody turned up. */
+    const detOf = p => { if(!p) return '';
+      const st = stats[p.playerId], line = statLine(st, p.pos);
+      return line ? esc(line) : ((st||noStats) ? '' : 'did not play'); };
     return `<div class="h2h-row">
       ${side(a,'l')}
       <span class="h2h-pts${lead==='l'?' win':''}">${pa==null?'—':pa.toFixed(1)}${(showProj&&a)?`<span class="h2h-proj">${projTxt(a)}</span>`:''}</span>
-      <span class="h2h-slot">${slotTag(slot, slot)}</span>
+      ${/* colour it by the player, not by the slot name, which is what the desktop column does.
+           Passing the slot left BN and IR reading var(--bn) and var(--ir) - variables that do
+           not exist - so those two chips came out an accidental grey on the phone and the
+           player's own colour on the desktop. */''}
+      <span class="h2h-slot">${slotTag(slot, ((a||b||{}).pos) || slot)}</span>
       <span class="h2h-pts${lead==='r'?' win':''}">${pb==null?'—':pb.toFixed(1)}${(showProj&&b)?`<span class="h2h-proj">${projTxt(b)}</span>`:''}</span>
       ${side(b,'r')}
+      ${(()=>{ const da=detOf(a), db=detOf(b);
+        /* one line each, under the name and its score rather than squeezed beside them */
+        return (da||db) ? `<span class="h2h-det l">${da}</span><span class="h2h-det r">${db}</span>` : ''; })()}
     </div>`;
   };
   /* records for the header, computed once for the whole view rather than per card */
@@ -10165,7 +10211,7 @@ async function renderGameCenter(){
     let out = h2hHead(ax, bx, A_, B_)
       + (showProj ? `<div class="h2h-key">Score · projection below</div>` : '')
       + `<div class="gc-band">Starters</div>`;
-    starterSlotSeq.forEach((s,i)=>{ out += h2hRow(s, A.starters[i], B.starters[i]); });
+    starterSlotSeq.forEach((s,i)=>{ out += h2hRow(s, A.bySlot[i], B.bySlot[i]); });
     const bn = Math.max(A.bench.length, B.bench.length);
     if(bn){ out += `<div class="gc-band">Bench</div>`;
       for(let i=0;i<bn;i++) out += h2hRow('BN', A.bench[i], B.bench[i]); }
