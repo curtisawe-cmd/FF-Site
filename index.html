@@ -237,13 +237,25 @@ section.view > .viewhead{
   :root[data-layout="side"] .burger{display:inline-flex;order:0}
 }
 
+/* ---- why every strip above carries touch-action:pan-x ----
+   These strips all sit inside the pinned header stack, and they are all horizontal scrollports.
+   A scrollport with touch-action:auto asks the browser to work out which way a drag was meant to
+   go, and a drag that starts on the strip with any sideways component at all gets claimed by it:
+   the tabs slide under your thumb while the page stays where it is. pan-x says this element pans
+   horizontally and does nothing else, so a vertical drag is the page's from the first frame.
+
+   overflow-y:hidden goes with it because overflow-x:auto alone computes the other axis to auto,
+   which quietly makes each of these a vertical scrollport too - with nothing to scroll, but able
+   to swallow the gesture. */
 /* The shared Teams/Players/Trades sub-nav. nowrap is the point: it must occupy exactly one
    line on every page so the content below never shifts vertically between them. Too narrow to
    fit becomes a sideways scroll, the same as the main tabs. */
 /* a page that needs an account: still there, visibly not available yet */
 nav.tabs button.locked{opacity:.4}
 nav.tabs button.locked:hover{opacity:.6}
+/* see the pan-x note below: this strip pans sideways and hands every vertical drag to the page */
 .subnav{gap:8px;margin-bottom:16px;flex-wrap:nowrap;overflow-x:auto;
+  touch-action:pan-x;overflow-y:hidden;overscroll-behavior-x:contain;
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .subnav::-webkit-scrollbar{display:none}
 /* These bars are markup="row subnav", and .row is the same specificity but lands a hundred
@@ -1367,6 +1379,7 @@ nav.tabs button.active{box-shadow:inset 0 -3px 0 var(--neon), 0 6px 16px -8px va
    the header, is most of a phone screen gone before a single setting shows. The bottom gap
    belongs to the head now, not the row, or the bar pins an empty stripe along with it. */
 .spage-tabs{display:flex;flex-wrap:nowrap;gap:7px;margin:10px 0 0;overflow-x:auto;
+  touch-action:pan-x;overflow-y:hidden;overscroll-behavior-x:contain;
   scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .spage-tabs::-webkit-scrollbar{display:none}
 #view-settings > .viewhead{padding-bottom:14px}   /* clear the pinned row from the first card */
@@ -1494,14 +1507,14 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
      so everything tightens here — and nowrap + overflow-x means a narrower phone or a longer
      team name scrolls the ribbon rather than dropping a control onto a second row. */
   .subbar{order:4;justify-content:flex-start;gap:5px;padding-top:5px;margin:0;
-    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    flex-wrap:nowrap;overflow-x:auto;touch-action:pan-x;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   .subbar::-webkit-scrollbar{display:none}
   .subbar > *{flex:0 0 auto}
   .subbar .theme-toggle{font-size:10px;padding:3px 8px;gap:4px;letter-spacing:.02em;margin-left:0}
   .subbar .theme-toggle .dot{width:6px;height:6px}
   .subbar .team-picker{font-size:10px;padding:3px 19px 3px 8px;max-width:96px;
     background-position:right 6px center;letter-spacing:.02em}
-  nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  nav.tabs{order:3;width:100%;flex-wrap:nowrap;overflow-x:auto;touch-action:pan-x;overflow-y:hidden;overscroll-behavior-x:contain;margin-left:0;padding-bottom:3px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
   nav.tabs::-webkit-scrollbar{display:none}
   /* a fifth bigger than they were (30px tall -> 37): a thumb is not a cursor. Covers the
      drawer too, whose nav reuses these classes. */
