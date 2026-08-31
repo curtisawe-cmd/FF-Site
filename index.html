@@ -377,6 +377,14 @@ table.plain td{padding:6px 8px;border-bottom:1px solid var(--line)}
 /* ---------- position colors ---------- */
 .pos-QB{--pc:var(--qb)} .pos-RB{--pc:var(--rb)} .pos-WR{--pc:var(--wr)}
 .pos-TE{--pc:var(--te)} .pos-K{--pc:var(--k)} .pos-DEF{--pc:var(--def)}
+/* the projection column: mono and right-aligned so the decimal points line up down a list you
+   are scanning for the biggest number */
+table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:600;
+  font-variant-numeric:tabular-nums;color:var(--turf-bright);white-space:nowrap}
+/* On a waiver row the projection is text in the meta line, not a second pill: the phone
+   grid gives .statpill one cell, and two pills in it sat on top of each other. */
+.pl-projmeta{color:var(--turf-bright);font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.pl-projpill{font-variant-numeric:tabular-nums;white-space:nowrap}
 .postag{
   display:inline-block;min-width:34px;text-align:center;
   font-family:var(--f-ui);font-weight:700;font-size:12px;letter-spacing:.05em;
@@ -1177,9 +1185,14 @@ nav.tabs button{position:relative}
      11px-padded chip they inherit from the desktop table. */
   #wvView .wv-item .faRow .pick,
   #wvView .wv-item .faRow > .btn{min-height:38px;padding-left:20px;padding-right:20px;font-size:14px}
-  /* the settled list has no face or pill - it only needs its meta to stop shoving the row wide */
-  #wvView .faRow{flex-wrap:wrap}
-  #wvView .faRow .pmeta{min-width:0}
+  /* The settled list, and the free-agent list on My Team, are a different shape - no face, no
+     grid. They only need to be allowed to wrap and to let the meta shrink. #faList earns its way
+     in here because adding a projection pill to that row squeezed the player name to a width of
+     zero, the same failure the waiver row had. */
+  #wvView .faRow, #faList .faRow{flex-wrap:wrap;row-gap:5px}
+  #wvView .faRow .pmeta, #faList .faRow .pmeta{min-width:0}
+  /* and the name keeps a floor, so it can wrap but never vanish */
+  #faList .faRow .faName{flex:1 1 60%;min-width:110px}
 }
 .wv-claimants{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 4px 8px 45px;font-size:12px}
 .wv-lbl{color:var(--chalk-dim);letter-spacing:.03em;text-transform:uppercase;font-size:11px;font-weight:700}
@@ -2266,6 +2279,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <select id="plTeam" onchange="window.plTeam=this.value;renderPlayers()"><option value="ALL">All teams</option></select>
       <select id="plSort" onchange="window.plSort=this.value;renderPlayers()">
         <option value="rank">Sort: Relevance</option>
+        <option value="proj">Sort: Projection</option>
         <option value="name">Sort: Name</option>
         <option value="team">Sort: Team</option>
         <option value="age">Sort: Age</option>
@@ -5563,7 +5577,11 @@ function renderPlayers(){
     (!window.plInjOnly||p.inj) &&
     (!q||p.name.toLowerCase().includes(q)||(p.team||'').toLowerCase().includes(q)||(p.college||'').toLowerCase().includes(q)));
   const sort=window.plSort||'rank';
-  rows.sort((a,b)=> sort==='name'? a.name.localeCompare(b.name)
+  /* best projection first, because the question is who to pick up. Anyone Sleeper has no
+     projection for sinks below everyone who has one rather than sorting as a zero. */
+  const pw = p => { const v = projWkPts(p); return v==null ? -1 : v; };
+  rows.sort((a,b)=> sort==='proj'? (pw(b)-pw(a) || a.rank-b.rank)
+                  : sort==='name'? a.name.localeCompare(b.name)
                   : sort==='team'? (a.team.localeCompare(b.team)||a.rank-b.rank)
                   : sort==='age' ? ((a.age||199)-(b.age||199)||a.rank-b.rank)
                   : a.rank-b.rank);
@@ -5575,11 +5593,12 @@ function renderPlayers(){
   const st=document.getElementById('plStatus');
   if(st) st.innerHTML=`${eligible.length-draftedN} available${draftedN?` · ${draftedN} drafted`:''} · ${injCount} injury-flagged${canAdd?` · adding to <b>${esc(teamName(addTi))}</b> (${rosterCount(addTi)}/${rosterLimit()})`:''}${window.plUpdated?` · updated ${timeAgo(window.plUpdated)}`:''} · <a href="#" class="poolrefresh" onclick="loadPlayers(true);return false">refresh</a>`;
   list.innerHTML=`<div style="overflow-x:auto"><table class="plain plplayers">
-    <tr><th style="width:44px">Pos</th><th>Player</th><th style="width:58px">Team</th><th style="width:52px;text-align:center" title="The week this player's NFL team does not play">Bye</th><th style="width:52px;text-align:center">Age</th><th style="width:52px;text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
+    <tr><th style="width:44px">Pos</th><th>Player</th><th style="width:58px">Team</th><th style="width:62px;text-align:right" title="Projected points a week, scored through this league's own rules. The same number Game Center shows beside what he actually scored.">Proj/wk</th><th style="width:52px;text-align:center" title="The week this player's NFL team does not play">Bye</th><th style="width:52px;text-align:center">Age</th><th style="width:52px;text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
       <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}</span></span></td>
       <td style="font-family:var(--f-mono)">${esc(p.team)}</td>
+      <td class="pl-proj">${projWkTxt(p)}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${byeCellHTML(null, p.team)}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.age??'—'}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.exp==null?'—':(p.exp===0?'R':p.exp)}</td>
@@ -7568,7 +7587,10 @@ function showView(v){
   if(v==='teams'){ renderTeams();
     if(!statsLoaded) loadCareerStats().then(()=>{ if(window.currentView==='teams') renderTeams(); }); }
   if(v==='matchups'){ renderMatchups(); setMuTab(window.muTab||'board'); }
-  if(v==='players'){ ensurePlayers(); setPlTab(window.plTab||'all'); }
+  if(v==='players'){ ensurePlayers(); setPlTab(window.plTab||'all');
+    /* this view never asked for the projections before, so the column it now has would have sat
+       empty unless you happened to open Teams or Matchups first */
+    waitForProj('pl', ()=>{ if(window.currentView==='players'){ renderPlayers(); renderWaivers(); } }); }
   if(v==='trades') renderTradeCenter();
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
@@ -8345,6 +8367,24 @@ function renderQueue(){
 }
 /* This season's projection, scored through the league's own rules, as one number for a pool
    row. A season total, not a per-week figure - "what is this pick worth" is a season question. */
+/* The per-week projection, as one string, for any list of players you might pick up.
+
+   This is the SAME number Game Center prints beside a player’s real score, so what a pickup is
+   worth and what he actually did are measured the same way. It is deliberately not the season
+   total the draft pool shows: that answers "who should I take in August", this answers "who
+   should I start on Sunday", and the two get labelled differently wherever they appear.
+
+   Takes whatever shape of player it is handed - the pool calls the id `id`, a roster pick calls
+   it `playerId`, a waiver entry calls it `pid`. */
+function projWkPts(p){
+  if(!p || !statsLoaded) return null;
+  return projWeekPoints(p.id || p.playerId || p.pid, p.pos);
+}
+function projWkTxt(p){
+  if(!statsLoaded) return '\u2026';        /* still loading: say so rather than claim a dash */
+  const v = projWkPts(p);
+  return v==null ? '\u2014' : v.toFixed(1);
+}
 function seasonProjPts(p){
   if(!statsLoaded) return null;
   const raw = (STAT_CACHE.proj||{})[p.id];
@@ -10183,16 +10223,24 @@ if(!window._gcJumpBound){
    do. It cannot just chain off loadCareerStats(): that returns an ALREADY-RESOLVED promise when
    another caller is mid-fetch, so re-rendering from its .then() while a fetch is in flight would
    spin - render, resolve, render. Watch the flag instead, and arm this only once. */
-function gcWaitForProj(){
-  if(statsLoaded || window._gcProjWait) return;
-  window._gcProjWait = true;
-  const done = ()=>{ window._gcProjWait = false;
-    if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter(); };
+/* Keyed so two pages can each wait without stacking waiters or redrawing each other. The reason
+   nobody can simply chain a redraw off loadCareerStats() is worth keeping in front of you: it
+   returns an ALREADY-RESOLVED promise when another caller is mid-fetch, so a render that redrew
+   from its .then() would spin - render, resolve, render. Watch the flag instead. */
+function waitForProj(key, redraw){
+  const k = '_projWait_' + key;
+  if(statsLoaded || window[k]) return;
+  window[k] = true;
+  const done = ()=>{ window[k] = false; try{ redraw(); }catch(e){} };
   const tick = ()=>{
     if(statsLoaded || !statsLoading) return done();   /* arrived, or the fetch failed - redraw once either way */
     setTimeout(tick, 250);
   };
   loadCareerStats().then(tick, tick);
+}
+function gcWaitForProj(){
+  waitForProj('gc', ()=>{
+    if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter(); });
 }
 /* force a fresh pull even if the cache is still warm */
 async function refreshGameCenter(){
@@ -13450,7 +13498,7 @@ function renderWaivers(){
         return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
           <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${byeTagHTML(w.pid, w.nfl)}</span>
-          <span class="pmeta">${esc(w.nfl||'')} · ${from}</span>
+          <span class="pmeta">${esc(w.nfl||'')} · ${from} · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(w)} proj</b></span>
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
           ${mineIn
             ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
@@ -13567,6 +13615,7 @@ function renderFreeAgents(ti){
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
       <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
       <span class="pmeta">${p.team||''}</span>${byeTagHTML(null, p.team)}
+      <span class="statpill pl-projpill" title="Projected points a week under this league's rules">${projWkTxt(p)} proj</span>
       ${onWaivers(p.id)
         ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
            <button class="pick" onclick="claimWaiver('${p.id}')">Claim</button>`
