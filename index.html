@@ -538,7 +538,9 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
    Smaller than before on purpose - it wraps now, so size buys lines, not letters: 15px fits nine
    characters a line on a laptop, which is a first name or a surname in one piece. */
 .sticker .stk-row{display:flex;flex-direction:column;gap:2px;min-width:0}
-.sticker .stk-sub{display:flex;align-items:center;gap:3px;min-width:0}
+.sticker .stk-sub{display:flex;align-items:center;gap:3px;min-width:0;flex-wrap:wrap}
+/* wrap, so "DEF·BUF · keeper" beside a 22px face drops whole words under it at full tile
+   width instead of shearing them ("keep/er") in the sliver that is left */
 /* A size down from the standalone meta line, since it shares this row with the face - and it
    wraps rather than ellipsises: the tile grows now, so "DEF·BUF · keeper" can take a second
    line instead of ending in a dot-dot-dot that hides which team a defence is. */
@@ -8430,7 +8432,7 @@ function renderBoard(){
   const stickerHTML = (p, srcIdx) => {
     const displaced = ownerForPick(srcIdx)!==teamForPick(srcIdx);
     const origin = displaced ? (S.teams[teamForPick(srcIdx)]||{}).name||'' : '';
-    return `<div class="stk-cell"><div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row"><span class="nm">${esc(p.name)}</span><span class="stk-sub">${playerFace(p,16)}<span class="mt">${p.pos}·${p.nfl||''}${displaced?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(teamForPick(srcIdx))}"></span>via ${esc(origin)}</b>`:''}${p.auto?' ·&nbsp;auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' ·&nbsp;keeper':''}</span></span></div></div></div>`;
+    return `<div class="stk-cell"><div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row"><span class="nm">${esc(p.name)}</span><span class="stk-sub">${playerFace(p,22)}<span class="mt">${p.pos}·${p.nfl||''}${displaced?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(teamForPick(srcIdx))}"></span>via ${esc(origin)}</b>`:''}${p.auto?' ·&nbsp;auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' ·&nbsp;keeper':''}</span></span></div></div></div>`;
   };
   for(let row=0;row<rowStarts.length;row++){
     const meta = rowStarts[row];
