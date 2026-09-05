@@ -166,6 +166,14 @@ worker's own `fetch` was answered from the browser HTTP cache and still served t
 Pages are fetched with `cache:'reload'` to force revalidation. Live data hosts (Firebase,
 Sleeper, ESPN) are never cached.
 
+On phones (<=640px) the header is two rows - brand + kickoff chip, then tabs - and
+`placeHeaderBits()` **moves** `#authBtn` and the `.subbar` switches ribbon into `#navDrawer`
+behind the burger (moved back above 640px). Moved, not copied: the JS finds those controls by
+id. If Sign in or a toggle "is missing" on a phone, it is in the drawer. Sub-tab strips
+(`.subnav .musub .statssub .chatsub .spage-tabs`) render as one scrolling underline row there.
+`html,body{overscroll-behavior-y:none}` is what keeps the pinned header and title blocks from
+riding the rubber-band when the page is pulled down; it needs iOS 16+.
+
 Safe-area insets are hoisted into `--sa-t/r/b/l` on `:root` and composed into padding with
 `calc()`. A mobile media query that sets `padding` outright will wipe them and the header
 disappears under the notch - that happened once.
