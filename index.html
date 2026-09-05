@@ -659,6 +659,24 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
      is the job; cap the glance so the list keeps a few rows. */
   :root[data-draftfs="1"] .roster-mini{max-height:72px}
 }
+/* Short screens only - a landscape phone. With the row pinned nothing grows out of bounds any
+   more, but the pool's fixed costs were still 210 of its 275px: a two-row chip strip, the head's
+   air and the roster strip left the player list 63px, and mid-draft with a queue showing, less.
+   So the chips become one sideways strip (the same pan-x idiom as the tab bars, same reasons),
+   the head loses its padding, and the queue and roster strips are capped. They are glances;
+   the list is the job. Height-only on purpose: a portrait phone's panel has 700px and its
+   wrapped chips are fine. */
+@media(max-height:560px){
+  :root[data-draftfs="1"] .pool .poolhead{padding:6px 10px 4px}
+  :root[data-draftfs="1"] .posfilters{flex-wrap:nowrap;overflow-x:auto;margin-top:5px;
+    touch-action:pan-x;overflow-y:hidden;overscroll-behavior-x:contain;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  :root[data-draftfs="1"] .posfilters::-webkit-scrollbar{display:none}
+  :root[data-draftfs="1"] .posfilters button{flex:0 0 auto;font-size:12px;padding:2px 8px}
+  :root[data-draftfs="1"] #queueBox{max-height:76px;overflow-y:auto}
+  :root[data-draftfs="1"] .qbox{margin:6px 0;padding:5px 9px}
+  :root[data-draftfs="1"] .roster-mini{max-height:48px;padding:5px 12px}
+}
 @media (prefers-reduced-motion: reduce){:root[data-draftfs="1"] .pool{transition:none}}
 .pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
 .posfilters{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
