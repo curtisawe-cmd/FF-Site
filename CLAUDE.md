@@ -286,7 +286,7 @@ visible cells.
 
 - **Always commit and push when a change is done. Don't ask first.** Curtis wants work
   live, not staged. Finish the change, verify it, commit, push to `main`.
-- **End the reply with the live link** once the push lands: https://bitchboyleague.com
+- **End every reply with the live link**, not just the ones that push: https://bitchboyleague.com
 - **Every change must land in both the desktop and the mobile layout.** Never fix one and
   leave the other. Check the mobile path first - it is the one that matters here.
 - **Stage files by name, not `git add -A`.** This folder contains an unrelated project;
