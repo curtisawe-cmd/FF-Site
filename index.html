@@ -495,7 +495,8 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
   min-height:clamp(42px,5.8vw,60px);border-radius:4px;background:var(--panel);border:1px dashed var(--line);
   position:relative;overflow:hidden;min-width:0;display:flex;flex-direction:column;gap:2px;justify-content:center;
 }
-.slot .stk-cell{position:relative;flex:1 1 auto;min-height:clamp(40px,5.4vw,56px);min-width:0}
+.slot .stk-cell{position:relative;flex:1 1 auto;min-height:clamp(40px,5.4vw,56px);min-width:0;display:flex;flex-direction:column}
+.slot .stk-cell > .kp-add{flex:1 1 auto}
 .slot .stk-cell.gone{flex:0 0 auto;min-height:18px;display:flex;align-items:center;justify-content:center}
 .gone-note{font-family:var(--f-mono);font-size:10px;color:var(--chalk-dim);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 3px}
@@ -512,24 +513,37 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
   border:1px solid var(--tc,var(--charge));border-radius:3px;padding:0 4px;line-height:1.5}
 .slot .tt-name{font-family:var(--f-mono);font-weight:700;font-size:10px;color:var(--tc,var(--chalk));
   max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sticker .mt .mt-trade{font-weight:800;white-space:nowrap}
+.sticker .mt .mt-trade{font-weight:800}   /* wraps with the line now; nowrap was for the ellipsis era */
 .sticker .tdot{display:inline-block;width:7px;height:7px;border-radius:50%;vertical-align:baseline;
   margin-right:2px;border:1px solid rgba(0,0,0,.45)}   /* outlined so it reads on any sticker colour */
+/* In flow, not absolute: the sticker used to be pinned to the cell (inset:0), so the cell could
+   never grow to fit what was on it and every name past ~7 letters ended in an ellipsis. As a flex
+   child it still fills the cell, but now a wrapped name makes the cell taller and the row follows
+   - rows already vary in height when a column holds two picks, so nothing new is asked of the
+   grid. flex:1 so a short name still gets the full tile when a neighbour wraps. */
 .sticker{
-  position:absolute;inset:0;border-radius:5px;
+  position:relative;flex:1 1 auto;border-radius:5px;
   background:var(--pc,#555);color:#0e1114;
-  padding:2px 6px;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:1px;
+  padding:3px 5px;display:flex;flex-direction:column;justify-content:center;min-width:0;gap:1px;
   transform:rotate(-.6deg);
   animation:slap .18s ease-out;
   box-shadow:0 2px 5px rgba(30,50,70,.28);
 }
 .sticker:nth-child(odd){transform:rotate(.6deg)}
 @keyframes slap{from{transform:scale(1.25) rotate(-3deg);opacity:0}to{transform:scale(1) rotate(-.6deg);opacity:1}}
-.sticker .stk-row{display:flex;align-items:center;gap:5px;min-width:0}
-.sticker .stk-row > div{display:flex;flex-direction:column;min-width:0;flex:1}
-/* heavier, but NOT bigger: 12 columns of names already ellipsise, and every extra px of
-   font size hides another character. Weight 800 costs ~1% of the visible name, 20px costs 8%. */
-.sticker .nm{font-family:var(--f-ui);font-weight:800;font-size:clamp(12px,1.4vw,18px);line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The name gets the whole width of the tile and wraps. The face used to sit beside it, and at
+   12 columns that was 24 of the name's ~69px - even "Christian" could not finish a line. It
+   lives on the second row now, next to the position tag, where the short text leaves it room.
+   overflow-wrap:anywhere is the floor: a word wider than the tile breaks rather than hides.
+   Smaller than before on purpose - it wraps now, so size buys lines, not letters: 15px fits nine
+   characters a line on a laptop, which is a first name or a surname in one piece. */
+.sticker .stk-row{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sticker .stk-sub{display:flex;align-items:center;gap:3px;min-width:0}
+/* A size down from the standalone meta line, since it shares this row with the face - and it
+   wraps rather than ellipsises: the tile grows now, so "DEF·BUF · keeper" can take a second
+   line instead of ending in a dot-dot-dot that hides which team a defence is. */
+.sticker .stk-sub .mt{font-size:clamp(9px,0.8vw,11px);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.sticker .nm{font-family:var(--f-ui);font-weight:800;font-size:clamp(11px,1.15vw,15px);line-height:1.02;white-space:normal;overflow-wrap:anywhere;word-break:normal}
 @media(max-width:700px){.sticker .pface{display:none}}   /* too cramped to help on small phones */
 .sticker .mt{font-family:var(--f-mono);font-weight:600;font-size:clamp(9px,0.92vw,13px);opacity:.85;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:980px){.sticker .mt{display:none}}
@@ -1399,7 +1413,7 @@ nav.tabs button{position:relative}
 .pstat{cursor:pointer}
 .pstat:hover{color:var(--turf);text-decoration:underline}
 /* injury flag on the draft-board sticker */
-.sticker .inj-flag{position:absolute;top:2px;right:2px;z-index:2;font-family:var(--f-ui);font-weight:700;font-size:9px;line-height:1;padding:1px 4px;border-radius:3px;background:#0c1420;color:#fff}
+.sticker .inj-flag{position:absolute;bottom:2px;right:2px;z-index:2;font-family:var(--f-ui);font-weight:700;font-size:9px;line-height:1;padding:1px 4px;border-radius:3px;background:#0c1420;color:#fff}
 .sticker .inj-flag.q{color:var(--gold)}
 .sticker .inj-flag.d{color:#ffb15c}
 .sticker .inj-flag.out{color:#ff7b7b}
@@ -8393,10 +8407,11 @@ function renderBoard(){
   /* rail is wider than it looks like it needs — the round labels are set bigger now and
      "STARTER" is nowrap inside an overflow:hidden cell, so a narrow rail clips it. The 40px
      floor was what forced the label to be hidden on phones; 58px fits the word at its 8px
-     size, so the rail carries it at every width instead. Team columns floor at 56px: on
+     size, so the rail carries it at every width instead. Team columns floor at 64px: on
      desktop 1fr is bigger anyway, on phones the board overflows into .boardscroll's
-     horizontal swipe instead of crushing names to 2 letters. */
-  board.style.gridTemplateColumns = `clamp(58px,4.3vw,66px) repeat(${n}, minmax(56px,1fr))`;
+     horizontal swipe instead of crushing names. Names wrap now, and 64 is what a nine-letter
+     word needs to finish a line at the phone font size rather than break in the middle. */
+  board.style.gridTemplateColumns = `clamp(58px,4.3vw,66px) repeat(${n}, minmax(64px,1fr))`;
   let html = `<div class="bcorner"></div>`;   /* sticks with the names, else R1 slides in under them */
   S.teams.forEach((t,i)=>html+=`<div class="bhead" style="--tc:${teamColor(i)}">${esc(t.name)}</div>`);
   const byIndex = {}; D.picks.forEach(p=>byIndex[p.pickIndex]=p);
@@ -8415,7 +8430,7 @@ function renderBoard(){
   const stickerHTML = (p, srcIdx) => {
     const displaced = ownerForPick(srcIdx)!==teamForPick(srcIdx);
     const origin = displaced ? (S.teams[teamForPick(srcIdx)]||{}).name||'' : '';
-    return `<div class="stk-cell"><div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row">${playerFace(p,20)}<div style="min-width:0"><span class="nm">${esc(p.name)}</span><span class="mt">${p.pos} · ${p.nfl||''}${displaced?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(teamForPick(srcIdx))}"></span>via ${esc(origin)}</b>`:''}${p.auto?' · auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' · keeper':''}</span></div></div></div></div>`;
+    return `<div class="stk-cell"><div class="sticker pos-${p.pos}${injInfo(p.playerId).cls}">${injInfo(p.playerId).flag}<div class="stk-row"><span class="nm">${esc(p.name)}</span><span class="stk-sub">${playerFace(p,16)}<span class="mt">${p.pos}·${p.nfl||''}${displaced?` <b class="mt-trade"><span class="tdot" style="background:${teamColor(teamForPick(srcIdx))}"></span>via ${esc(origin)}</b>`:''}${p.auto?' ·&nbsp;auto':''}${(KR()&&Math.floor(p.pickIndex/n)===0)?' ·&nbsp;keeper':''}</span></span></div></div></div>`;
   };
   for(let row=0;row<rowStarts.length;row++){
     const meta = rowStarts[row];
@@ -8451,6 +8466,7 @@ function renderBoard(){
     }
   }
   board.innerHTML = html;
+  try{ fitStickerNames(); }catch(e){}
   /* the round banner appears once a draft starts, which changes how much room the board gets */
   try{ syncBoardMax(); }catch(e){}
 }
@@ -15738,6 +15754,34 @@ function syncBoardMax(){
      page can just scroll normally instead. */
   document.documentElement.style.setProperty('--boardmax', Math.max(260, Math.round(innerHeight-used))+'px');
 }
+/* Sticker names wrap at spaces. The one thing wrapping cannot fix is a single word wider than
+   the tile - overflow-wrap would split it mid-word - and at twelve columns that is a normal
+   surname, more so in whichever typeface a manager picked. So after a render each name whose
+   longest word does not fit steps its own font down, to a floor, until it does: "Bo Nix" stays
+   at full size, "Ka'imi Fairbairn" gives up a couple of px. Same idea as fitContrast(), walking
+   a value until a constraint clears. Canvas measures text without a layout per sticker; the
+   font is read from the name itself, so it measures what is actually drawn. Inline sizes are
+   cleared first so the base is the stylesheet's, not the last fit. */
+function fitStickerNames(){
+  const nms=document.querySelectorAll('#board .sticker .nm'); if(!nms.length) return;
+  nms.forEach(el=>{ el.style.fontSize=''; });
+  const cs=getComputedStyle(nms[0]);
+  const base=parseFloat(cs.fontSize); if(!base) return;
+  const floor=Math.max(9, Math.round(base*0.7));
+  const ctx=fitStickerNames._c || (fitStickerNames._c=document.createElement('canvas').getContext('2d'));
+  ctx.font=`${cs.fontStyle} ${cs.fontWeight} ${base}px ${cs.fontFamily}`;
+  const jobs=[];                                            /* read everything, then write */
+  nms.forEach(el=>{
+    const w=el.clientWidth; if(!w) return;
+    let widest=0; el.textContent.split(/\s+/).forEach(x=>{ widest=Math.max(widest, ctx.measureText(x).width); });
+    if(widest>w-1) jobs.push([el, Math.max(floor, Math.floor(base*(w-1)/widest))]);   /* -1: subpixel rounding wraps, so lean early */
+  });
+  jobs.forEach(([el,fs])=>{ el.style.fontSize=fs+'px'; });
+}
+/* the tiles change width with the window, with full screen, and when the real typeface lands */
+window.addEventListener('resize', ()=>{ if(fitStickerNames._r) return;
+  fitStickerNames._r=requestAnimationFrame(()=>{ fitStickerNames._r=0; try{ fitStickerNames(); }catch(e){} }); }, {passive:true});
+try{ document.fonts.ready.then(()=>{ try{ fitStickerNames(); }catch(e){} }); }catch(e){}
 
 /* ---- Draft full screen ----
    The button promises one thing - the board gets the screen - and does it two ways. The CSS
@@ -15768,6 +15812,7 @@ function setDraftFs(on){
   }
   try{ syncBoardMax(); }catch(e){}
   try{ queueViewheadTop(); }catch(e){}
+  try{ fitStickerNames(); }catch(e){}       /* the tiles just changed width */
 }
 function toggleDraftFs(){ setDraftFs(!draftFsOn()); }
 /* the pool's phone form: a panel off the right edge, because a second column would leave the
