@@ -541,6 +541,110 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 @media(min-width:1021px){
   .pool{position:sticky;top:calc(var(--hdr-h,72px) + 10px);align-self:start;max-height:calc(100dvh - var(--hdr-h,72px) - 30px)}
 }
+/* ---- Draft full screen ------------------------------------------------------------------
+   A 12-wide, 17-round board is the one page that never has enough room. Before a single pick
+   is drawn, the header, tab bar, title block and score ticker have taken ~300px of height and
+   the rail has taken its share of the width. Full screen drops the chrome and hands it over.
+   What it must NOT drop is the player pool - a board you cannot pick from is a scoreboard. So
+   the pool keeps its place on the right at every width that can hold it, and below that it
+   comes back as a panel off that same right edge. The normal layout's answer at <=1020px -
+   stack the pool underneath - is exactly wrong here: in full screen there is no page scroll
+   left to reach it with. */
+:root[data-draftfs="1"] header.top,
+:root[data-draftfs="1"] .ticker,
+:root[data-draftfs="1"] .installbar{display:none}
+/* layout=side makes body a 212px grid for the rail. With the header gone that column would
+   sit there as a 212px gutter down the left of the board. */
+:root[data-draftfs="1"] body{display:block}
+:root[data-draftfs="1"] main{padding:0;max-width:none}
+/* 100 clears the ticker (80) and the apply bar (95) and stays under the auth overlay (120),
+   the nav drawer (125/130), the tab flash (200) and every modal - nothing that needs to
+   interrupt a draft ends up trapped behind the board.
+   overflow:hidden here is the one thing the note above .view[data-ghost] warns against, and
+   it is safe only because both pool rules below take it off sticky first. */
+:root[data-draftfs="1"] #view-draft.active{
+  position:fixed;inset:0;z-index:100;overflow:hidden;
+  display:flex;flex-direction:column;
+  background:var(--bg);max-width:none;margin:0;
+  padding:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l);
+}
+/* the viewhead sticks to --hdr-h, the height of a header that is no longer there. It is the
+   top of the flex column now and has nothing left to stick to. */
+:root[data-draftfs="1"] #view-draft > .viewhead{
+  position:static;margin:0;padding:6px 12px 4px;box-shadow:none;flex:0 0 auto;
+}
+:root[data-draftfs="1"] #draftTitle{display:none}     /* 46px spent on a word you already know */
+:root[data-draftfs="1"] #view-draft .viewhead > .row{margin-bottom:8px}
+:root[data-draftfs="1"] .clockbar{margin-bottom:0}    /* the clock stays - it is the whole room */
+:root[data-draftfs="1"] .draftwrap{
+  flex:1 1 auto;min-height:0;position:relative;padding:0 12px 12px;
+  grid-template-columns:minmax(0,1fr) clamp(300px,24vw,380px);
+}
+:root[data-draftfs="1"] .draftwrap > div:first-child{display:flex;flex-direction:column;min-height:0}
+/* --boardmax is measured to leave room for the chrome above and below. There is none now, so
+   the board takes what the flex column has left rather than a figure computed for a page. */
+:root[data-draftfs="1"] .boardscroll{flex:1 1 auto;max-height:none;min-height:0}
+:root[data-draftfs="1"] .pool{position:static;max-height:none;height:100%}
+#draftPoolBtn{display:none}                            /* only earns its place in narrow full screen */
+.poolclose{display:none}                               /* likewise - the rail needs no close */
+/* On a phone the mode row is already two near-full-width buttons; a third carrying a word
+   wraps to a second row and costs the board 49px in the NORMAL view - a bad trade for a
+   button pressed once a draft. The glyph alone fits; title and aria-label still say it.
+   In full screen the mode buttons are gone, so the label comes back. */
+@media(max-width:640px){
+  :root:not([data-draftfs="1"]) #draftFsBtn .fs-txt{display:none}
+  /* and the row has to make room for it: at 16px/20px the two mode buttons alone take 340 of
+     a 366px phone, so the third wraps and costs the board a whole row in the NORMAL view.
+     Trimming all three to 14px keeps them on one line - the row ends up a few px SHORTER than
+     it was before the button existed. */
+  #modeReal,#modeMock,#draftFsBtn{font-size:14px;padding:8px 13px}
+}
+.poolscrim{display:none}
+/* Narrow: the rail cannot have a third of a phone, so it leaves the grid and slides in over
+   the board from the right on the Players button. Absolute, not fixed: an entrance animation
+   on a section.view child would make the section a containing block and quietly re-anchor a
+   fixed panel. Anchoring to .draftwrap also stops it short of the clock bar, so you can still
+   see who is up while you browse. */
+@media(max-width:819px){
+  :root[data-draftfs="1"] .draftwrap{grid-template-columns:minmax(0,1fr)}
+  :root[data-draftfs="1"] #draftPoolBtn{display:inline-block}
+  :root[data-draftfs="1"] .pool{
+    position:absolute;top:0;right:12px;bottom:12px;z-index:135;height:auto;
+    width:min(340px,84vw);box-shadow:0 0 34px rgba(0,0,0,.55);
+    transform:translateX(calc(100% + 14px));transition:transform .22s ease;visibility:hidden;
+  }
+  :root[data-draftfs="1"][data-draftpool="1"] .pool{transform:none;visibility:visible}
+  :root[data-draftfs="1"][data-draftpool="1"] .poolscrim{
+    display:block;position:absolute;inset:0;z-index:134;background:rgba(0,0,0,.45);
+  }
+  /* the head carries the close, so the search box gives up the corner rather than sitting
+     under it. The chips below wrap, so the same padding costs them nothing. */
+  :root[data-draftfs="1"] .pool .poolhead{position:relative;padding-right:54px}
+  :root[data-draftfs="1"] .poolclose{
+    display:grid;place-items:center;position:absolute;top:9px;right:10px;width:36px;height:36px;
+    font-size:24px;line-height:1;color:var(--chalk);background:var(--bg);
+    border:1px solid var(--line-strong);border-radius:10px;
+  }
+}
+/* Full screen must not spend three wrapped rows of buttons on getting there - that is 150px
+   of the height it was meant to win back. Real/Mock is a before-you-start choice, not a
+   mid-draft one, so it steps out and the two controls that matter share one compact row.
+   Keyed off height as well as width on purpose: a landscape phone is 844 wide, comfortably
+   past the rail's breakpoint, but only 390 tall - full-size chrome leaves it three rounds.
+   Height-blind, the layout with the most to gain from full screen would gain the least. */
+@media(max-width:819px),(max-height:560px){
+  :root[data-draftfs="1"] #modeReal,
+  :root[data-draftfs="1"] #modeMock{display:none}
+  :root[data-draftfs="1"] #view-draft > .viewhead{padding:5px 10px 3px}
+  :root[data-draftfs="1"] #view-draft .viewhead > .row{margin-bottom:6px}
+  :root[data-draftfs="1"] #draftFsBtn,
+  :root[data-draftfs="1"] #draftPoolBtn{font-size:13px;padding:7px 12px}
+  :root[data-draftfs="1"] .clockbar{padding:6px 12px;gap:10px}
+  :root[data-draftfs="1"] .clock{font-size:24px;min-width:74px;padding:2px 9px}
+  :root[data-draftfs="1"] .onclock{font-size:16px}
+  :root[data-draftfs="1"] .draftwrap{padding:0 8px 8px}
+}
+@media (prefers-reduced-motion: reduce){:root[data-draftfs="1"] .pool{transition:none}}
 .pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
 .posfilters{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}
 /* The free-agent list is its own 360px scroll box, and the position chips render inside it,
@@ -2198,6 +2302,8 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
   <div class="row" style="gap:8px;margin-bottom:14px">
     <button class="btn" id="modeReal" onclick="setDraftMode('real')">Real Draft</button>
     <button class="btn ghost" id="modeMock" onclick="setDraftMode('mock')">Mock Draft</button>
+    <button class="btn ghost" id="draftFsBtn" onclick="toggleDraftFs()" aria-label="Full screen draft board" title="Give the board the whole screen - the player list stays on the right">&#9974;<span class="fs-txt"> Full Screen</span></button>
+    <button class="btn ghost" id="draftPoolBtn" onclick="toggleDraftPool()" title="Slide the player list in from the right">Players</button>
   </div>
   <!-- The clock, who is on the clock and the draft controls live INSIDE the sticky viewhead so
        they stay pinned while the board scrolls under them. Sticking the bar separately would
@@ -2238,6 +2344,9 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     </div>
     <div class="pool">
       <div class="poolhead">
+        <!-- only in narrow full screen, where the pool is a panel: it covers most of a phone,
+             so the sliver of scrim beside it is not a close button anyone can hit. -->
+        <button class="poolclose" id="poolClose" onclick="toggleDraftPool(false)" aria-label="Close the player list">&times;</button>
         <input type="text" id="poolSearch" placeholder="Search players…" style="width:100%" oninput="renderPool()">
         <div class="posfilters" id="posFilters"></div>
         <div id="poolStatus" style="font-size:12px;color:var(--chalk-dim);margin-top:6px">Loading player pool…</div>
@@ -2248,6 +2357,9 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <div class="poollist" id="poolList"></div>
       <div class="roster-mini" id="rosterMini"></div>
     </div>
+    <!-- only ever visible in narrow full screen, where the pool is a panel over the board.
+         display:none the rest of the time, so it never takes a cell in the two-column grid. -->
+    <div class="poolscrim" id="poolScrim" onclick="toggleDraftPool(false)"></div>
   </div>
 </section>
 
@@ -7569,6 +7681,8 @@ function showView(v){
   /* managers may read the league's setup; lockSettingsForViewers() makes it look-don't-touch */
   window.currentView = v;
   try{ toggleDrawer(false); }catch(e){}       /* picking a page closes the drawer */
+  /* full screen belongs to the board; every other page gets its header back */
+  try{ if(v!=='draft' && v!=='mock' && draftFsOn()) setDraftFs(false); }catch(e){}
   const domView = (v==='mock') ? 'draft' : v;
   document.querySelectorAll('section.view').forEach(s=>s.classList.remove('active'));
   stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
@@ -15591,6 +15705,54 @@ function syncBoardMax(){
      page can just scroll normally instead. */
   document.documentElement.style.setProperty('--boardmax', Math.max(260, Math.round(innerHeight-used))+'px');
 }
+
+/* ---- Draft full screen ----
+   The button promises one thing - the board gets the screen - and does it two ways. The CSS
+   mode on :root always works. The real Fullscreen API on top of it does not: it needs a user
+   gesture, and iOS Safari does not implement it outside <video>, which is most of this league.
+   So the API is asked for and ignored when it refuses; the CSS half is what the button
+   guarantees. They only have to stay in step in one direction - leaving browser full screen by
+   Esc or the system UI must also leave ours, or you are left on a page with no header and no
+   way back to one. */
+function draftFsOn(){ return document.documentElement.getAttribute('data-draftfs')==='1'; }
+function setDraftFs(on){
+  const html=document.documentElement;
+  if(on) html.setAttribute('data-draftfs','1');
+  else { html.removeAttribute('data-draftfs'); html.removeAttribute('data-draftpool'); }
+  const b=document.getElementById('draftFsBtn');
+  if(b){ b.innerHTML = on ? '&#8690;<span class="fs-txt"> Exit Full Screen</span>'
+                          : '&#9974;<span class="fs-txt"> Full Screen</span>';
+         b.setAttribute('aria-label', on?'Exit full screen draft board':'Full screen draft board');
+         b.className = 'btn'+(on?'':' ghost'); }
+  try{ toggleDrawer(false); }catch(e){}
+  if(on){
+    const el=html, req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req) try{ Promise.resolve(req.call(el)).catch(()=>{}); }catch(e){}
+  }else{
+    const ex=document.exitFullscreen||document.webkitExitFullscreen;
+    if(ex && (document.fullscreenElement||document.webkitFullscreenElement))
+      try{ Promise.resolve(ex.call(document)).catch(()=>{}); }catch(e){}
+  }
+  try{ syncBoardMax(); }catch(e){}
+  try{ queueViewheadTop(); }catch(e){}
+}
+function toggleDraftFs(){ setDraftFs(!draftFsOn()); }
+/* the pool's phone form: a panel off the right edge, because a second column would leave the
+   board about 40% of a phone and neither half would be usable */
+function toggleDraftPool(open){
+  const html=document.documentElement;
+  const to=(open===undefined) ? html.getAttribute('data-draftpool')!=='1' : !!open;
+  if(to) html.setAttribute('data-draftpool','1'); else html.removeAttribute('data-draftpool');
+}
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>
+  document.addEventListener(ev, ()=>{
+    if(!(document.fullscreenElement||document.webkitFullscreenElement) && draftFsOn()) setDraftFs(false);
+  }));
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape' || !draftFsOn()) return;
+  if(document.documentElement.getAttribute('data-draftpool')==='1'){ toggleDraftPool(false); return; }
+  setDraftFs(false);
+});
 function toggleDrawer(open){
   const d=document.getElementById('navDrawer'), sc=document.getElementById('drawerScrim');
   if(!d||!sc) return;
