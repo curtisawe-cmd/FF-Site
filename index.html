@@ -579,12 +579,23 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 :root[data-draftfs="1"] .draftwrap{
   flex:1 1 auto;min-height:0;position:relative;padding:0 12px 12px;
   grid-template-columns:minmax(0,1fr) clamp(300px,24vw,380px);
+  /* The row is the whole trick. Left implicit it is an auto track, and an auto track grows to
+     its tallest item's content-based minimum - which for a pool holding 900 players is ~21000px.
+     The board's column stretched to match, both scroll boxes ended up taller than what was in
+     them, and the section's overflow:hidden clipped the lot with nothing left to scroll. Same
+     lesson as the columns above (plain 1fr = min-width:auto), on the other axis: minmax(0,1fr)
+     pins the one row to exactly the height there is, and the boxes inside do the scrolling. */
+  grid-template-rows:minmax(0,1fr);
 }
 :root[data-draftfs="1"] .draftwrap > div:first-child{display:flex;flex-direction:column;min-height:0}
 /* --boardmax is measured to leave room for the chrome above and below. There is none now, so
    the board takes what the flex column has left rather than a figure computed for a page. */
 :root[data-draftfs="1"] .boardscroll{flex:1 1 auto;max-height:none;min-height:0}
-:root[data-draftfs="1"] .pool{position:static;max-height:none;height:100%}
+/* min-height:0 is the other half of the fix - a grid item's default min-height:auto is the same
+   content-based minimum, so even a pinned row would let the pool stretch past it. Stretch, not
+   height:100%: it needs no definite grid area to resolve against, which Safari has been picky
+   about. align-self reset because the desktop rule above sets start for the sticky. */
+:root[data-draftfs="1"] .pool{position:static;align-self:stretch;height:auto;max-height:none;min-height:0}
 #draftPoolBtn{display:none}                            /* only earns its place in narrow full screen */
 .poolclose{display:none}                               /* likewise - the rail needs no close */
 /* On a phone the mode row is already two near-full-width buttons; a third carrying a word
@@ -643,6 +654,10 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
   :root[data-draftfs="1"] .clock{font-size:24px;min-width:74px;padding:2px 9px}
   :root[data-draftfs="1"] .onclock{font-size:16px}
   :root[data-draftfs="1"] .draftwrap{padding:0 8px 8px}
+  /* On a 390px-tall landscape phone the pool head and the on-clock roster strip (180px when
+     it fills mid-draft) left the player list 59px - one row. The strip is a glance, the list
+     is the job; cap the glance so the list keeps a few rows. */
+  :root[data-draftfs="1"] .roster-mini{max-height:72px}
 }
 @media (prefers-reduced-motion: reduce){:root[data-draftfs="1"] .pool{transition:none}}
 .pool .poolhead{padding:12px 12px 8px;border-bottom:1px solid var(--line)}
