@@ -5433,7 +5433,9 @@ const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
    without adding the field here does nothing at all to season totals. */
 const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_tgt','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpa','xpmiss','fgm','fga','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp',
   /* the defence's line - the weekly scorer reads these, so a projection has to carry them */
-  'sack','int','fum_rec','ff','safe','def_td','def_st_td','def_2pt','pts_allow','yds_allow'];
+  'sack','int','fum_rec','ff','safe','def_td','def_st_td','def_2pt','pts_allow','yds_allow',
+  'pts_allow_0','pts_allow_1_6','pts_allow_7_13','pts_allow_14_20','pts_allow_21_27','pts_allow_28_34','pts_allow_35p',
+  'yds_allow_0_100','yds_allow_100_199','yds_allow_200_299','yds_allow_300_349','yds_allow_350_399','yds_allow_400_449','yds_allow_450_499','yds_allow_500_549','yds_allow_550p'];
 /* Sleeper publishes a single season-long projection file. Everything that shows a projected
    number is reading THIS year, so the year lives in one place - the fetch below and the Game
    Center gate both read it, and they cannot drift apart when it rolls over. */
@@ -5481,15 +5483,46 @@ function scoreSeasonStats(st,pos){
    games played, and points and yards allowed per game pick the tier - through the weekly
    scorer itself, so the tier table lives in one place and the two cannot disagree. Times
    games played gives the season figure every caller of scoreSeasonStats expects. */
-function scoreSeasonDef(st){
-  const gp = Math.max(1, +st.gp || 17), per = {};
-  for(const k in st){ if(k!=='gp' && st[k]!=null && !isNaN(+st[k])) per[k] = +st[k]/gp; }
-  const wk = scoreWeekStats(per, 'DEF');
-  return wk==null ? null : Math.round(wk*gp*10)/10;
+function scoreSeasonDef(st, rows){
+  const gp  = Math.max(1, +st.gp || 17);
+  const row = (label, stat, per) => { if(rows && stat && per) rows.push([label, Math.round(stat*100)/100, per]); };
+  const R = S.scoring||{}, v = k => +(R[k]||0);
+  const W   = o => scoreWeekStats(o, 'DEF') || 0;
+  const num = k => (st[k]==null || isNaN(+st[k])) ? null : +st[k];
+  /* Counting stats - sacks, picks, recoveries, TDs - are season totals: the average game.
+     W({}) is what an empty line earns, which is the shutout bonus (a missing pts_allow reads
+     as 0 to the weekly scorer); taking it back off leaves just the counting points. */
+  const per = {}; ['sack','int','fum_rec','ff','safe','def_td','def_st_td','def_2pt'].forEach(k=>{ if(num(k)!=null) per[k]=num(k)/gp; });
+  let wk = W(per) - W({});
+  [['sack','DST sack'],['int','DST interception'],['fum_rec','DST fumble recovered'],['ff','DST fumble forced'],['safe','DST safety'],['def_td','DST TD'],['def_st_td','DST kick/punt return TD'],['def_2pt','DST 2-pt return']]
+    .forEach(([k,lbl])=>row(lbl, num(k)||0, v(lbl)));
+  /* Points allowed, three ways, best first. Sleeper's stat lines can carry a count of games in
+     each tier (pts_allow_0, pts_allow_1_6, ...): score each tier by the table and weight by
+     the counts. Failing that, a pts_allow figure - a season total on most files, already an
+     average on some; over more than one game a total is always past 45 - picks the tier of
+     the average game. Failing THAT, no tier at all: the weekly scorer scores a missing figure
+     as a shutout, +10 a game under the default rules, and a projection is the one place that
+     is guaranteed wrong. That is how every DST came to project 250. */
+  const tier  = x => W({pts_allow:x});
+  const PA = [['pts_allow_0',0],['pts_allow_1_6',3],['pts_allow_7_13',10],['pts_allow_14_20',17],['pts_allow_21_27',24],['pts_allow_28_34',31],['pts_allow_35p',40]];
+  const paN = PA.reduce((n,[k])=>n+(num(k)||0),0);
+  const paLbl = x => x<=0?'Points allowed 0':x<=6?'Points allowed 1-6':x<=13?'Points allowed 7-13':x<=20?'Points allowed 14-20':x<=27?'Points allowed 21-27':x<=34?'Points allowed 28-34':'Points allowed 35+';
+  if(paN>0){ wk += PA.reduce((t,[k,x])=>t+(num(k)||0)*tier(x),0)/paN; PA.forEach(([k,x])=>row(paLbl(x)+' (games)', num(k)||0, tier(x))); }
+  else if(num('pts_allow')!=null){ const pa=num('pts_allow'), avg = gp>1 && pa>45 ? pa/gp : pa; wk += tier(avg); row(`${paLbl(avg)} (avg ${avg.toFixed(1)}/g, x games)`, gp, tier(avg)); }
+  /* yards allowed: the same three ways; the delta against a 24-point game isolates the yards tier */
+  const ytier = y => W({pts_allow:24, yds_allow:y}) - tier(24);
+  const YA = [['yds_allow_0_100',50],['yds_allow_100_199',150],['yds_allow_200_299',250],['yds_allow_300_349',325],['yds_allow_350_399',375],['yds_allow_400_449',425],['yds_allow_450_499',475],['yds_allow_500_549',525],['yds_allow_550p',575]];
+  const yaN = YA.reduce((n,[k])=>n+(num(k)||0),0);
+  const yaLbl = y => y<100?'Under 100 total yds allowed':y<200?'100-199 yds allowed':y>=500?'500+ yds allowed':'200-499 yds allowed';
+  if(yaN>0){ wk += YA.reduce((t,[k,y])=>t+(num(k)||0)*ytier(y),0)/yaN; YA.forEach(([k,y])=>row(yaLbl(y)+' (games)', num(k)||0, ytier(y))); }
+  else if(num('yds_allow')!=null){ const ya=num('yds_allow'), avg = gp>1 && ya>700 ? ya/gp : ya; wk += ytier(avg); row(`${yaLbl(avg)} (avg ${avg.toFixed(0)}/g, x games)`, gp, ytier(avg)); }
+  return Math.round(wk*gp*10)/10;
 }
 /* itemized version of scoreSeasonStats, for verifying scoring against real data */
 function scoreBreakdown(st,pos){
   if(!st) return [];
+  if(pos==='DEF'){ const rows=[]; scoreSeasonDef(st, rows);
+    return rows.map(([label,stat,per])=>({label,stat,per,pts:Math.round(stat*per*10)/10})).filter(it=>it.stat!==0 && it.per!==0); }
   const g=k=>+(st[k]||0), R=S.scoring, v=k=>+(R[k]||0);
   const rows=[
     ["Passing yards", g('pass_yd'), v("Passing yards (per yd)")],
@@ -5536,7 +5569,9 @@ function renderBreakdown(id){
     ${items.length? items.map(it=>`<tr><td style="text-align:left">${esc(it.label)}</td><td style="text-align:right">${it.stat}</td><td style="text-align:right">${it.per}</td><td style="text-align:right;font-weight:600">${it.pts.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--chalk-dim)">No scoring categories in ${y}.</td></tr>`}
     <tr class="top"><td style="text-align:left"><b>Total${gp?` · ${gp} GP`:''}</b></td><td></td><td></td><td style="text-align:right;font-weight:700">${total!=null?total.toFixed(1):'—'}</td></tr>
   </table></div>
-  <p class="sub" style="font-size:12px;margin-top:8px">Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.</p>`;
+  <p class="sub" style="font-size:12px;margin-top:8px">${y==='proj'
+    ? `Sleeper's ${PROJ_SEASON} projection × your league's rules, as a season total - divide by the games for a week (the matchups do). A defence's points-allowed tier is scored on its average game.`
+    : `Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.`}</p>`;
 }
 function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || null; }
 /* =====================================================
@@ -5811,9 +5846,11 @@ function renderPlayerModal(id){
     </table></div>`;
     body=chart+table+`<p class="sub" style="font-size:12px;margin-top:12px">Scored in <b>your league's rules</b> from season totals (per-game yardage/long-TD bonuses excluded). 2026 is Sleeper's projection.</p>`;
     /* only seasons the player actually has stats for; newest first and selected */
-    const brkYears=[...CAREER_YEARS].reverse().filter(y=>STAT_CACHE[String(y)]?.[id]);
+    /* the projection leads the list: it is the number the draft board and the matchups run
+       on, and the one to check when a DST or a kicker looks wrong */
+    const brkYears=[...(STAT_CACHE.proj?.[id]?['proj']:[]), ...[...CAREER_YEARS].reverse().filter(y=>STAT_CACHE[String(y)]?.[id])];
     if(brkYears.length) body+=`<div class="eyebrow" style="margin:18px 0 6px">Verify scoring · itemized breakdown</div>
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y}</option>`).join('')}</select></div>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y==='proj'?PROJ_SEASON+' projection':y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
   /* Mid-draft, this popup is where a phone naturally lands - tapping a player in the pool
