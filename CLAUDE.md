@@ -292,6 +292,27 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Live win probability
+
+`loadKickoffs` now keeps `NFL_KICKS.games[TEAM] = {kick, state:'pre'|'in'|'post', remain, label}`
+off the same ESPN scoreboard (`status.type.state`, `period`, `displayClock`; `gameRemain`
+turns period + clock into the fraction of the game left, halftime = 0.5, OT ≈ 0.05), and
+refetches every **3 minutes while a slate is on** (`slateActive`) instead of every 6 hours.
+`liveWinModel(ai, bi, stats, wk)` (`liveSide` per team over `starterPicks`): each starter is
+points scored + projection × fraction of his game left; the two expected finals go through the
+pre-game logistic with the spread scaled by `sqrt(points still in play / total projected)`,
+floor 4, so a lead hardens as the slate empties; nothing left to play = the result. Returns
+null without this week's scoreboard, so nothing invents odds from a blank map.
+
+Where it shows: Game Center (`gcBar`, both headers) - `Final` for a finished week or any older
+season, the live bar with an on-pace line and "n v m still to play" during the week, the
+projections bar before kickoff, and a `.gc-gs` clock tag (Q3 8:12 / Final / kickoff time)
+beside each player. The matchups board reads `liveScoresMap[wk].live.g{m}` -
+`{ea, eb, p, la, lb, f}` written by `postLiveScores` from the posting device's model - and
+shows it while the week is on (fresh within 30 minutes), `Final` only once `weekIsOver` or an
+official score exists. `winBarHTML(a, b, final, note, live)` takes `{pct, sub}` to draw a
+probability worked out elsewhere; a note starting with "Live" gets the pulsing dot.
+
 ## Weekly recaps (auto-written)
 
 `rcBuild(yr, wk, seed, X)` writes the week in plain text. It is **deterministic**: `rcPick`

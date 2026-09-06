@@ -2334,6 +2334,16 @@ section.view[data-ghost] > *{position:relative;z-index:1}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .wp-track{display:flex;height:6px;border-radius:4px;overflow:hidden;background:var(--line)}
 .wp-a{background:var(--turf-bright)} .wp-b{background:var(--charge)}
+/* live: a pulsing dot on the label, and the on-pace line under the track */
+.wp.live .wp-lbl::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--charge);margin:0 5px 1px 0;animation:wp-pulse 1.4s ease-in-out infinite}
+@keyframes wp-pulse{0%,100%{opacity:1}50%{opacity:.25}}
+.wp-sub{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);margin-top:4px;text-align:center;font-variant-numeric:tabular-nums}
+/* a player's game clock in Game Center */
+.gc-gs{white-space:nowrap;opacity:.8}
+.gc-gs.in{color:var(--charge);opacity:1;font-weight:700}
+.gc-gs.post{opacity:.65}
+.gc-meta .gc-gs::before{content:' · ';opacity:.6}
+.h2h-meta .gc-gs{display:block}
 /* the desktop copy hides on phones, where the head-to-head block carries its own */
 @media(max-width:720px){ .wp-desk{display:none} }
 /* on the matchups list the bar spans the whole row, under both teams */
@@ -10968,14 +10978,14 @@ async function renderGameCenter(){
       if(!p) return `<span class="h2h-side ${s} empty">—</span>`;
       return `<span class="h2h-side ${s}">${playerFace(p,20)}<span class="h2h-txt">`
         + `<span class="h2h-nm pstat" onclick="openPlayer('${p.playerId}')">${esc(shortName(p))}</span>`
-        + `<span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}</span>`
+        + `<span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</span>`
         + `</span></span>`;
     };
     /* Same line the desktop column prints, "did not play" included - that is the difference
        between a nought that happened and a nought that means nobody turned up. */
     const detOf = p => { if(!p) return '';
       const st = stats[p.playerId], line = statLine(st, p.pos);
-      return line ? esc(line) : ((st||noStats) ? '' : 'did not play'); };
+      return line ? esc(line) : ((st||noStats) ? '' : esc(noLine(p))); };
     return `<div class="h2h-row">
       ${side(a,'l')}
       <span class="h2h-pts${lead==='l'?' win':''}">${pa==null?'—':pa.toFixed(1)}${(showProj&&a)?`<span class="h2h-proj">${projTxt(a)}</span>`:''}</span>
@@ -11025,7 +11035,33 @@ async function renderGameCenter(){
     const v = pp.pair[side], d = Math.round((total - v)*10)/10;
     return `proj ${v.toFixed(1)}${pp.verdict?` <b class="${d>=0?'up':'down'}">${signed1(d)}</b>`:''}`;
   };
-  const h2hHead = (ax, bx, A, B) => {
+  /* Which bar a matchup gets. A finished week (this season past its Tuesday, or any older
+     season) is the result. The live week is the live model - projections until kickoff,
+     then points scored plus what is still to come. Otherwise the projections, else the
+     totals as before. */
+  const finalWeek = season!==PROJ_SEASON || weekIsOver(wk) || (currentNflWeek()>0 && wk < currentNflWeek());
+  const liveWeek = !finalWeek && season===PROJ_SEASON && wk===currentNflWeek();
+  const gcBar = (ax, bx, A, B, pp) => {
+    if(finalWeek) return winBarHTML(A.total, B.total, true, 'Final');
+    let LW = null;
+    if(liveWeek && statsLoaded && wkProjReady){ try{ LW = liveWinModel(ax, bx, stats, wk); }catch(e){ LW = null; } }
+    if(LW && LW.state==='final') return winBarHTML(A.total, B.total, true, 'Final');
+    if(LW && LW.state==='live') return winBarHTML(A.total, B.total, false, 'Live win probability', { pct: LW.pA, sub: liveWinSub(LW.a.exp, LW.b.exp, LW.a.left+LW.a.playing, LW.b.left+LW.b.playing) });
+    if(LW && LW.state==='pre') return winBarHTML(LW.a.exp, LW.b.exp, false, 'Win probability · from projections', { pct: LW.pA, sub: `Projected ${LW.a.exp.toFixed(1)} – ${LW.b.exp.toFixed(1)}` });
+    if(pp) return winBarHTML(pp.pair[0], pp.pair[1], false, 'Win probability · from projections');
+    return winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability');
+  };
+  /* the game clock beside a player: Q3 8:12 while he is playing, Final when he is done, the
+     kickoff time until he starts - only for the week being played */
+  const gameTag = p => {
+    if(!liveWeek || !p) return '';
+    const g = gameOf(p.nfl); if(!g) return '';
+    return `<span class="gc-gs ${g.state}">${esc(g.label)}</span>`;   /* the separator is CSS: inline on desktop, its own line on a phone */
+  };
+  /* what an empty stat line means depends on the clock: before kickoff nobody has played */
+  const noLine = p => { const g = liveWeek && p ? gameOf(p.nfl) : null;
+    return g && g.state==='pre' ? 'yet to play' : g && g.state==='in' ? 'nothing yet' : 'did not play'; };
+  const h2hHead = (ax, bx, A, B, bar) => {
     const tA=S.teams[ax]||{}, tB=S.teams[bx]||{};
     const aw = A.total>B.total, bw = B.total>A.total;
     const sub = (t,ti) => [t.manager||'', gcRec[ti]||''].filter(Boolean).join(' · ');
@@ -11044,11 +11080,11 @@ async function renderGameCenter(){
         <div class="h2h-hname">${esc(tB.name||'?')}</div>
         <div class="h2h-hmgr">${esc(sub(tB,bx))}</div>
       </div>
-    </div>${winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability')}`;
+    </div>${bar || winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability')}`;
   };
-  const h2hBlock = (ax, bx, A_, B_) => {
+  const h2hBlock = (ax, bx, A_, B_, bar) => {
     const A = teamLists(ax), B = teamLists(bx);
-    let out = h2hHead(ax, bx, A_, B_)
+    let out = h2hHead(ax, bx, A_, B_, bar)
       + (showProj ? `<div class="h2h-key">Score · projection below</div>` : '')
       + `<div class="gc-band">Starters</div>`;
     starterSlotSeq.forEach((s,i)=>{ out += h2hRow(s, A.bySlot[i], B.bySlot[i]); });
@@ -11074,8 +11110,8 @@ async function renderGameCenter(){
         <td><div class="row" style="gap:7px;align-items:flex-start;flex-wrap:nowrap">${playerFace(p,26)}
             <div style="min-width:0;flex:1">
               <div class="gc-pl pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</div>
-              <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}</div>
-              ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">did not play</div>`)}
+              <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</div>
+              ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">${esc(noLine(p))}</div>`)}
             </div></div></td>
         ${showProj?`<td class="gc-proj">${projTxt(p)}</td>`:''}
         <td class="gc-pts">${pts==null?'—':pts.toFixed(1)}</td></tr>`;
@@ -11099,6 +11135,7 @@ async function renderGameCenter(){
     const tA=S.teams[g[0]], tB=S.teams[g[1]];
     const aWin=A.total>B.total, bWin=B.total>A.total;
     const pp = projPair(g[0], g[1]);
+    const bar = gcBar(g[0], g[1], A, B, pp);
     return `<section class="gc-card"><div class="card" style="padding:0;overflow:hidden">
       <div class="gc-head">
         <span class="gc-side">${teamMarkHTML(tA,42)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-totwrap"><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span>${pp?`<span class="gc-ptot">${projLine(pp,0,A.total)}</span>`:''}</span></span>
@@ -11106,9 +11143,9 @@ async function renderGameCenter(){
         <span class="gc-side"><span class="gc-totwrap"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span>${pp?`<span class="gc-ptot">${projLine(pp,1,B.total)}</span>`:''}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
       </div>
       ${(()=>{ try{ return rivalryBannerHTML(g[0], g[1]); }catch(e){ return ''; } })()}
-      <div class="wp-desk">${winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability')}</div>
+      <div class="wp-desk">${bar}</div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
-      ${h2hBlock(g[0], g[1], A, B)}
+      ${h2hBlock(g[0], g[1], A, B, bar)}
     </div></section>`;
   }).join('');
   if(layout==='all'){
@@ -11211,6 +11248,18 @@ async function postLiveScores(wk, season){
   const proj = (!weekIsOver(wk) && weekProjPairs(wk))
             || (prev && prev.proj && +prev.season === +payload.season ? prev.proj : null);
   if(proj) payload.proj = proj;
+  /* the live odds ride too, so the matchups board and anyone without the stat file can show
+     them: expected finals, the probability, and who is still to play. Keys g0..g5 for the
+     same reason as proj. Only while the week is being played and the scoreboard is in. */
+  if(!weekIsOver(wk) && +wk===currentNflWeek() && NFL_KICKS.games && Object.keys(NFL_KICKS.games).length){
+    const live = {}; let any = false;
+    games.forEach((g,m)=>{
+      try{ const LW = liveWinModel(g[0], g[1], stats, +wk); if(!LW) return;
+        live['g'+m] = { ea: LW.a.exp, eb: LW.b.exp, p: LW.pA, la: LW.a.left+LW.a.playing, lb: LW.b.left+LW.b.playing, f: LW.state==='final' ? 1 : 0 };
+        any = true; }catch(e){}
+    });
+    if(any) payload.live = live;
+  }
   await window.FB.dbSet(`${livePath()}/${wk}`, payload);
   return true;
 }
@@ -11952,13 +12001,17 @@ function winProbPct(a, b, final){
 }
 /* The bar itself: two segments meeting at the split, percentages on the outside. `note` says
    what the number is actually based on, so nobody reads projections as live odds. */
-function winBarHTML(a, b, final, note){
-  const pa = winProbPct(a, b, final), pb = 100-pa;
-  return `<div class="wp">
+function winBarHTML(a, b, final, note, live){
+  /* `live` = {pct, sub}: a probability worked out elsewhere (the live model) and a line to
+     print under the bar; the pulsing dot marks a number that is still moving */
+  const pa = (live && live.pct!=null) ? Math.max(0, Math.min(100, Math.round(+live.pct))) : winProbPct(a, b, final), pb = 100-pa;
+  const isLive = /^live\b/i.test(String(note||''));
+  return `<div class="wp${isLive?' live':''}">
     <div class="wp-row"><span class="wp-pct${pa>=pb?' lead':''}">${pa}%</span>
       <span class="wp-lbl">${esc(note||'Win probability')}</span>
       <span class="wp-pct${pb>pa?' lead':''}">${pb}%</span></div>
     <div class="wp-track"><span class="wp-a" style="width:${pa}%"></span><span class="wp-b" style="width:${pb}%"></span></div>
+    ${live && live.sub ? `<div class="wp-sub">${esc(live.sub)}</div>` : ''}
   </div>`;
 }
 function standingsRowHTML(r, rank, leader){
@@ -12684,7 +12737,16 @@ function renderMatchups(){
             /* Always shown, with the label naming what it is based on. Skipping the bar when
                there is nothing to go on just makes the feature look missing - an even bar that
                says WHY it is even is more honest than a blank space. */
-            if(done) return `<div class="mu-wp">${winBarHTML(pa, pb, true, 'Final')}</div>`;
+            if(done){
+              /* a score on the board is not a final until the week is over: while the games
+                 are on it is the live odds the last live post worked out (see postLiveScores),
+                 or failing that the score so far, and it says so */
+              if(weekIsOver(wk) || !!officialScore(wk,m)) return `<div class="mu-wp">${winBarHTML(pa, pb, true, 'Final')}</div>`;
+              const lv = liveScoresMap && liveScoresMap[wk] && liveScoresMap[wk].live && liveScoresMap[wk].live['g'+m];
+              if(lv && lv.p!=null && Date.now()-liveStamp(wk) < 30*60000)
+                return `<div class="mu-wp">${winBarHTML(pa, pb, false, lv.f ? 'Final' : 'Live win probability', lv.f ? null : { pct: lv.p, sub: liveWinSub(lv.ea, lv.eb, lv.la, lv.lb) })}</div>`;
+              return `<div class="mu-wp">${winBarHTML(pa, pb, false, 'Live · from the score so far')}</div>`;
+            }
             if(prA!=null && prB!=null && (prA||prB))
               return `<div class="mu-wp">${winBarHTML(prA, prB, false, 'Win probability · from projections')}</div>`;
             return `<div class="mu-wp">${winBarHTML(0, 0, false, statsLoaded?'Even · no projections yet':'Win probability · loading projections')}</div>`;
@@ -14003,25 +14065,97 @@ Bench players are not dropped, only reordered.`)) return;
    applies. Preseason and bye weeks lock nothing for the same reason - no kickoff, no lock.
    The commissioner can push through any locked move behind a confirm, because fixing a
    lineup for someone at the bar IS the commissioner's job. */
-let NFL_KICKS = { wk: 0, map: {}, at: 0 };
+let NFL_KICKS = { wk: 0, map: {}, games: {}, at: 0 };
 const ESPN_TEAM_FIX = { WSH:'WAS' };   /* the one code ESPN and Sleeper disagree on */
+/* how much of a game is left, 0..1, off ESPN's period and clock: halftime is 0.5, overtime is
+   nearly nothing, a game not yet kicked off is everything */
+function gameRemain(period, clock){
+  const p = +period||0;
+  if(p<=0) return 1;
+  if(p>4) return 0.05;
+  const m = /^(\d+):(\d\d)/.exec(String(clock||'')); const secs = m ? (+m[1])*60 + (+m[2]) : 0;
+  return Math.max(0, Math.min(1, ((4-p)*900 + secs) / 3600));
+}
+/* a slate is being played from an hour before its first kickoff until every game has gone
+   final - while it is, the scoreboard is asked every three minutes instead of every six hours,
+   because the live win probability reads the clock off it */
+function slateActive(){
+  const now = Date.now(), g = NFL_KICKS.games||{}, ks = Object.values(NFL_KICKS.map||{});
+  if(Object.keys(g).length) return Object.values(g).some(x=>x.state==='in' || (x.state==='pre' && x.kick - now < 3600000 && x.kick - now > -5*3600000));
+  return ks.some(t=>now > t - 3600000 && now < t + 4.5*3600000);
+}
+const kickoffLabel = t => new Date(t).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' });
 async function loadKickoffs(force){
   const wk = currentNflWeek();
-  if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, at: Date.now() }; return; }
-  if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < 6*3600000) return;
+  if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, games: {}, at: Date.now() }; return; }
+  const ttl = slateActive() ? 3*60000 : 6*3600000;
+  if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < ttl) return;
   try{
     const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${wk}&dates=2026`);
     const j = await r.json();
-    const map = {};
+    const map = {}, games = {};
     (j.events||[]).forEach(ev=>{
       const t = Date.parse(ev.date); if(!Number.isFinite(t)) return;
-      (((ev.competitions||[])[0]||{}).competitors||[]).forEach(c=>{
+      const comp = (ev.competitions||[])[0]||{};
+      const st = ev.status || comp.status || {};
+      let state = String(((st.type||{}).state)||'').toLowerCase();
+      if(state!=='pre' && state!=='in' && state!=='post') state = Date.now() < t ? 'pre' : 'in';
+      const period = +st.period||0, clock = String(st.displayClock||'');
+      const remain = state==='post' ? 0 : state==='pre' ? 1 : gameRemain(period, clock);
+      const label = state==='post' ? 'Final' : state==='in' ? ((period>4?'OT':'Q'+period) + (clock?' '+clock:'')) : kickoffLabel(t);
+      (comp.competitors||[]).forEach(c=>{
         const ab = String((c.team||{}).abbreviation||'').toUpperCase();
-        if(ab) map[ESPN_TEAM_FIX[ab]||ab] = t;
+        if(!ab) return;
+        const code = ESPN_TEAM_FIX[ab]||ab;
+        map[code] = t; games[code] = { kick:t, state, remain, label };
       });
     });
-    if(Object.keys(map).length) NFL_KICKS = { wk, map, at: Date.now() };
+    if(Object.keys(map).length) NFL_KICKS = { wk, map, games, at: Date.now() };
   }catch(e){}
+}
+/* ===================== LIVE WIN PROBABILITY =====================
+   Before kickoff the number is the projections; after the last whistle it is the score. In
+   between it is both: every starter is what he has scored plus what his projection says is
+   still to come, in proportion to how much of his game is left (a man at halftime has half
+   his line coming; a man whose game is final has none). The two expected finals go through
+   the same logistic as the pre-game odds, but the spread shrinks with the points still in
+   play - a ten-point lead with everyone done is a lock, the same lead with both sides' Sunday
+   starters still to kick off is a coin flip with a lean. When nothing is left to play the
+   odds are the result. Needs this week's scoreboard (NFL_KICKS.games) - without it, nothing. */
+function gameOf(nfl){ const g = NFL_KICKS.games; return (g && g[String(nfl||'').toUpperCase()]) || null; }
+function liveSide(ti, stats, wk){
+  const r1 = n => Math.round(n*10)/10;
+  let scored = 0, exp = 0, rem = 0, proj = 0, left = 0, playing = 0, done = 0;
+  starterPicks(ti).forEach(p=>{
+    const st = stats && stats[p.playerId];
+    const pts = st ? r1(scoreWeekStats(st, p.pos)||0) : 0;
+    const pr = projWeekPoints(p.playerId, p.pos, wk) || 0;
+    const g = gameOf(p.nfl);
+    const state = g ? g.state : (st ? 'post' : 'none');        /* bye or unknown: nothing coming */
+    const remain = state==='pre' ? 1 : state==='in' ? g.remain : 0;
+    scored += pts; proj += pr; exp += pts + pr*remain; rem += pr*remain;
+    if(state==='pre') left++; else if(state==='in') playing++; else done++;
+  });
+  return { scored:r1(scored), exp:r1(exp), rem:r1(rem), proj:r1(proj), left, playing, done };
+}
+function liveWinModel(ai, bi, stats, wk){
+  if(!NFL_KICKS.games || !Object.keys(NFL_KICKS.games).length || NFL_KICKS.wk !== +wk) return null;
+  const A = liveSide(ai, stats, wk), B = liveSide(bi, stats, wk);
+  const over = (A.left + A.playing + B.left + B.playing) === 0;
+  const pre = (A.done + A.playing + B.done + B.playing) === 0;
+  let pA;
+  if(over) pA = A.scored > B.scored ? 100 : B.scored > A.scored ? 0 : 50;
+  else{
+    const scale = Math.max(4, 24 * Math.sqrt((A.rem + B.rem) / Math.max(1, A.proj + B.proj)));
+    const p = 1/(1+Math.exp(-(A.exp - B.exp)/scale));
+    pA = Math.max(1, Math.min(99, Math.round(p*100)));
+  }
+  return { a:A, b:B, pA, state: over ? 'final' : pre ? 'pre' : 'live' };
+}
+/* the sub-line under a live bar: the finals both sides are on pace for, and who is still out there */
+function liveWinSub(ea, eb, la, lb){
+  const still = (la||0) + (lb||0);
+  return `On pace ${(+ea).toFixed(1)} – ${(+eb).toFixed(1)}${still ? ` · ${la} v ${lb} still to play` : ''}`;
 }
 /* ---- who each NFL team plays in a given week ----
    Off the same ESPN scoreboard loadKickoffs and loadByeWeeks already read, so no new source and
@@ -15853,7 +15987,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · weekly recaps write themselves';
+const BUILD_STAMP = '2026-09-06 · live win probability';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
