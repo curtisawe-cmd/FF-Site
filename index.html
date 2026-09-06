@@ -301,7 +301,7 @@ nav.tabs button.locked:hover{opacity:.6}
    centred line: each one sits under its team's own score box, so the number reads as that
    team's, and the favourite's is filled with the team colour and marked. The actual winner
    is still .win on the name - final and projected never share a treatment. */
-.mu-pj{display:none;align-items:baseline;gap:5px;justify-self:end;
+.mu-pj{display:none;align-items:baseline;gap:5px;justify-self:end;white-space:nowrap;
   font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--chalk-dim);
   padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel)}
 .mu-pj i{font-style:normal;font-family:var(--f-ui);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
@@ -1476,7 +1476,9 @@ nav.tabs button{position:relative}
   .mu-row > span:not(.mu-team){display:none}
   /* With projections, each team takes two rows: its score box, then its projection pill
      right under it. The centred "Projected a - b" line is the same information and goes. */
-  .mu-row.has-pj{row-gap:3px}
+  /* the score column was a fixed 86px, and the favourite's pill needs ~95 - it broke the
+     marker onto a second line. auto lets the column follow the widest thing in it. */
+  .mu-row.has-pj{row-gap:3px;grid-template-columns:minmax(0,1fr) auto}
   .mu-row.has-pj > .mu-proj{display:none}
   .mu-row.has-pj > .mu-team{grid-row:1/3}
   .mu-row.has-pj > .mu-team.r{grid-row:3/5;margin-top:9px}
