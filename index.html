@@ -297,6 +297,15 @@ nav.tabs button.locked:hover{opacity:.6}
   font-family:var(--f-ui);font-size:11.5px;color:var(--chalk-dim);opacity:.9}
 .mu-proj b{color:var(--turf)}
 @media(max-width:640px){ .mu-proj{grid-column:1/-1;text-align:center} }
+/* The per-side projection pills. Off everywhere but the phone grid, where they replace the
+   centred line: each one sits under its team's own score box, so the number reads as that
+   team's, and the favourite's is filled with the team colour and marked. The actual winner
+   is still .win on the name - final and projected never share a treatment. */
+.mu-pj{display:none;align-items:baseline;gap:5px;justify-self:end;
+  font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--chalk-dim);
+  padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel)}
+.mu-pj i{font-style:normal;font-family:var(--f-ui);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
+.mu-pj.fav{color:var(--turf);font-weight:700;background:var(--turf-wash);border-color:var(--turf)}
 /* Weekly recap: plain text straight from the generator, so pre-wrap does the formatting and the
    same string copies and posts to chat unchanged. Capped at 70ch on desktop for readability;
    phones get the full width and a slightly smaller face. */
@@ -1465,6 +1474,16 @@ nav.tabs button{position:relative}
   .mu-row > input:first-of-type{grid-row:1}
   .mu-row > input:last-of-type{grid-row:2}
   .mu-row > span:not(.mu-team){display:none}
+  /* With projections, each team takes two rows: its score box, then its projection pill
+     right under it. The centred "Projected a - b" line is the same information and goes. */
+  .mu-row.has-pj{row-gap:3px}
+  .mu-row.has-pj > .mu-proj{display:none}
+  .mu-row.has-pj > .mu-team{grid-row:1/3}
+  .mu-row.has-pj > .mu-team.r{grid-row:3/5;margin-top:9px}
+  .mu-row.has-pj > input:last-of-type{grid-row:3;margin-top:9px}
+  .mu-row.has-pj > .mu-pj{display:inline-flex;grid-column:2}
+  .mu-row.has-pj > .mu-pj.a{grid-row:2}
+  .mu-row.has-pj > .mu-pj.b{grid-row:4}
   .mu-team.r{flex-direction:row;text-align:left}
 }
 .wk-date{display:flex;flex-direction:column;line-height:1.15;margin-left:6px;font-family:var(--f-mono);font-size:13px;color:var(--chalk-dim)}
@@ -11882,17 +11901,23 @@ function renderMatchups(){
         const projTag = (edge!=null)
           ? `<div class="mu-proj">Projected ${prA.toFixed(1)} &ndash; ${prB.toFixed(1)} · edge <b>${esc((S.teams[g[edge]]||{}).name||'')}</b></div>` : '';
         const aWin = done && pa>pb, bWin = done && pb>pa;
+        /* On a phone the same two numbers sit under their own score boxes instead of on one
+           centred line (see .mu-pj) - the favourite's pill is filled and carries the marker. */
+        const pj = (v, which) => (edge!=null)
+          ? `<span class="mu-pj ${which}${edge===(which==='a'?0:1)?' fav':''}"><i>Proj${edge===(which==='a'?0:1)?' \u25B2':''}</i>${v.toFixed(1)}</span>` : '';
         const side = (ti,win,other,right) => {
           if(edit) return `<span class="mu-team${right?' r':''}"><select onchange="setMatchTeam('${wk}',${m},${other},+this.value)">${teamOpts(ti)}</select></span>`;
           const t = S.teams[ti];
           const nm = `<span class="mu-name"${win?' style="font-weight:700"':''}>${win?'\uD83C\uDFC8 ':''}${esc(t?.name||'?')}${t&&t.manager?` <span style="color:var(--chalk-dim);font-size:12px">\u00B7 ${esc(t.manager)}</span>`:''}</span>`;
           return `<span class="mu-team${right?' r':''}${win?' win':''}">${teamMarkHTML(t,40)}${nm}</span>`;
         };
-        return `<div class="row mu-row" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px">
+        return `<div class="row mu-row${edge!=null?' has-pj':''}" style="padding:9px 0;border-bottom:1px solid var(--line);gap:8px">
           ${side(g[0],aWin,0,false)}
           <input type="number" step="0.1" style="width:82px" value="${fmt1(pa)}" placeholder="\u2014" onchange="setScore('${wk}',${m},0,this.value)">
+          ${pj(prA,'a')}
           <span style="color:var(--chalk-dim);font-size:12px">vs</span>
           <input type="number" step="0.1" style="width:82px" value="${fmt1(pb)}" placeholder="\u2014" onchange="setScore('${wk}',${m},1,this.value)">
+          ${pj(prB,'b')}
           ${side(g[1],bWin,1,true)}
           ${projTag}
           ${edit ? '' : (()=>{
