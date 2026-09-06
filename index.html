@@ -5431,13 +5431,22 @@ const CAREER_YEARS=[2020,2021,2022,2023,2024,2025];
    (2025: st_td 27, kr_td+pr_td 22, zero players carrying both). Anything absent from this
    list is stripped by slimSeason before season scoring ever sees it, so changing a formula
    without adding the field here does nothing at all to season totals. */
-const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_tgt','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpa','xpmiss','fgm','fga','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp'];
+const STAT_FIELDS=['pass_yd','pass_td','pass_int','pass_sack','pass_cmp','pass_att','pass_2pt','pass_int_td','rush_att','rush_yd','rush_td','rush_2pt','rush_fd','rec','rec_tgt','rec_yd','rec_td','rec_2pt','rec_fd','fum_lost','fum_rec_td','kr_td','pr_td','st_td','xpm','xpa','xpmiss','fgm','fga','fgm_0_19','fgm_20_29','fgm_30_39','fgm_40_49','fgm_50p','fgmiss_0_19','fgmiss_20_29','gp',
+  /* the defence's line - the weekly scorer reads these, so a projection has to carry them */
+  'sack','int','fum_rec','ff','safe','def_td','def_st_td','def_2pt','pts_allow','yds_allow'];
 /* Sleeper publishes a single season-long projection file. Everything that shows a projected
    number is reading THIS year, so the year lives in one place - the fetch below and the Game
    Center gate both read it, and they cannot drift apart when it rolls over. */
 const PROJ_SEASON = 2026;
 let STAT_CACHE={}, statsLoading=false, statsLoaded=false;
-function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue; if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm||p.st_td)) continue; const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; } m[id]=o; } return m; }
+function slimSeason(dict){ const m={}; for(const id in dict){ const p=dict[id]; if(!p) continue;
+  /* offence, kicking - and a defence, which has none of those fields and used to fail this
+     test, so every DEF in the league projected to exactly 0 */
+  if(!(p.pass_yd||p.rush_yd||p.rec||p.fgm||p.xpm||p.st_td||p.sack||p.int||p.def_td||p.pts_allow!=null)) continue;
+  const o={}; for(const f of STAT_FIELDS){ if(p[f]!=null) o[f]=p[f]; }
+  /* newer Sleeper files split 50+ into 50-59 and 60+; the scorer reads 50+ */
+  if(o.fgm_50p==null && (p.fgm_50_59!=null||p.fgm_60p!=null)) o.fgm_50p=(+p.fgm_50_59||0)+(+p.fgm_60p||0);
+  m[id]=o; } return m; }
 async function loadCareerStats(){
   if(statsLoaded||statsLoading) return;
   statsLoading=true;
@@ -5453,6 +5462,7 @@ async function loadCareerStats(){
 /* league-custom points from a season/projection stat total (per-game bonuses excluded — can't derive from a total) */
 function scoreSeasonStats(st,pos){
   if(!st) return null;
+  if(pos==='DEF') return scoreSeasonDef(st);
   const g=k=>+(st[k]||0), R=S.scoring, v=k=>+(R[k]||0);
   let p=0;
   p+=g('pass_yd')*v("Passing yards (per yd)")+g('pass_td')*v("Passing TD")+g('pass_int')*v("Interception thrown")+g('pass_sack')*v("Sacked");
@@ -5466,6 +5476,16 @@ function scoreSeasonStats(st,pos){
   p+=g('rush_fd')*v("Rushing first down")+g('rec_fd')*v("Receiving first down")+g('pass_cmp')*v("Completion")+(g('pass_att')-g('pass_cmp'))*v("Incompletion")+g('pass_int_td')*v("Pick-six thrown");
   if(pos==='TE') p+=g('rec')*v("TE premium (per reception)");
   return Math.round(p*10)/10;
+}
+/* A defence's season line, scored as its average game: sacks, picks and the rest divide by
+   games played, and points and yards allowed per game pick the tier - through the weekly
+   scorer itself, so the tier table lives in one place and the two cannot disagree. Times
+   games played gives the season figure every caller of scoreSeasonStats expects. */
+function scoreSeasonDef(st){
+  const gp = Math.max(1, +st.gp || 17), per = {};
+  for(const k in st){ if(k!=='gp' && st[k]!=null && !isNaN(+st[k])) per[k] = +st[k]/gp; }
+  const wk = scoreWeekStats(per, 'DEF');
+  return wk==null ? null : Math.round(wk*gp*10)/10;
 }
 /* itemized version of scoreSeasonStats, for verifying scoring against real data */
 function scoreBreakdown(st,pos){
@@ -12751,7 +12771,8 @@ function ensureLineup(ti){
   const lu = S.lineups[ti] = S.lineups[ti] || {};
   const roster = teamRoster(ti);
   const ids = new Set(roster.map(p=>p.playerId));
-  Object.keys(lu).forEach(id=>{ if(!ids.has(id)) delete lu[id]; });
+  let changed = false;
+  Object.keys(lu).forEach(id=>{ if(!ids.has(id)){ delete lu[id]; changed = true; } });
   // seed: fill starters greedily in pick order, rest to bench
   const cap = slot => slot==='BN'? Infinity : (+S.roster[slot]||0);
   const used = slot => Object.values(lu).filter(s2=>s2===slot).length;
@@ -12759,8 +12780,24 @@ function ensureLineup(ti){
     if(lu[p.playerId]) return;
     const opts = [...(SLOT_ELIG[p.pos]||[]), 'BN'];
     lu[p.playerId] = opts.find(s2=>used(s2)<cap(s2)) || 'BN';
+    changed = true;
   });
+  /* A seed only this device knows about was the bug: the stored lineup is whatever the
+     manager's phone last pushed, the listener puts it straight back over anything seeded
+     here, and a map saved mid-draft stayed one starter deep for good. So when the seed added
+     or removed anything, and this device may edit the team, it goes up - debounced, since a
+     draft night renders this a lot. Deterministic from pick order, so two devices seeding the
+     same roster push the same map and never fight. */
+  if(changed) queueLineupPush(ti);
   return lu;
+}
+const _luPush = {};
+function queueLineupPush(ti){
+  try{
+    if(!fbOk() || !canEditTeam(ti)) return;
+    clearTimeout(_luPush[ti]);
+    _luPush[ti] = setTimeout(()=>{ try{ pushTeamData(ti); }catch(e){} }, 1500);
+  }catch(e){}
 }
 /* ============ projected points + best lineup ============
    No model and no API key — this scores Sleeper's own season projection through YOUR league's
@@ -12842,7 +12879,11 @@ function benchLeftHTML(ti, stats, noStats){
     <span class="gc-bench-cap">${b.best.toFixed(1)} was there for the taking</span></div>`;
 }
 function projectedTotal(ti){
-  const lu = S.lineups[ti]||{};
+  /* ensureLineup, not the raw map: every roster renderer seeds unslotted players into open
+     starting slots before drawing, and this read the stored map as-is, where a player with no
+     entry at all counted as benched. A lineup pushed mid-draft carried one starter, so the
+     team page showed a full lineup while the matchup projected that one player - 17 points. */
+  const lu = ensureLineup(ti);
   return Math.round(teamRoster(ti)
     .filter(p=>{ const sl=lu[p.playerId]; return sl && sl!=='BN' && sl!=='IR'; })
     .reduce((t,p)=>t + (projWeekPoints(p.playerId,p.pos)||0), 0) * 10)/10;

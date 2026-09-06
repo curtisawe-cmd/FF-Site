@@ -196,6 +196,16 @@ All read-only, all unauthenticated, all cached with a TTL. No API keys.
 | `sleepercdn.com/content/nfl/players/thumb/{id}.jpg` | player faces | browser |
 | `sleepercdn.com/images/team_logos/nfl/{tm}.png` | DEF logos | browser |
 
+Projections are Sleeper's season file scored through the league's own rules
+(`scoreSeasonStats`) and divided by games played (`projWeekPoints`). A **defence** is scored as
+its average game through `scoreWeekStats` (`scoreSeasonDef`) so the points-allowed tiers apply
+- `slimSeason` used to drop every DEF for lacking offensive fields, and they all projected 0.
+`projectedTotal(ti)` reads **`ensureLineup(ti)`**, the same seeded lineup every roster page
+draws, never the raw `S.lineups` map: a player with no entry counted as benched, and a lineup
+pushed mid-draft with one starter made a team project 17 while its page showed a full lineup.
+`ensureLineup` now pushes anything it seeds (`queueLineupPush`) when the device may edit the
+team, so the stored map stops being partial.
+
 Auto-scoring polls every `AUTOSCORE_EVERY_MS` (5m) and is crowd-computed: whichever
 member has the app open keeps the board current. Don't assume a server is doing it.
 
