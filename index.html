@@ -565,6 +565,8 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 /* keep the player pool pinned in view while scrolling the long draft board */
 @media(min-width:1021px){
   .pool{position:sticky;top:calc(var(--hdr-h,72px) + 10px);align-self:start;max-height:calc(100dvh - var(--hdr-h,72px) - 30px)}
+  /* the bar takes the bottom 54px of the viewport; without this the panel's roster strip sat under it */
+  body.has-ticker .pool{max-height:calc(100dvh - var(--hdr-h,72px) - 30px - 54px - var(--sa-b))}
 }
 /* ---- Draft full screen ------------------------------------------------------------------
    A 12-wide, 17-round board is the one page that never has enough room. Before a single pick
@@ -1811,6 +1813,11 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   border-top:2px solid var(--charge);
   /* shadow both ways: it is a bar with page above it AND page below it now */
   box-shadow:0 -6px 18px rgba(0,0,0,.28), 0 5px 14px rgba(0,0,0,.22)}
+/* On a desktop, solid and unblurred: a bar the page STOPS at. The glass version read as the
+   ticker lying over the page - which, with the page end never clearing it, it literally was.
+   Phones keep the glass; there the bar is a strip you scroll past, and the room under the
+   page was always reserved. */
+@media(min-width:641px){.ticker{background:var(--panel-2);-webkit-backdrop-filter:none;backdrop-filter:none}}
 /* The bottom edge, drawn at the foot of the CONTENT rather than the foot of the element.
    As a border-bottom it sat under the home-indicator padding, which on a phone with a gesture
    bar left a strip of empty bar between the red label box and the line - the line floating well
@@ -1844,6 +1851,16 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 /* Room for the bar, plus a little air so the last card stops short of it instead of butting
    against the border. Without this the page ends flush against the ticker at exactly 0px. */
 body.has-ticker{padding-bottom:calc(54px + var(--sa-b) + 12px)}
+/* ...except that on a desktop it did nothing. body is height:100% - one viewport tall - and
+   there the DOCUMENT scrolls, so body's padding sat at the 900px mark of a 5000px page while
+   the last rows of every view ended under the bar with nothing left to scroll. On a phone
+   overflow-x:hidden makes body itself the scroller, its padding lands after the content, and
+   that is why only desktops complained. main grows with the content everywhere, so on a
+   desktop the room goes there. Anything else pinned to the bottom edge steps up over the bar
+   too: the toast was z-index 50 and popped up BEHIND it, the install prompt on top of it. */
+@media(min-width:641px){ body.has-ticker main{padding-bottom:calc(14px + 54px + var(--sa-b) + 12px)} }
+body.has-ticker .toast{bottom:calc(18px + 54px + var(--sa-b))}
+body.has-ticker .installbar{bottom:calc(12px + 54px + var(--sa-b))}
 
 /* ---- the phone header -------------------------------------------------------------------
    It was 173px tall and pinned: wordmark, a countdown chip and Sign-in wrapping onto a second
