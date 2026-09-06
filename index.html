@@ -1922,6 +1922,8 @@ body.has-ticker .installbar{bottom:calc(12px + 54px + var(--sa-b))}
     font-size:15px;letter-spacing:.06em;border-bottom:3px solid transparent;transform:none}
   .row.subnav .btn:not(.ghost),.row.musub .btn:not(.ghost),.row.statssub .btn:not(.ghost),.row.chatsub .btn:not(.ghost){
     color:var(--turf);border-bottom-color:var(--turf);background:none}
+  /* Game Center's Refresh: a pill like the two view pills beside it, and tall enough to hit */
+  .gc-refresh{min-height:40px;padding:6px 14px !important;font-size:14px !important}
   /* Settings' page strip is built by JS with .on for the current page; same treatment. */
   .spage-tabs{gap:0;margin:2px -12px 0;padding:0 8px;border-bottom:1px solid var(--line)}
   .spage-tabs button{min-height:44px;padding:10px 12px;background:none;border:0;border-radius:0;box-shadow:none;
@@ -10630,7 +10632,7 @@ async function renderGameCenter(){
       <span style="flex:1"></span>
       ${narrow ? '' : `<button class="btn ${layout==='all'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='all';renderGameCenter()">All matchups</button>
       <button class="btn ${layout==='swipe'?'':'ghost'}" style="padding:3px 11px;font-size:13px" onclick="window.gcLayout='swipe';renderGameCenter()">One at a time</button>`}
-      <a href="#" class="poolrefresh" onclick="refreshGameCenter();return false">refresh now</a>
+      <button class="btn ghost gc-refresh" style="padding:3px 11px;font-size:13px" onclick="refreshGameCenter()" title="Pull the latest stats from Sleeper now">&#8635; Refresh</button>
     </div>`;
   if(!games.length){ el.innerHTML = head + `<div class="card"><p class="sub" style="margin:0">No matchups in week ${wk}.</p></div>`; return; }
   /* keep the panel you're on (and skip the loading flash) when refreshing the same week */
