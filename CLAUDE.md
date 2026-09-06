@@ -190,7 +190,7 @@ All read-only, all unauthenticated, all cached with a TTL. No API keys.
 | Source | Used for | Cache |
 | --- | --- | --- |
 | `api.sleeper.app/v1/players/nfl` | player pool | `POOL_REFRESH_MS` 4h |
-| `api.sleeper.app/v1/stats/nfl/regular/{yr}` | season + weekly stats | `STATS_TTL_MS` 1m (in-progress week only) |
+| `api.sleeper.app/v1/stats/nfl/regular/{yr}` | season + weekly stats | `STATS_TTL_MS` 3m (in-progress week only) |
 | `api.sleeper.app/v1/projections/nfl/regular/2026` | projections | - |
 | `site.api.espn.com/.../football/nfl/injuries` | injury report | `ESPN_TTL_MS` 20m |
 | `sleepercdn.com/content/nfl/players/thumb/{id}.jpg` | player faces | browser |
@@ -206,7 +206,7 @@ pushed mid-draft with one starter made a team project 17 while its page showed a
 `ensureLineup` now pushes anything it seeds (`queueLineupPush`) when the device may edit the
 team, so the stored map stops being partial.
 
-Auto-scoring polls every `AUTOSCORE_EVERY_MS` (1m, on a 1m pulse) and is crowd-computed: whichever
+Auto-scoring polls every `AUTOSCORE_EVERY_MS` (3m, on a 1m pulse) and is crowd-computed: whichever
 member has the app open keeps the board current. Don't assume a server is doing it.
 
 `playerFace(p, size)` is deliberately **shape-agnostic** - it reads `p.id||p.playerId`
