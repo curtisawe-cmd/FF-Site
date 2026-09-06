@@ -5567,7 +5567,7 @@ function renderBreakdown(id){
   el.innerHTML=`<div style="overflow-x:auto"><table class="plain" style="white-space:nowrap;font-family:var(--f-mono);font-size:13px">
     <tr><th style="text-align:left">Category</th><th style="text-align:right">Stat</th><th style="text-align:right">× pts</th><th style="text-align:right">= Points</th></tr>
     ${items.length? items.map(it=>`<tr><td style="text-align:left">${esc(it.label)}</td><td style="text-align:right">${it.stat}</td><td style="text-align:right">${it.per}</td><td style="text-align:right;font-weight:600">${it.pts.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--chalk-dim)">No scoring categories in ${y}.</td></tr>`}
-    <tr class="top"><td style="text-align:left"><b>Total${gp?` · ${gp} GP`:''}</b></td><td></td><td></td><td style="text-align:right;font-weight:700">${total!=null?total.toFixed(1):'—'}</td></tr>
+    <tr class="top"><td style="text-align:left"><b>Total${gp?` · ${gp} GP`:''}</b>${(gp>1&&total!=null)?`<span style="color:var(--chalk-dim);font-weight:400"> · ${(total/gp).toFixed(1)} a game</span>`:''}</td><td></td><td></td><td style="text-align:right;font-weight:700">${total!=null?total.toFixed(1):'—'}</td></tr>
   </table></div>
   <p class="sub" style="font-size:12px;margin-top:8px">${y==='proj'
     ? `Sleeper's ${PROJ_SEASON} projection × your league's rules, as a season total - divide by the games for a week (the matchups do). A defence's points-allowed tier is scored on its average game.`
@@ -8682,11 +8682,11 @@ function renderQueue(){
       if(!p) return '';
       const taken = gone.has(id);
       if(!taken) n++;
-      const proj = seasonProjPts(p);
+      const proj = projWkPts(p);
       return `<div class="qrow${taken?' gone':''}">
         <span class="qnum">${taken?'\u2715':n}</span>
         <span class="qname" onclick="openPlayer('${id}')">${esc(p.name)}</span>
-        <span class="qproj">${taken?'taken':(proj==null?'':proj+' proj')}</span>
+        <span class="qproj">${taken?'taken':(proj==null?'':proj.toFixed(1)+'/wk')}</span>
         ${taken?'':`<span class="qmv">
           <button ${i===0?'disabled':''} title="Move up" onclick="queueMove('${id}',-1)">\u25B2</button>
           <button ${i===q.length-1?'disabled':''} title="Move down" onclick="queueMove('${id}',1)">\u25BC</button>
@@ -8800,10 +8800,13 @@ function renderPool(){
   list.innerHTML = shown.map(p=>{
     /* the name gets its own line so it never truncates; team, bye and the projection share the
        line beneath it, which is also what freed the width the ellipsis was fighting for */
-    const proj = seasonProjPts(p);
-    const projTxt = statsLoaded ? (proj==null?'—':proj+' proj') : '… proj';
+    /* A week, not the season: the Players tab, waivers, Game Center and the matchups all speak
+       in weeks, and a season total here read as "a defence projects 146" next to them. The
+       draft-value order below still ranks on the season figure - same shape, no scaling. */
+    const proj = projWkPts(p);
+    const projTxt = statsLoaded ? (proj==null?'—':proj.toFixed(1)+'/wk') : '… proj';
     const bye = byeWeekOfTeam(p.team);
-    /* best-available rank at his own position: the reason a 310 sits above a 630 */
+    /* best-available rank at his own position: the reason a lower number can sit above a higher one */
     const rk = PV && PV.rank.get(p.id);
     const posRk = rk ? p.pos+rk : '';
     return `
