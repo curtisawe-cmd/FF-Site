@@ -14,15 +14,19 @@
    ============================================================ */
 
 import { getStore } from '@netlify/blobs';
-import { runScoreWatch } from './lib/score.mjs';
+import { runScoreWatch, runLineupWatch } from './lib/score.mjs';
 
 export default async () => {
   let store = null;
   try { store = getStore('bbl'); } catch { /* reported by runScoreWatch */ }
   const result = await runScoreWatch(store);
+  /* the lineup check rides the same beat: it is free outside a kickoff window, and the window
+     is when it matters */
+  let lineup;
+  try { lineup = await runLineupWatch(store); } catch (e) { lineup = { error: String(e && e.message || e) }; }
   /* Netlify keeps these in the function log, which is where to look when a Sunday goes quiet */
-  console.log('[BBL score-watch]', JSON.stringify(result));
-  return new Response(JSON.stringify(result), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[BBL score-watch]', JSON.stringify({ ...result, lineup }));
+  return new Response(JSON.stringify({ ...result, lineup }), { headers: { 'Content-Type': 'application/json' } });
 };
 
 export const config = { schedule: '*/2 * * * *' };

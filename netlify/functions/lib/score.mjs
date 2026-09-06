@@ -160,3 +160,168 @@ export async function runScoreWatch(store) {
   }
   return { sent, teams: pass.sends.length };
 }
+
+/* ============================================================
+   LINEUP ALERTS - "your guy isn't playing and kickoff is in two hours."
+
+   Same snapshot, same relay, same one-manager-at-a-time push. What it adds is a look at each
+   team's starters a little before their games: a starter who is out, on IR, suspended, on bye,
+   or simply has no line in Sleeper's projection file for the week is going to score zero, and
+   so is an empty slot. The manager hears about it while there is still time to do something.
+
+   WHEN. An issue is due in the window before its player's own kickoff (lead hours, from the
+   settings). A bye or an empty slot has no kickoff of its own, so it rides the next kickoff of
+   the week that has not happened yet - Thursday night if the watcher is running then, Sunday
+   morning otherwise. Once told, a manager is not told the same thing again that week.
+
+   WHAT COUNTS AS OUT. The injury tag the app already shows (Out, IR, PUP, suspended...), a
+   Doubtful tag, or no stat line in Sleeper's weekly projection file. Every player is in that
+   file; the ones who will not play carry only draft-position fields and no stats, which is how
+   the app's own projections already read them.
+   ============================================================ */
+const OUT_TAGS = ['Out', 'IR', 'PUP', 'Sus', 'Suspended', 'NA', 'DNR', 'COV'];
+const ESPN_TEAM_FIX = { WSH: 'WAS' };
+
+/* the ids Sleeper has a real line for this week - the rest are not playing or not projected */
+export function projectedIds(weekProj) {
+  const ids = new Set();
+  Object.keys(weekProj || {}).forEach(id => {
+    const l = weekProj[id]; if (!l) return;
+    const real = (+l.gp > 0) || Object.keys(l).some(k => !k.startsWith('adp_') && !k.startsWith('pos_adp') && k !== 'gp');
+    if (real) ids.add(String(id));
+  });
+  return ids;
+}
+
+/* Pure. What each manager should be told right now, and the marks to store so nobody hears
+   the same thing twice. `kick` is {TEAM: kickoffMs}; `lined` the Set from projectedIds. */
+export function lineupPass(snapshot, lined, kick, marks, now, leadMs) {
+  const week = +snapshot.lineupWeek || +snapshot.week || 0;
+  const next = JSON.parse(JSON.stringify(marks || {}));
+  const kicks = Object.values(kick || {}).filter(Number.isFinite);
+  const byesKnown = kicks.length >= 20;
+  const nextKick = kicks.filter(t => t > now).sort((a, b) => a - b)[0] || null;
+  const due = t => Number.isFinite(t) && t > now && t - now <= leadMs;
+  const sends = [];
+  (snapshot.teams || []).forEach(team => {
+    if (!team.uid) return;
+    const seen = next[team.uid] = next[team.uid] || {};
+    const issues = [];
+    (team.players || []).forEach(pl => {
+      const id = String(pl.id);
+      const tm = String(pl.nfl || '').toUpperCase();
+      const onBye = (week && +pl.bye === week) || (byesKnown && tm && !Number.isFinite(kick[tm]));
+      let why = null;
+      if (onBye) why = 'bye';
+      else if (OUT_TAGS.includes(pl.inj)) why = pl.inj === 'IR' ? 'IR' : pl.inj === 'Out' ? 'out' : String(pl.inj).toLowerCase();
+      else if (pl.inj === 'Doubtful') why = 'doubtful';
+      else if (lined && lined.size && !lined.has(id)) why = 'not projected to play';
+      if (!why) return;
+      /* his own kickoff; a bye or a team with no game rides the next kickoff of the week */
+      const at = onBye || !Number.isFinite(kick[tm]) ? nextKick : kick[tm];
+      if (!due(at)) return;
+      if (seen[id]) return;
+      issues.push({ key: id, text: `${pl.name || 'A starter'} (${pl.pos || '?'}) ${why}`, at });
+    });
+    const open = +team.open || 0;
+    if (open > 0 && due(nextKick)) {
+      const key = 'open:' + open;
+      if (!seen[key]) issues.push({ key, text: `${open} empty slot${open > 1 ? 's' : ''}`, at: nextKick });
+    }
+    if (!issues.length) return;
+    issues.forEach(i => { seen[i.key] = 1; });
+    const soonest = Math.min(...issues.map(i => i.at));
+    sends.push({ uid: team.uid, team: team.name || '', issues, msUntil: soonest - now });
+  });
+  return { next, sends };
+}
+
+/* the words. Short enough for a lock screen, blunt enough for this league. */
+export function lineupText(issues, msUntil) {
+  const players = issues.filter(i => !String(i.key).startsWith('open:'));
+  const open = issues.find(i => String(i.key).startsWith('open:'));
+  const n = players.length;
+  const title = n && open ? `${n + 1} lineup problems`
+              : n ? `${n} starter${n > 1 ? 's' : ''} won't play`
+              : 'Empty spot in your lineup';
+  const mins = Math.max(1, Math.round(msUntil / 60000));
+  const when = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60 ? (mins % 60) + 'm' : ''}`.trim() : `${mins}m`;
+  let list = issues.map(i => i.text).join(' · ');
+  if (list.length > 120) list = list.slice(0, 117).replace(/\s+\S*$/, '') + '…';
+  return { title, body: `${list}. Kickoff in ${when} — fix it or eat the zero.` };
+}
+
+/* ESPN's scoreboard for the week: {TEAM: kickoffMs}. Cached six hours - the fixture list is
+   a fact about the week, and a game moving is a rare enough thing to wait six hours for. */
+async function weekKickoffs(store, season, week) {
+  const key = `ko_${season}_${week}`;
+  try {
+    const hit = await store.get(key, { type: 'json' });
+    if (hit && hit.at && Date.now() - hit.at < 6 * 3600e3 && hit.map) return hit.map;
+  } catch {}
+  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`);
+  if (!r.ok) throw new Error('espn ' + r.status);
+  const j = await r.json();
+  const map = {};
+  (j.events || []).forEach(ev => {
+    const t = Date.parse(ev.date); if (!Number.isFinite(t)) return;
+    (((ev.competitions || [])[0] || {}).competitors || []).forEach(c => {
+      const ab = String((c.team || {}).abbreviation || '').toUpperCase();
+      if (ab) map[ESPN_TEAM_FIX[ab] || ab] = t;
+    });
+  });
+  if (Object.keys(map).length) { try { await store.setJSON(key, { at: Date.now(), map }); } catch {} }
+  return map;
+}
+
+/* the ids with a line in Sleeper's file for the week, cached twenty minutes like the app's own */
+async function weekLined(store, season, week) {
+  const key = `wl_${season}_${week}`;
+  try {
+    const hit = await store.get(key, { type: 'json' });
+    if (hit && hit.at && Date.now() - hit.at < 20 * 60e3 && Array.isArray(hit.ids)) return new Set(hit.ids);
+  } catch {}
+  const r = await fetch(`https://api.sleeper.app/v1/projections/nfl/regular/${season}/${week}`);
+  if (!r.ok) throw new Error('sleeper ' + r.status);
+  const ids = projectedIds(await r.json());
+  if (ids.size) { try { await store.setJSON(key, { at: Date.now(), ids: [...ids] }); } catch {} }
+  return ids;
+}
+
+/* The scheduled run. Costs nothing outside a kickoff window: it reads the fixture list (cached)
+   and returns before touching Sleeper unless some game is inside the lead time. */
+export async function runLineupWatch(store) {
+  if (!store) return { skipped: 'no blob store' };
+  let snap;
+  try { snap = await store.get('snapshot', { type: 'json' }); } catch { return { skipped: 'store read failed' }; }
+  if (!snap) return { skipped: 'no snapshot yet - open the league app once' };
+  if (!snap.lineup) return { skipped: 'lineup alerts are switched off in the league settings' };
+  const week = +snap.lineupWeek || +snap.week || 0;
+  if (!week || !snap.season) return { skipped: 'no week to check' };
+  if (snap.at && Date.now() - snap.at > 14 * 864e5) return { skipped: 'snapshot too old' };
+
+  const leadMs = (Number(snap.lead) > 0 ? Number(snap.lead) : 2) * 3600e3;
+  const now = Date.now();
+  let kick;
+  try { kick = await weekKickoffs(store, snap.season, week); } catch (e) { return { skipped: String(e.message || e) }; }
+  const kicks = Object.values(kick).filter(Number.isFinite);
+  if (!kicks.length) return { skipped: 'no kickoff times for week ' + week };
+  if (!kicks.some(t => t > now && t - now <= leadMs)) return { skipped: 'no kickoff inside the lead time', week };
+
+  let lined = null;
+  try { lined = await weekLined(store, snap.season, week); } catch { lined = null; }   /* injury tags and byes still work without it */
+
+  const key = `la_${snap.season}_${week}`;
+  let marks = {};
+  try { marks = (await store.get(key, { type: 'json' })) || {}; } catch {}
+  const pass = lineupPass(snap, lined, kick, marks, now, leadMs);
+  if (!pass.sends.length) return { sent: 0, week, checked: (snap.teams || []).length };
+
+  let sent = 0;
+  for (const s of pass.sends) {
+    const msg = lineupText(s.issues, s.msUntil);
+    try { if (await pushOne(s.uid, msg.title, msg.body, snap.url)) sent++; } catch {}
+  }
+  try { await store.setJSON(key, pass.next); } catch {}
+  return { sent, week, teams: pass.sends.length, told: pass.sends.map(s => ({ team: s.team, issues: s.issues.map(i => i.text) })) };
+}

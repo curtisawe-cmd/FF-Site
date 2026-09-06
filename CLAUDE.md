@@ -111,9 +111,11 @@ gated on team identity must re-render when the claim arrives.
 
 ## Push notifications
 
-Three triggers only, and nothing else should be added without asking: **new chat message**
+Five triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
-accepted** (everyone).
+accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
+watcher) and **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
+slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below).
 
 The chain has five links and every one of them broke at least once on 2026-08-01. In order:
 
@@ -153,6 +155,30 @@ the app open. Moving the trigger server-side is the known fix and is not done ye
 
 Changing `push/cloudflare-worker.js` does nothing until it is **pasted into the Cloudflare
 dashboard and deployed by hand**. Pushing to git does not deploy it.
+
+### Lineup alerts
+
+`runLineupWatch` in `netlify/functions/lib/score.mjs`, run by `score-watch.mjs` on the same
+two-minute cron as the score watcher and on demand with `POST {lineupNow:true}` (Settings >
+"Check lineups now"). It works from the **same snapshot** the score watcher reads, which now
+carries each starter's `nfl`, `inj` and `bye`, each team's `open` (empty starting slots), and
+`lineup` / `lineupWeek` / `lead` from the settings. `lineupWeek` is `projWeekNow()` - week 1
+all preseason - so the Thursday opener gets its warning even though `currentNflWeek()` is
+still 0 until kickoff.
+
+- **When:** an issue is due inside `lead` hours before its player's own kickoff (ESPN
+  scoreboard, cached 6h in the blob `ko_{season}_{week}`). A bye or an empty slot rides the
+  next kickoff of the week that has not happened. Marks in `la_{season}_{week}` mean one
+  manager hears about one problem once a week.
+- **What counts:** an `inj` tag in `OUT_TAGS` (Out, IR, PUP, Sus...), Doubtful, on bye, or
+  no stat line in Sleeper's weekly projection file (`projectedIds`, cached 20m in
+  `wl_{season}_{week}`). Sleeper unreachable = injury tags and byes still work.
+- **Snapshots now come from any signed-in device**, not just a commissioner's
+  (`checkScoreAlerts`). The check is only as fresh as the last snapshot, and a manager fixing
+  his lineup on his own phone is exactly the device that should tell the relay.
+- The in-app twin is `lineupIssues(ti)` / `lineupWarningHTML(ti)` on the team page, which
+  gained the same `out` category (injury tag or no weekly line) beside empty and bye.
+- The Cloudflare copy in `push/score-watch.js` does **not** have this; only the Netlify one.
 
 ## PWA and mobile
 
