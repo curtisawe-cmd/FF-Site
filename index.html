@@ -2285,6 +2285,46 @@ section.view[data-ghost] > *{position:relative;z-index:1}
   .tr-item{font-size:12px;padding:2px 0}
   .tr-swap{font-size:14px}
 }
+/* ---- trade analyzer: the deal re-solved through both lineups ---- */
+.tr-an{margin-bottom:14px}
+.tr-an-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.tr-an .h2h-tag{margin-left:0;font-size:10px;padding:2px 8px}
+.tr-an .h2h-tag.lean{border:1px solid var(--turf);color:var(--turf);background:var(--turf-wash)}
+.tr-an-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:start}
+.tr-an-col{min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.tr-an-team{display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;margin-bottom:4px;min-width:0}
+.tr-an-team > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-an-team .team-logo,.tr-an-team .avatar{width:22px !important;height:22px !important}
+.tr-an-row{display:flex;align-items:baseline;gap:6px;font-size:12px;padding:3px 0;border-bottom:1px solid var(--line)}
+.tr-an-row > span:first-child{color:var(--chalk-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-an-row b{font-family:var(--f-mono);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tr-an-row em{font-style:normal;font-family:var(--f-mono);font-weight:700;min-width:46px;text-align:right;white-space:nowrap;color:var(--chalk-dim)}
+.tr-an-row em.up{color:var(--turf-bright)} .tr-an-row em.down{color:var(--charge)} .tr-an-row em.ok{font-weight:500}
+.tr-an-note{font-size:11.5px;color:var(--charge);margin-top:4px;line-height:1.3}
+.tr-an-pl{font-size:11.5px;color:var(--chalk-dim);margin-top:5px;line-height:1.4;overflow-wrap:anywhere}
+.tr-an-pl b{color:var(--chalk);font-weight:600}
+.tr-an.mini{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:10px 0 0;padding:8px 10px;font-size:12px;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:10px}
+.tr-an.mini .tr-an-side{min-width:0;overflow-wrap:anywhere}
+.tr-an.mini b{font-family:var(--f-mono);font-weight:700;font-variant-numeric:tabular-nums}
+.tr-an.mini .tr-an-side > b:first-child{font-family:var(--f-ui);font-weight:700}
+.tr-an.mini b.up{color:var(--turf-bright)} .tr-an.mini b.down{color:var(--charge)}
+/* this week's projection beside each name in the builder */
+.tb-pj{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);min-width:34px;text-align:right;flex:0 0 auto}
+/* Phones STACK the two analyzer columns - unlike the offer card's swap columns. A row here is
+   a label plus three numbers, and two of those across a 375px screen left the label a single
+   character wide. One column under the other, each row on one line, is the readable shape. */
+@media(max-width:560px){
+  .tr-an-grid{grid-template-columns:minmax(0,1fr);gap:6px}
+  .tr-an-col{padding:6px 8px;border-radius:8px}
+  .tr-an-team{font-size:12px}
+  .tr-an-row{font-size:11.5px;gap:6px;flex-wrap:wrap}
+  .tr-an-row > span:first-child{flex:1 1 120px}
+  .tr-an-row em{min-width:40px}
+  .tr-an-pl,.tr-an-note{font-size:11px}
+  .tr-an.mini{font-size:11.5px;gap:4px 10px;padding:7px 8px}
+  .tb-pj{display:none}
+}
 /* ---- win probability bar ---- */
 .wp{padding:8px 10px;background:var(--panel-2);border-bottom:1px solid var(--line)}
 .wp-row{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:4px}
@@ -12449,6 +12489,112 @@ function tradeHasSelection(){
   const T = window.tradeSel || {};
   return !!((T.pa && T.pa.size) || (T.pb && T.pb.size) || (T.ra && T.ra.size) || (T.rb && T.rb.size));
 }
+/* ===================== TRADE ANALYZER =====================
+   What a deal does to both teams, worked out the way the Best lineup button and the Pickups
+   tab work: put the players where they would land and re-solve each side's best lineup. Two
+   horizons - this week's file, and the rest of the regular season week by week (the weekly
+   file where it is loaded, the season average otherwise, a bye as nothing) - plus the raw
+   projected value moving each way, what the roster count and the position depth look like
+   afterwards, and a verdict in the league's own words. Draft picks are listed but not priced:
+   there is no honest number for a 2027 third-rounder, and inventing one would make the verdict
+   worse, not better. Read-only, always: it never touches S, the board or Firebase. */
+function tradeWeeks(){
+  const now = projWeekNow();
+  if(!(now>=1)) return { now:0, weeks:[] };
+  const weeks = []; for(let w=now; w<=REG_WEEKS; w++) weeks.push(w);
+  return { now, weeks };
+}
+/* a pick's projected points in week w: the weekly file when it is in, else the season
+   average, and nothing on the bye. 0 rather than null - the solver counts a missing line as 0
+   and the sums here must agree with it. */
+function tradeWeekPts(p, w){
+  const id = String(p.playerId || p.id || ''), pos = p.pos || '';
+  const wk = PROJ_WEEKS[w];
+  if(wk && wk.data) return projWeekPoints(id, pos, w) || 0;
+  if(byeWeekOfTeam(p.nfl || p.team) === w) return 0;
+  const raw = (STAT_CACHE.proj||{})[id]; if(!raw) return 0;
+  const g = projGames(raw), s = scoreSeasonStats(raw, pos, g);
+  return s==null ? 0 : Math.round(s / g * 10) / 10;
+}
+function tradeAnalysis(ai, bi, paIds, pbIds, raS, rbS, py){
+  if(!statsLoaded || !Number.isInteger(ai) || !Number.isInteger(bi) || ai===bi) return null;
+  const r1 = n => Math.round(n*10)/10;
+  const { now, weeks } = tradeWeeks();
+  const d = realDraft();
+  const pa = new Set((paIds||[]).map(String)), pb = new Set((pbIds||[]).map(String));
+  const rosterOf = ti => d.picks.filter(p=>p.teamIndex===ti && !p.cut);
+  const rA = rosterOf(ai), rB = rosterOf(bi);
+  const giveA = rA.filter(p=>pa.has(String(p.playerId))), giveB = rB.filter(p=>pb.has(String(p.playerId)));
+  const side = (ti, mine, give, get, picksOut, picksIn) => {
+    const lu = S.lineups[ti] || {};
+    const notIR = p => lu[p.playerId] !== 'IR';
+    const gone = new Set(give.map(p=>String(p.playerId)));
+    const before = mine.filter(notIR);
+    /* incoming players land on the bench, so every one of them counts - even one the other
+       side had on IR */
+    const after = [...before.filter(p=>!gone.has(String(p.playerId))), ...get];
+    const solve = (roster, w) => optimalLineupOf(roster, p=>tradeWeekPts(p, w)).total;
+    const nowB = now ? solve(before, now) : 0, nowA = now ? solve(after, now) : 0;
+    let rosB = 0, rosA = 0; weeks.forEach(w=>{ rosB += solve(before, w); rosA += solve(after, w); });
+    const val = list => list.map(p=>({ p, now: now ? tradeWeekPts(p, now) : 0, ros: r1(weeks.reduce((t,w)=>t+tradeWeekPts(p,w), 0)) }));
+    const out = val(give), inn = val(get);
+    const sum = l => r1(l.reduce((t,x)=>t+x.ros, 0));
+    const limit = rosterLimit(), req = starterReq(), thin = [];
+    ['QB','RB','WR','TE','K','DEF'].forEach(pos=>{
+      const have = after.filter(p=>p.pos===pos).length, need = +req[pos]||0;
+      if(need && have < need) thin.push({ pos, have, need });
+    });
+    const keepers = give.filter(p=>isKeeperPick(p)).map(p=>p.name);
+    return { ti, name: (S.teams[ti]||{}).name||'?', nowB, nowA, dNow: r1(nowA-nowB), rosB: r1(rosB), rosA: r1(rosA), dRos: r1(rosA-rosB),
+             out, inn, valOut: sum(out), valIn: sum(inn), dVal: r1(sum(inn)-sum(out)),
+             countBefore: before.length, countAfter: after.length, limit, over: Math.max(0, after.length-limit),
+             thin, keepers, picksOut: (picksOut||[]).map(Number), picksIn: (picksIn||[]).map(Number) };
+  };
+  const A = side(ai, rA, giveA, giveB, raS, rbS), B = side(bi, rB, giveB, giveA, rbS, raS);
+  /* The verdict. Who improves more, per week, over the rest of the season - and when neither
+     lineup really moves (a bench-for-bench swap) the raw value decides instead. Under a point
+     and a half a week is a fair deal; under four leans; four or more is a robbery. Picks are on
+     the table but not on the scale, and the chip says so. */
+  const n = Math.max(1, weeks.length);
+  const lt = (A.dRos - B.dRos) / n, vt = A.dVal / n;
+  const t = Math.abs(lt) >= 1.5 ? lt : vt;
+  const picks = A.picksOut.length + B.picksOut.length > 0;
+  let kind = 'fair', who = null, text = 'Fair deal';
+  if(Math.abs(t) >= 4){ kind = 'robbery'; who = t>0 ? A : B; text = `Robbery — ${(t>0 ? B : A).name} gets fleeced`; }
+  else if(Math.abs(t) >= 1.5){ kind = 'leans'; who = t>0 ? A : B; text = `Leans ${who.name}`; }
+  if(picks) text += ' · picks not priced';
+  return { a: A, b: B, now, weeks, py: py || curDraftYear(), verdict: { kind, who: who ? who.ti : null, text, perWeek: r1(t) } };
+}
+function tradeAnalyzerHTML(an, mode){
+  if(!an) return '';
+  const chip = `<span class="h2h-tag ${an.verdict.kind==='fair' ? 'good' : an.verdict.kind==='robbery' ? 'bad' : 'lean'}">${esc(an.verdict.text)}</span>`;
+  const cls = v => v>0 ? 'up' : v<0 ? 'down' : '';
+  const fmt0 = v => Math.round(v).toLocaleString();
+  const hasRos = an.weeks.length > 1;
+  if(mode==='mini'){
+    const one = s => `<span class="tr-an-side"><b>${esc(s.name)}</b> ${an.now?`<b class="${cls(s.dNow)}">${signed1(s.dNow)}</b> this wk`:''}${hasRos?`${an.now?' · ':''}<b class="${cls(s.dRos)}">${signed1(s.dRos)}</b> rest of season`:''}${s.over?` · <b class="down">${s.countAfter}/${s.limit} roster, drop ${s.over}</b>`:''}${s.thin.length?` · <b class="down">left with ${s.thin.map(t=>`${t.have} ${t.pos}`).join(', ')}</b>`:''}</span>`;
+    return `<div class="tr-an mini">${chip}${one(an.a)}${one(an.b)}</div>`;
+  }
+  const em = v => `<em class="${cls(v)}">${signed1(v)}</em>`;
+  const plist = (label, list, picks) => (!list.length && !picks.length) ? '' :
+    `<div class="tr-an-pl">${esc(label)}: ${list.map(x=>`<b>${esc(x.p.name)}</b> ${an.now?x.now.toFixed(1):''}${hasRos?` · ${fmt0(x.ros)}`:''}`).join(', ')}${picks.length?`${list.length?', ':''}${picks.map(r=>`${an.py} R${r}`).join(', ')} pick${picks.length>1?'s':''}`:''}</div>`;
+  const col = s => `<div class="tr-an-col">
+    <div class="tr-an-team">${teamMarkHTML(S.teams[s.ti], 22)}<span>${esc(s.name)}</span></div>
+    ${an.now?`<div class="tr-an-row"><span>Best lineup this week</span><b>${s.nowB.toFixed(1)} → ${s.nowA.toFixed(1)}</b>${em(s.dNow)}</div>`:''}
+    ${hasRos?`<div class="tr-an-row"><span>Rest of season · ${an.weeks.length} wks</span><b>${fmt0(s.rosB)} → ${fmt0(s.rosA)}</b>${em(s.dRos)}</div>`:''}
+    <div class="tr-an-row"><span>Value out → in</span><b>${fmt0(s.valOut)} → ${fmt0(s.valIn)}</b>${em(s.dVal)}</div>
+    <div class="tr-an-row"><span>Roster</span><b>${s.countBefore} → ${s.countAfter} of ${s.limit}</b>${s.over?`<em class="down">drop ${s.over}</em>`:'<em class="ok">fits</em>'}</div>
+    ${s.thin.map(t=>`<div class="tr-an-note">Leaves ${t.have} ${esc(t.pos)} for ${t.need} ${esc(t.pos)} slot${t.need>1?'s':''}</div>`).join('')}
+    ${s.keepers.length?`<div class="tr-an-note">Gives up a keeper: ${esc(s.keepers.join(', '))}</div>`:''}
+    ${plist('Out', s.out, s.picksOut)}${plist('In', s.inn, s.picksIn)}
+  </div>`;
+  const both = an.a.dRos > 0 && an.b.dRos > 0 && hasRos ? `<span class="sub" style="margin:0">Both lineups get better - that's what a trade is for.</span>` : '';
+  return `<div class="card tr-an">
+    <div class="tr-an-head"><div class="eyebrow" style="margin:0">Trade analyzer</div>${chip}${both}</div>
+    <div class="tr-an-grid">${col(an.a)}${col(an.b)}</div>
+    <p class="sub" data-note="tr-an-how" style="margin:8px 0 0;font-size:11.5px">Each side's best possible lineup, re-solved with the deal done. Rest of season is week by week to week 14: this week's file, the season average after that, byes as zero. Value is a player's projected points from here to week 14 (this week · rest of season beside each name). Picks are listed, not priced.</p>
+  </div>`;
+}
 function tradeToggle(side, pid){
   const s2 = window.tradeSel[side];
   if(s2.has(pid)) s2.delete(pid); else s2.add(pid);
@@ -13003,6 +13149,11 @@ function renderOffers(){
         <div class="tr-swap" aria-hidden="true">\u21C4</div>
         ${sideCol(tB, o.bName, t.bGave)}
       </div>
+      ${(()=>{
+        /* the same analysis, one line per side, so a veto vote is cast with the numbers in view */
+        if(!statsLoaded){ waitForProj('trade', ()=>{ if(window.currentView==='trades') renderOffers(); }); return `<div class="tr-an mini"><span class="sub" style="margin:0">Analyzer loading projections\u2026</span></div>`; }
+        try{ return tradeAnalyzerHTML(tradeAnalysis(o.a, o.b, o.pa, o.pb, o.ra, o.rb, o.py), 'mini'); }catch(e){ return ''; }
+      })()}
       ${reviewing?`<p class="sub" style="margin:10px 0 8px">Vetoes: <b style="color:${vc>=need?'var(--danger)':'var(--chalk)'}">${vc}</b> / ${need} needed to block${iVetoed?' \u00B7 you voted to veto':''}</p>`:''}
       <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap">${acts.join('')||'<span class="sub" style="margin:0">Waiting\u2026</span>'}</div>
     </div>`;
@@ -13048,7 +13199,7 @@ function renderTradeCenter(){
         <input type="checkbox" ${selSet.has(p.playerId)?'checked':''} onchange="tradeToggle('${side==='a'?'pa':'pb'}','${p.playerId}')" style="width:auto">
         <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
         <span class="tb-face">${playerFace(p,26)}</span>
-        <span class="tb-nm" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="tb-full">${esc(p.name)}</span><span class="tb-short">${esc(abbrevName(p))}</span></span><span class="tb-nfl" style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span>
+        <span class="tb-nm" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="tb-full">${esc(p.name)}</span><span class="tb-short">${esc(abbrevName(p))}</span></span><span class="tb-nfl" style="color:var(--chalk-dim);font-size:12px">${p.nfl||''}</span><span class="tb-pj" title="Projected this week">${projWkTxt(p)}</span>
       </label>`).join('');
   };
   const cnt = ti => d.picks.filter(p=>p.teamIndex===ti && !p.cut).length;
@@ -13087,7 +13238,9 @@ function renderTradeCenter(){
       </div>
       <div class="card" style="margin-bottom:18px">
         <h2>Pending Offers &amp; Reviews</h2>
-        <div id="tradeOffers"></div>
+        <!-- offersView, not tradeOffers: renderOffers looks for this id, and the old one left
+             this card empty for the whole of every post-deadline stretch -->
+        <div id="offersView" style="margin-top:10px"></div>
       </div>`;
     renderOffers();
     return;
@@ -13156,6 +13309,14 @@ function renderTradeCenter(){
         </div>
       </div>
     </div>
+    ${(()=>{
+      /* the analyzer sits right above Send, so the verdict is the last thing read before the
+         tap; it only appears once something is on the table */
+      if(!tradeHasSelection()) return '';
+      if(!statsLoaded){ waitForProj('trade', ()=>{ if(window.currentView==='trades') renderTradeCenter(); });
+        return `<div class="card tr-an"><div class="eyebrow" style="margin:0 0 4px">Trade analyzer</div><p class="sub" style="margin:0">Loading projections…</p></div>`; }
+      try{ return tradeAnalyzerHTML(tradeAnalysis(T.a, T.b, [...T.pa], [...T.pb], [...(T.ra||[])], [...(T.rb||[])], py), 'full'); }catch(e){ return ''; }
+    })()}
     ${window.counterOf?`<div class="notice" style="margin-bottom:10px">Countering <b>${esc((offersMap[window.counterOf]||{}).aName||'an offer')}</b>'s offer — adjust the terms below, then send. <a href="#" onclick="clearCounter();return false" style="color:var(--charge)">cancel</a></div>`:''}
     <div class="row" style="margin-bottom:8px;gap:8px">
       <button class="btn" id="sendOfferBtn" onclick="sendTradeOffer()" ${armed?'':'disabled'}
@@ -15386,7 +15547,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · pickups: who would start for you, streamers';
+const BUILD_STAMP = '2026-09-06 · trade analyzer';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

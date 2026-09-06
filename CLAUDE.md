@@ -339,6 +339,27 @@ nodes because a parent `.write` rule cannot cascade over per-user votes.
 - A pending offer that shows no buttons explains why on the card (unclaimed team, someone
   else's trade, or a competing accepted deal). Keep that - a silently button-less card is
   indistinguishable from a broken app.
+- **Trades never check `rosterLimit()`** and never call `keeperGuard` - a 3-for-1 lands a team
+  at 19/17 with no drop forced, and keepers can be traded. The analyzer surfaces both; the
+  mechanics are unchanged.
+
+### Trade analyzer
+
+`tradeAnalysis(ai, bi, paIds, pbIds, raS, rbS, py)` (read-only, next to `tradeHasSelection`)
+builds each side's post-trade pick list (given players out, incoming players in - they land
+on the bench so they all count; IR players excluded like `rosterCount`) and re-solves the best
+lineup with `optimalLineupOf` for this week and for every remaining week (`tradeWeeks()`:
+`projWeekNow()`..`REG_WEEKS`, empty out of season). `tradeWeekPts(p, w)` is the weekly file
+where loaded, else the season average from `STAT_CACHE.proj` / `projGames`, and 0 on the bye -
+always a number, so the sums match the solver. Per side: `dNow`, `dRos`, raw `valOut`/`valIn`,
+`countAfter` vs `rosterLimit()`, `thin` positions (fewer players than `starterReq` seats) and
+keepers given up. Verdict: who improves more per remaining week (`(A.dRos - B.dRos)/n`), or the
+raw value tilt when neither lineup moves; under 1.5/wk Fair, under 4 Leans, else Robbery ("X
+gets fleeced"). Picks are listed, never priced, and the chip says so.
+`tradeAnalyzerHTML(an, 'full'|'mini')`: the full card sits in the builder right above Send
+(only once something is ticked); the mini strip sits on every offer card under the `.tr-grid`.
+Both wait on `waitForProj('trade', ...)` - the trades view never loaded projections before.
+The builder rows also show this week's projection (`.tb-pj`, hidden on phones).
 
 ## Draft board
 
