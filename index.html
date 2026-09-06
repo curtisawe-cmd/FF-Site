@@ -5462,9 +5462,24 @@ async function loadCareerStats(){
   statsLoading=false;
 }
 /* league-custom points from a season/projection stat total (per-game bonuses excluded — can't derive from a total) */
-function scoreSeasonStats(st,pos){
+/* Games behind a projection line. Sleeper's file carries gp, and for skill players it is a
+   season's worth; the defences came through with season-sized totals beside a games-played
+   the arithmetic could not use, so every D/ST showed its whole season as a week - 103 and 110
+   in Game Center next to a kicker's 6. A gp under 8 sitting next to numbers only a season
+   produces is not a divisor; 17 is. A gp under 8 next to single-game-sized numbers is trusted,
+   so a per-game line with gp 1 still scores as one game. Projections only - a real season
+   with 3 games played is exactly what it says. */
+function projGames(st){
+  const g = +st.gp, n = k => +(st[k]||0);
+  const seasonish = n('pass_yd')>1200 || n('rush_yd')>500 || n('rec_yd')>500 || n('rec')>35 || n('fgm')>10 || n('xpm')>15
+                 || n('pts_allow')>60 || n('yds_allow')>1500 || n('sack')>12 || n('int')>6;
+  if(g>=8 && g<=20) return g;
+  if(g>=1 && !seasonish) return g;
+  return 17;
+}
+function scoreSeasonStats(st,pos,games){
   if(!st) return null;
-  if(pos==='DEF') return scoreSeasonDef(st);
+  if(pos==='DEF') return scoreSeasonDef(st, null, games);
   const g=k=>+(st[k]||0), R=S.scoring, v=k=>+(R[k]||0);
   let p=0;
   p+=g('pass_yd')*v("Passing yards (per yd)")+g('pass_td')*v("Passing TD")+g('pass_int')*v("Interception thrown")+g('pass_sack')*v("Sacked");
@@ -5483,8 +5498,8 @@ function scoreSeasonStats(st,pos){
    games played, and points and yards allowed per game pick the tier - through the weekly
    scorer itself, so the tier table lives in one place and the two cannot disagree. Times
    games played gives the season figure every caller of scoreSeasonStats expects. */
-function scoreSeasonDef(st, rows){
-  const gp  = Math.max(1, +st.gp || 17);
+function scoreSeasonDef(st, rows, games){
+  const gp  = games || Math.max(1, +st.gp || 17);
   const row = (label, stat, per) => { if(rows && stat && per) rows.push([label, Math.round(stat*100)/100, per]); };
   const R = S.scoring||{}, v = k => +(R[k]||0);
   const W   = o => scoreWeekStats(o, 'DEF') || 0;
@@ -5519,9 +5534,9 @@ function scoreSeasonDef(st, rows){
   return Math.round(wk*gp*10)/10;
 }
 /* itemized version of scoreSeasonStats, for verifying scoring against real data */
-function scoreBreakdown(st,pos){
+function scoreBreakdown(st,pos,games){
   if(!st) return [];
-  if(pos==='DEF'){ const rows=[]; scoreSeasonDef(st, rows);
+  if(pos==='DEF'){ const rows=[]; scoreSeasonDef(st, rows, games);
     return rows.map(([label,stat,per])=>({label,stat,per,pts:Math.round(stat*per*10)/10})).filter(it=>it.stat!==0 && it.per!==0); }
   const g=k=>+(st[k]||0), R=S.scoring, v=k=>+(R[k]||0);
   const rows=[
@@ -5563,7 +5578,8 @@ function renderBreakdown(id){
   const y=(document.getElementById('brkYear')||{}).value||'2025';
   const st=STAT_CACHE[String(y)] && STAT_CACHE[String(y)][id];
   if(!st){ el.innerHTML=`<p class="sub" style="margin:0">No ${y} stats on record for this player.</p>`; return; }
-  const items=scoreBreakdown(st,pos), total=scoreSeasonStats(st,pos), gp=+(st.gp||0);
+  const games = (y==='proj') ? projGames(st) : undefined;
+  const items=scoreBreakdown(st,pos,games), total=scoreSeasonStats(st,pos,games), gp=games || +(st.gp||0);
   el.innerHTML=`<div style="overflow-x:auto"><table class="plain" style="white-space:nowrap;font-family:var(--f-mono);font-size:13px">
     <tr><th style="text-align:left">Category</th><th style="text-align:right">Stat</th><th style="text-align:right">× pts</th><th style="text-align:right">= Points</th></tr>
     ${items.length? items.map(it=>`<tr><td style="text-align:left">${esc(it.label)}</td><td style="text-align:right">${it.stat}</td><td style="text-align:right">${it.per}</td><td style="text-align:right;font-weight:600">${it.pts.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--chalk-dim)">No scoring categories in ${y}.</td></tr>`}
@@ -8721,7 +8737,7 @@ function seasonProjPts(p){
   if(!statsLoaded) return null;
   const raw = (STAT_CACHE.proj||{})[p.id];
   if(!raw) return null;
-  const v = scoreSeasonStats(raw, p.pos);
+  const v = scoreSeasonStats(raw, p.pos, projGames(raw));
   return v==null ? null : Math.round(v);
 }
 /* ===================== THE DRAFT BOARD'S VALUE ORDER =====================
@@ -12848,10 +12864,10 @@ function queueLineupPush(ti){
 function projWeekPoints(pid, pos){
   const raw = (STAT_CACHE.proj||{})[pid];
   if(!raw) return null;
-  const season = scoreSeasonStats(raw, pos);
+  const games = projGames(raw);                   /* see projGames: the file's gp is not always a divisor */
+  const season = scoreSeasonStats(raw, pos, games);
   if(season==null) return null;
-  const gp = +raw.gp || 17;                       /* projections carry games played; fall back to a full year */
-  return Math.round((season / Math.max(1, gp)) * 10) / 10;
+  return Math.round((season / games) * 10) / 10;
 }
 /* The solver, with the scoring left open. Projections answer "who should I start"; the week's
    real points answer "who should I have started". Same question, same slot rules, so they share
