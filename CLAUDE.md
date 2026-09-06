@@ -191,15 +191,29 @@ All read-only, all unauthenticated, all cached with a TTL. No API keys.
 | --- | --- | --- |
 | `api.sleeper.app/v1/players/nfl` | player pool | `POOL_REFRESH_MS` 4h |
 | `api.sleeper.app/v1/stats/nfl/regular/{yr}` | season + weekly stats | `STATS_TTL_MS` 3m (in-progress week only) |
-| `api.sleeper.app/v1/projections/nfl/regular/2026` | projections | - |
+| `api.sleeper.app/v1/projections/nfl/regular/2026` | season projections (draft value, player card bar) | - |
+| `api.sleeper.app/v1/projections/nfl/regular/2026/{wk}` | weekly projections (everything that says "proj") | `PROJ_TTL_MS` 20m (this week and later; played weeks final) |
 | `site.api.espn.com/.../football/nfl/injuries` | injury report | `ESPN_TTL_MS` 20m |
 | `sleepercdn.com/content/nfl/players/thumb/{id}.jpg` | player faces | browser |
 | `sleepercdn.com/images/team_logos/nfl/{tm}.png` | DEF logos | browser |
 
-Projections are Sleeper's season file scored through the league's own rules
-(`scoreSeasonStats`) and divided by games played (`projWeekPoints`). A **defence** is scored as
-its average game through `scoreWeekStats` (`scoreSeasonDef`) so the points-allowed tiers apply
-- `slimSeason` used to drop every DEF for lacking offensive fields, and they all projected 0.
+**Projections are weekly.** `projWeekPoints(pid, pos, wk)` scores Sleeper's file for week `wk`
+(default `projWeekNow()`: week 1 all preseason, this week in season) through the league's own
+rules (`scoreSeasonStats` with `games = 1`). Every player is in every week's file; one who is
+out, on IR or on bye has no stat line, so he projects **null** - a dash, counted as 0 in a
+team total - never a fabricated number. A Questionable player carries a reduced line. Files
+live in `PROJ_WEEKS` keyed by week (`loadWeekProj`), refetched on the one-minute pulse once
+`PROJ_TTL_MS` (20m) is up, and the page redraws only if the numbers moved (`maybeRefreshWeekProj`).
+Game Center's "refresh now" forces it. Matchups and Game Center project the **selected** week
+and hold the number back (`projWeekReady`) until that week's file is in, so a week-7 matchup
+already has week 7's byes out of it and never flashes a season average first. Only with no
+weekly file at all (offseason, fetch failed) does `projWeekPoints` fall back to the season file
+divided by games played.
+
+The season file (`STAT_CACHE.proj`) is still what the draft-value order (`seasonProjPts`) and
+the player card's '26 bar read - those are season questions. A **defence** is scored through
+`scoreWeekStats` (`scoreSeasonDef`) so the points-allowed tiers apply - `slimSeason` used to
+drop every DEF for lacking offensive fields, and they all projected 0.
 `projectedTotal(ti)` reads **`ensureLineup(ti)`**, the same seeded lineup every roster page
 draws, never the raw `S.lineups` map: a player with no entry counted as benched, and a lineup
 pushed mid-draft with one starter made a team project 17 while its page showed a full lineup.

@@ -5101,6 +5101,7 @@ setInterval(()=>{
      holding the cursor, which would eat the edit mid-sentence. */
   if(window.__noteFocus) return;
   try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
+  try{ if(typeof maybeRefreshWeekProj==='function') maybeRefreshWeekProj(); }catch(e){}   /* this week's projections, 20m TTL, redraws only if they moved */
   try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
@@ -5457,11 +5458,87 @@ async function loadCareerStats(){
   try{
     const jobs=CAREER_YEARS.map(y=>fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${y}`).then(r=>r.json()).then(d=>[String(y),slimSeason(d)]));
     jobs.push(fetch(`https://api.sleeper.app/v1/projections/nfl/regular/${PROJ_SEASON}`).then(r=>r.json()).then(d=>['proj',slimSeason(d)]));
-    (await Promise.all(jobs)).forEach(([k,m])=>STAT_CACHE[k]=m);
+    /* this week's file rides along, so statsLoaded means the weekly line is there too and no
+       page draws a season average first and a weekly number a second later */
+    jobs.push(loadWeekProj(projWeekNow()).then(()=>null));
+    (await Promise.all(jobs)).forEach(kv=>{ if(kv) STAT_CACHE[kv[0]]=kv[1]; });
     RANK_CACHE={};                       /* ranks are derived from the cache they just replaced */
     statsLoaded=true;
   }catch(e){}
   statsLoading=false;
+}
+/* ===================== WEEKLY PROJECTIONS =====================
+   Sleeper publishes a projection file per week (.../regular/2026/{wk}) beside the season one,
+   and the weekly file is what "who should I start" needs. A player who is out, on IR or on
+   bye has no stat line in his week - the season file kept projecting him at his full average,
+   so a starter who was ruled out on Wednesday still counted 14 points on Sunday. A Questionable
+   player carries a reduced line. Every player is in every week's file; the ones with nothing
+   to project carry only draft-position fields, which slimSeason drops, so "no line" is the
+   signal and it reads as a dash, never a fabricated zero.
+
+   The season file stays for the season questions: the draft-value order and the '26 bar on
+   the player card. Keyed by week, because the matchups page and Game Center look at other
+   weeks - a week-7 matchup projects with week 7's byes already taken out. */
+const PROJ_WEEKS = {};                      /* wk -> {at, data} - data null when the fetch failed */
+const PROJ_TTL_MS = 20*60*1000;             /* a week's line moves with injury news, not the clock; same beat as the ESPN injury report */
+const projWeekLoading = {};
+function projWeekNow(){
+  /* the week a lineup is being set for: week 1 all preseason, this week in season, and 0 -
+     the season average - once the regular season is over */
+  if(Date.now() < NFL_2026_KICKOFF.getTime()) return 1;
+  return currentNflWeek();
+}
+async function loadWeekProj(wk, force){
+  wk = +wk; if(!(wk>=1 && wk<=REG_WEEKS)) return null;
+  const hit = PROJ_WEEKS[wk];
+  const settled = wk < projWeekNow();       /* a played week's file is final; this week and later still move */
+  if(hit && !force && (settled || Date.now()-hit.at < PROJ_TTL_MS)) return hit.data;
+  if(projWeekLoading[wk]) return projWeekLoading[wk];
+  projWeekLoading[wk] = (async()=>{
+    try{
+      const r = await fetch(`https://api.sleeper.app/v1/projections/nfl/regular/${PROJ_SEASON}/${wk}`);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d = await r.json();
+      const data = slimSeason(d||{});
+      const sig = JSON.stringify(data);
+      PROJ_WEEKS[wk] = { at: Date.now(), data, sig, changed: !!(hit && hit.sig && hit.sig !== sig) };
+      return data;
+    }catch(e){
+      /* a failed fetch is still an answer - otherwise every page waiting on it would refetch on
+         each redraw. projWeekPoints falls back to the season average until the TTL retries. */
+      PROJ_WEEKS[wk] = hit ? {...hit, at: Date.now()} : { at: Date.now(), data: null };
+      return PROJ_WEEKS[wk].data;
+    }finally{ delete projWeekLoading[wk]; }
+  })();
+  return projWeekLoading[wk];
+}
+/* Has week wk's file been asked for? If not, ask, and redraw the caller when it lands. Pages
+   that look at a week other than this one (matchups, Game Center) call this before drawing
+   and hold the projection back until the answer is in, so nobody sees a season average flip
+   to a weekly number. */
+function projWeekReady(wk, redraw){
+  wk = +wk; if(!(wk>=1 && wk<=REG_WEEKS)) return true;
+  if(PROJ_WEEKS[wk]) return true;
+  loadWeekProj(wk).then(()=>{ try{ redraw && redraw(); }catch(e){} });
+  return false;
+}
+/* the one-minute pulse: refetch this week's file once its TTL is up, and redraw the page that
+   is showing projections only when the numbers actually moved */
+function maybeRefreshWeekProj(){
+  const wk = projWeekNow(); if(!wk || !statsLoaded) return;
+  const hit = PROJ_WEEKS[wk];
+  if(hit && Date.now()-hit.at < PROJ_TTL_MS) return;
+  loadWeekProj(wk).then(()=>{
+    const now = PROJ_WEEKS[wk];
+    if(!now || !now.changed) return;
+    now.changed = false;
+    try{
+      const v = window.currentView;
+      if(v==='teams') renderTeams();
+      else if(v==='matchups'){ renderMatchups(); if(window.muTab==='gc') renderGameCenter(); }
+      else if(v==='players') renderPlayers();
+    }catch(e){}
+  });
 }
 /* league-custom points from a season/projection stat total (per-game bonuses excluded — can't derive from a total) */
 /* Games behind a projection line. Sleeper's file carries gp, and for skill players it is a
@@ -5578,17 +5655,20 @@ function renderBreakdown(id){
   const el=document.getElementById('pbrk'); if(!el) return;
   const m=findPlayerMeta(id)||{}; const pos=m.pos||'';
   const y=(document.getElementById('brkYear')||{}).value||'2025';
-  const st=STAT_CACHE[String(y)] && STAT_CACHE[String(y)][id];
-  if(!st){ el.innerHTML=`<p class="sub" style="margin:0">No ${y} stats on record for this player.</p>`; return; }
-  const games = (y==='proj') ? projGames(st) : undefined;
+  const pwk = projWeekNow();
+  const st = (y==='projwk') ? PROJ_WEEKS[pwk]?.data?.[id] : STAT_CACHE[String(y)] && STAT_CACHE[String(y)][id];
+  if(!st){ el.innerHTML=`<p class="sub" style="margin:0">No ${y==='projwk'?`week ${pwk} projection`:y+' stats'} on record for this player.</p>`; return; }
+  const games = (y==='projwk') ? 1 : (y==='proj') ? projGames(st) : undefined;
   const items=scoreBreakdown(st,pos,games), total=scoreSeasonStats(st,pos,games), gp=games || +(st.gp||0);
   el.innerHTML=`<div style="overflow-x:auto"><table class="plain" style="white-space:nowrap;font-family:var(--f-mono);font-size:13px">
     <tr><th style="text-align:left">Category</th><th style="text-align:right">Stat</th><th style="text-align:right">× pts</th><th style="text-align:right">= Points</th></tr>
     ${items.length? items.map(it=>`<tr><td style="text-align:left">${esc(it.label)}</td><td style="text-align:right">${it.stat}</td><td style="text-align:right">${it.per}</td><td style="text-align:right;font-weight:600">${it.pts.toFixed(1)}</td></tr>`).join('') : `<tr><td colspan="4" style="color:var(--chalk-dim)">No scoring categories in ${y}.</td></tr>`}
     <tr class="top"><td style="text-align:left"><b>Total${gp?` · ${gp} GP`:''}</b>${(gp>1&&total!=null)?`<span style="color:var(--chalk-dim);font-weight:400"> · ${(total/gp).toFixed(1)} a game</span>`:''}</td><td></td><td></td><td style="text-align:right;font-weight:700">${total!=null?total.toFixed(1):'—'}</td></tr>
   </table></div>
-  <p class="sub" style="font-size:12px;margin-top:8px">${y==='proj'
-    ? `Sleeper's ${PROJ_SEASON} projection × your league's rules, as a season total - divide by the games for a week (the matchups do). A defence's points-allowed tier is scored on its average game.`
+  <p class="sub" style="font-size:12px;margin-top:8px">${y==='projwk'
+    ? `Sleeper's week ${pwk} projection × your league's rules - the number the matchups, Game Center and Best lineup use. It already knows who is out, on IR or on bye: those players have no line this week and project a dash. Refreshed every 20 minutes.`
+    : y==='proj'
+    ? `Sleeper's ${PROJ_SEASON} projection × your league's rules, as a season total - what the draft board ranks on. A defence's points-allowed tier is scored on its average game.`
     : `Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.`}</p>`;
 }
 function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || null; }
@@ -5825,7 +5905,13 @@ function renderPlayerModal(id){
   const act=pmDraftActionHTML(id, m) || pmRosterActionHTML(id, m);
   const head=`<div class="pmodal-head${act?' has-act':''}">${playerFace(m,66)}<div style="min-width:0">
     <div class="pmodal-name">${esc(m.name)}</div>
-    <div class="pmodal-meta"><span class="postag pos-${pos}" style="--pc:var(--${pos.toLowerCase()||'wr'})">${pos||'?'}</span> ${esc(m.team||'FA')}${m.num!=null?` · #${m.num}`:''}${m.age?` · ${m.age} yo`:''}${m.exp!=null?` · ${m.exp===0?'Rookie':m.exp+' yr'+(m.exp>1?'s':'')}`:''}${m.inj?injBadge(m.inj,m.injBody):''}${byeTagHTML(id, m.team)}</div>
+    <div class="pmodal-meta"><span class="postag pos-${pos}" style="--pc:var(--${pos.toLowerCase()||'wr'})">${pos||'?'}</span> ${esc(m.team||'FA')}${m.num!=null?` · #${m.num}`:''}${m.age?` · ${m.age} yo`:''}${m.exp!=null?` · ${m.exp===0?'Rookie':m.exp+' yr'+(m.exp>1?'s':'')}`:''}${m.inj?injBadge(m.inj,m.injBody):''}${byeTagHTML(id, m.team)}${(()=>{
+      /* this week's number, right under his name - the one the matchups count him for */
+      if(!statsLoaded) return '';
+      const wk = projWeekNow(); if(!wk) return '';
+      const v = projWeekPoints(id, pos, wk);
+      /* one unit, so a phone wraps the dot with the number instead of leaving it dangling */
+      return `<span style="white-space:nowrap"> · <b class="pl-projmeta" title="Projected for week ${wk} under this league's rules${v==null?'. No line this week: out, on bye, or unprojected':''}">${v==null?'—':v.toFixed(1)} proj wk ${wk}</b></span>`; })()}</div>
   </div>${act}</div>`;
   let body;
   if(!statsLoaded){
@@ -5866,9 +5952,11 @@ function renderPlayerModal(id){
     /* only seasons the player actually has stats for; newest first and selected */
     /* the projection leads the list: it is the number the draft board and the matchups run
        on, and the one to check when a DST or a kicker looks wrong */
-    const brkYears=[...(STAT_CACHE.proj?.[id]?['proj']:[]), ...[...CAREER_YEARS].reverse().filter(y=>STAT_CACHE[String(y)]?.[id])];
+    /* this week's line leads when he has one - it is what the matchups and Best lineup run on */
+    const pwk = projWeekNow();
+    const brkYears=[...(PROJ_WEEKS[pwk]?.data?.[id]?['projwk']:[]), ...(STAT_CACHE.proj?.[id]?['proj']:[]), ...[...CAREER_YEARS].reverse().filter(y=>STAT_CACHE[String(y)]?.[id])];
     if(brkYears.length) body+=`<div class="eyebrow" style="margin:18px 0 6px">Verify scoring · itemized breakdown</div>
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y==='proj'?PROJ_SEASON+' projection':y}</option>`).join('')}</select></div>
+      <div class="row" style="gap:8px;align-items:center;margin-bottom:8px"><label class="sub" style="margin:0">Season</label><select id="brkYear" onchange="renderBreakdown('${id}')">${brkYears.map((y,k)=>`<option value="${y}"${k===0?' selected':''}>${y==='projwk'?`Week ${pwk} projection`:y==='proj'?PROJ_SEASON+' projection':y}</option>`).join('')}</select></div>
       <div id="pbrk"></div>`;
   }
   /* Mid-draft, this popup is where a phone naturally lands - tapping a player in the pool
@@ -10599,6 +10687,8 @@ function gcWaitForProj(){
 async function refreshGameCenter(){
   const wk=+(window.muWeek||1), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
   try{ await fetchWeekStats(season, wk, true); }catch(e){}
+  /* the projections too: a Sunday-morning "refresh now" is usually about who got ruled out */
+  if(season===PROJ_SEASON){ try{ await loadWeekProj(wk, true); }catch(e){} }
   renderGameCenter();
 }
 async function renderGameCenter(){
@@ -10689,15 +10779,18 @@ async function renderGameCenter(){
   };
   const ptsOf = p => { if(!p) return null; const st=stats[p.playerId];
     return st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null); };
-  /* A projection is a PROJ_SEASON season total divided by games - the same per-week number the
-     matchups page adds up into a team total. Beside a 2024 box score it would be meaningless, so
-     the column is simply not offered when an older season is selected. Sleeper publishes none for
-     team defences, and those rows show a dash rather than a fabricated zero. */
+  /* A projection is Sleeper's line for THIS week scored through the league's rules - the same
+     per-week number the matchups page adds up into a team total, and for a played week what
+     was projected before kickoff, so the column reads as forecast beside result. Beside a
+     2024 box score it would be meaningless, so the column is simply not offered when an older
+     season is selected. A player with no line that week - out, on bye - shows a dash rather
+     than a fabricated zero. */
   const showProj = (season === PROJ_SEASON);
   if(showProj && !statsLoaded) gcWaitForProj();
+  const wkProjReady = !showProj || projWeekReady(wk, ()=>{ if(window.currentView==='matchups' && window.muTab==='gc' && +(window.muWeek||1)===wk) renderGameCenter(); });
   const projTxt = p => { if(!p) return '';
-    if(!statsLoaded) return '\u2026';
-    const v = projWeekPoints(p.playerId, p.pos);
+    if(!statsLoaded || !wkProjReady) return '\u2026';
+    const v = projWeekPoints(p.playerId, p.pos, wk);
     return v==null ? '\u2014' : v.toFixed(1); };
   /* "Jayden Daniels" -> "J. Daniels". Team defences keep their full name; initialising them
      produces nonsense like "C. Bengals D/ST". */
@@ -11944,6 +12037,8 @@ function renderMatchups(){
   const wk = String(window.muWeek || (window.muWeek = 1));
   const games = S.season.schedule[wk]||[];
   const edit = !!window.muEdit;
+  /* the selected week's projection file, fetched on first look and redrawn when it lands */
+  const wkProjReady = projWeekReady(+wk, ()=>{ if(window.currentView==='matchups' && String(window.muWeek||1)===wk) renderMatchups(); });
   const fmt1 = n => n===null? '' : n;
   const teamOpts = sel => S.teams.map((t,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(t.name)}</option>`).join('');
   const rows = seasonStandings();
@@ -11974,9 +12069,12 @@ function renderMatchups(){
         const [pa,pb] = mScore(wk,m);
         const done = pa!==null && pb!==null;
         /* before a game is scored, show what both lineups project to — the same numbers the
-           Best lineup button optimises, so the board and the roster never disagree */
-        const prA = (!done && statsLoaded) ? projectedTotal(g[0]) : null;
-        const prB = (!done && statsLoaded) ? projectedTotal(g[1]) : null;
+           Best lineup button optimises, so the board and the roster never disagree. THIS
+           week's file, so a week-7 matchup already has week 7's byes and injuries out of it;
+           held back until that week's file is in rather than drawn from the season average */
+        const canProj = !done && statsLoaded && wkProjReady;
+        const prA = canProj ? projectedTotal(g[0], +wk) : null;
+        const prB = canProj ? projectedTotal(g[1], +wk) : null;
         const edge = (prA!=null && prB!=null && (prA||prB)) ? (prA>=prB?0:1) : null;
         const projTag = (edge!=null)
           ? `<div class="mu-proj">Projected ${prA.toFixed(1)} &ndash; ${prB.toFixed(1)} · edge <b>${esc((S.teams[g[edge]]||{}).name||'')}</b></div>` : '';
@@ -12863,7 +12961,20 @@ function queueLineupPush(ti){
    starters, one FLEX) that an exhaustive best-first fill is optimal, not a heuristic: fill the
    single-position slots with the best eligible players, then hand FLEX the best of what is
    left. A projection is a season total, so it is divided by the season length to get a week. */
-function projWeekPoints(pid, pos){
+/* What a player projects for one week under the league's rules. Week wk's Sleeper file when
+   it is in (this week unless told otherwise); a player with no line in it - out, on bye, or
+   nobody projects him - is null, which every caller shows as a dash and adds up as nothing.
+   Only with no weekly file at all (offseason, or the fetch failed) does it fall back to the
+   season average, so a stat-feed outage degrades to last year's behaviour, not to blanks. */
+function projWeekPoints(pid, pos, wk){
+  wk = (wk==null) ? projWeekNow() : +wk;
+  const week = PROJ_WEEKS[wk];
+  if(week && week.data){
+    const line = week.data[pid];
+    if(!line) return null;
+    const v = scoreSeasonStats(line, pos, 1);     /* one game: a defence's tiers score its projected game as-is */
+    return v==null ? null : Math.round(v*10)/10;
+  }
   const raw = (STAT_CACHE.proj||{})[pid];
   if(!raw) return null;
   const games = projGames(raw);                   /* see projGames: the file's gp is not always a divisor */
@@ -12936,7 +13047,7 @@ function benchLeftHTML(ti, stats, noStats){
     who?` — ${who}${b.missed.length>2?` +${b.missed.length-2}`:''}`:''}
     <span class="gc-bench-cap">${b.best.toFixed(1)} was there for the taking</span></div>`;
 }
-function projectedTotal(ti){
+function projectedTotal(ti, wk){
   /* ensureLineup, not the raw map: every roster renderer seeds unslotted players into open
      starting slots before drawing, and this read the stored map as-is, where a player with no
      entry at all counted as benched. A lineup pushed mid-draft carried one starter, so the
@@ -12944,7 +13055,7 @@ function projectedTotal(ti){
   const lu = ensureLineup(ti);
   return Math.round(teamRoster(ti)
     .filter(p=>{ const sl=lu[p.playerId]; return sl && sl!=='BN' && sl!=='IR'; })
-    .reduce((t,p)=>t + (projWeekPoints(p.playerId,p.pos)||0), 0) * 10)/10;
+    .reduce((t,p)=>t + (projWeekPoints(p.playerId,p.pos,wk)||0), 0) * 10)/10;
 }
 async function optimizeLineup(ti){
   if(!requireTeam(ti)) return;
@@ -14772,7 +14883,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · weekly projections, 3-min live refresh';
+const BUILD_STAMP = '2026-09-06 · projections from Sleeper\'s weekly file: injuries and byes count';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
