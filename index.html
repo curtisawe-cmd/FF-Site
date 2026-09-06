@@ -2527,6 +2527,9 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
        the subtitles carry live facts and the badges live-update. -->
   <nav class="home-launch" id="homeLaunch" aria-label="Everything in the league"></nav>
 
+  <!-- the week's recap, written by the app once the games are over. Hidden until one exists. -->
+  <div class="card" id="homeRecap" style="display:none;margin-bottom:18px"></div>
+
   <!-- the week's disgraces, written by the data itself. Hidden until a week has scores. -->
   <div class="card" id="homeShame" style="display:none;margin-bottom:18px"></div>
 
@@ -3091,6 +3094,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <div class="setrow"><label title="Let the relay do the watching on a schedule, so alerts arrive with every app in the league shut. Needs push/score-watch.js deployed to the worker with a KV binding named BBL and a cron trigger. With this off, alerts only go out while a commissioner has the app open.">Send from the relay</label><label class="cswitch"><input type="checkbox" id="setScoreRelay" onchange="setScoreRelay(this.checked)"><span class="track"></span><span class="lbl" id="scoreRelayLbl">Off</span></label></div>
       <div class="setrow"><label title="Before kickoff, buzz a manager whose lineup has a starter who is out, on IR, suspended, on bye, or not projected to play - or an empty slot. Each manager hears only about their own team, once per problem per week. Sent from the relay, so it needs 'Send from the relay' on.">Lineup alerts</label><label class="cswitch"><input type="checkbox" id="setLineupAlerts" onchange="setLineupAlerts(this.checked)"><span class="track"></span><span class="lbl" id="lineupAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="How long before a player's kickoff the warning goes out. A bye or an empty slot is warned about before the next game of the week.">Warn (hours before kickoff)</label><input type="number" step="1" min="1" max="48" id="setLineupLead" style="max-width:110px" onchange="setLineupLead(this.value)"></div>
+      <div class="setrow"><label title="The app writes up every week on the Tuesday after it. With this on, a commissioner device also drops it into the league chat as League Desk - which buzzes everyone the way any chat message does. Off, it only shows on the Matchups board, the Recaps tab and Home.">Post weekly recaps to chat</label><label class="cswitch"><input type="checkbox" id="setRecapChat" onchange="setRecapToChat(this.checked)"><span class="track"></span><span class="lbl" id="recapChatLbl">Off</span></label></div>
     </div>
     <div class="row admin-only" style="gap:8px;margin-top:8px;flex-wrap:wrap">
       <button class="btn ghost" onclick="testScoreSnapshot()">Send the relay a snapshot</button>
@@ -3291,6 +3295,7 @@ const DEFAULTS = {
   scoreAlertMin: 6,      /* points a starter has to gain before it is worth a buzz - a TD */
   lineupAlerts: true,    /* push a manager before kickoff when a starter is out, on bye, or a slot is empty */
   lineupLead: 2,         /* hours before kickoff to say so */
+  recapToChat: false,    /* drop the week's auto-written recap into chat from a commissioner device */
   scoreRelay: false,     /* let the relay watch on a schedule, so alerts land with every app shut */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
@@ -5013,6 +5018,13 @@ function startLeagueSync(){
       if(window.currentView==='matchups'){ renderMatchups(); if(window.muTab==='gc') renderGameCenter(); }
     }catch(e){}
   });
+  window.FB.dbOn(recapsPath(), (m)=>{
+    recapsMap = m||{};
+    try{ renderHomeRecap(); }catch(e){}
+    try{ if(window.currentView==='matchups') renderMatchups(); }catch(e){}
+    try{ if(window.currentView==='recaps') renderRecaps(); }catch(e){}
+    try{ maybeAnnounceRecap(); }catch(e){}
+  });
   window.FB.dbOn(`league/${LEAGUE_ID}/transactions`, (m)=>{
     const first = txSeenIds === null;
     txMap = m||{};
@@ -5214,6 +5226,7 @@ setInterval(()=>{
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
   try{ checkScoreAlerts(); }catch(e){}      /* who on your team just scored */
+  try{ maybeWriteRecap(); }catch(e){}       /* the week's write-up, once the games are over */
   /* Game Center pulls fresh stats itself (3-min TTL on the live week) */
   if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
 }catch(e){} }, 60000);
@@ -7479,7 +7492,7 @@ const SETTING_LABELS={
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
   scoreAlerts:'score alerts', scoreAlertMin:'score alerts', scoreRelay:'score alerts',
-  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts',
+  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -8213,6 +8226,7 @@ function renderHome(){
       }).join('')}
     </table>`;
   try{ renderHeroBits(); renderHomeLaunch(); renderHomePulse(); }catch(e){}
+  try{ renderHomeRecap(); }catch(e){}
   try{ renderHomeShame(); }catch(e){}
   try{ renderHomeThisWeek(); }catch(e){}
   try{ checkRecordAlerts(); }catch(e){}     /* score entry repaints home, so records get seen fast */
@@ -9879,10 +9893,36 @@ function h2hAll(from, to){
 function h2hManagers(rec){
   return Object.keys(rec).sort((a,b)=>a.localeCompare(b));
 }
+/* the live season's weekly recaps, week by week, above the year-by-year archive */
+function liveRecapsHTML(){
+  const liveYr = (S.season && S.season.year) || curDraftYear();
+  const list = Object.values(recapsMap||{}).filter(r=>r && r.text && +r.yr===+liveYr).sort((a,b)=>+b.wk-+a.wk);
+  if(!list.length){
+    return S.season ? `<div class="card" style="max-width:860px;margin-bottom:18px"><div class="eyebrow">${esc(String(liveYr))} season</div>
+      <p class="sub" style="margin:4px 0 0">The first weekly recap writes itself on the Tuesday after week 1. Until then, the Recap button on the Matchups board writes one up from any finished week.</p></div>` : '';
+  }
+  if(!window.recapWeek || !list.some(r=>+r.wk===+window.recapWeek)) window.recapWeek = +list[0].wk;
+  const r = list.find(x=>+x.wk===+window.recapWeek);
+  const key = recapKey(r.yr, r.wk); window._rcShown[key] = r.text;
+  return `<div class="card" style="max-width:860px;margin-bottom:18px">
+    <div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="eyebrow" style="margin:0">${esc(String(liveYr))} season · week by week · written ${esc(timeAgo(+r.at||0))}${r.rewritten?', rewritten by the commissioner':''}</div>
+      <select onchange="window.recapWeek=+this.value;renderRecaps()">${list.map(x=>`<option value="${x.wk}"${+x.wk===+r.wk?' selected':''}>Week ${x.wk}${x.title?' · '+esc(x.title):''}</option>`).join('')}</select>
+    </div>
+    <div class="recap-body">${esc(r.text)}</div>
+    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn ghost" onclick='rcCopyText(${JSON.stringify(key)})'>Copy</button>
+      <button class="btn admin-only" onclick="rcRewrite('live',${+r.wk})" title="New words, same numbers - for everyone">Rewrite</button>
+      <button class="btn admin-only" onclick='rcPostKey(${JSON.stringify(key)})'>Post to chat</button>
+    </div>
+    <p class="sub" data-note="recap-auto" style="margin:10px 0 0;font-size:12px">Written by the app on the Tuesday after each week - the final scores, the projections, the benches and the wire, in the same words on every phone.</p>
+  </div>`;
+}
 function renderRecaps(){
   const H = S.history;
   const years = Object.keys(H.recaps||{}).sort((a,b)=>b-a);
-  if(!years.length){ document.getElementById('recapsView').innerHTML='<p class="sub">No recaps yet.</p>'; return; }
+  let liveHTML = ''; try{ liveHTML = liveRecapsHTML(); }catch(e){}
+  if(!years.length){ document.getElementById('recapsView').innerHTML = liveHTML + '<p class="sub">No season recaps yet.</p>'; return; }
   if(!window.recapYear || !years.includes(String(window.recapYear))) window.recapYear = years[0];
   const yr = String(window.recapYear);
   const R = H.recaps[yr];
@@ -9898,7 +9938,7 @@ function renderRecaps(){
   if(plr) strip.push(`Points leader: <b>${esc(plr.team)}</b> \u00B7 ${fmt(plr.pts)}`);
   if(twr) strip.push(`Best week: <b>${esc(twr.team)}</b> \u00B7 ${fmt(twr.pts)} (Wk ${twr.week})`);
   if(pwr) strip.push(`Top player week: <b>${esc(pwr.player)}</b> \u00B7 ${fmt(pwr.pts)} (Wk ${pwr.week})`);
-  document.getElementById('recapsView').innerHTML = `
+  document.getElementById('recapsView').innerHTML = liveHTML + `
     <div class="card" style="max-width:860px">
       <div class="row" style="justify-content:space-between;margin-bottom:6px">
         <button class="btn ghost" ${idx>=years.length-1?'disabled':''} onclick="window.recapYear='${years[Math.min(idx+1,years.length-1)]}';renderRecaps()">\u25C0 ${idx<years.length-1?years[idx+1]:''}</button>
@@ -11832,12 +11872,15 @@ function weekProjPairs(wk){
    verdict. Calendar days, not 86,400,000s: the clocks go back in November and a millisecond
    count would land the flip at 11pm Monday, in the fourth quarter of Monday Night Football.
    Rescheduled Tuesday games are rare enough to wear. */
+function weekOverAt(wk){
+  const d = new Date(NFL_2026_WEEK1.getTime());
+  d.setDate(d.getDate() + (+wk-1)*7 + 5);
+  d.setHours(4, 0, 0, 0);
+  return d.getTime();
+}
 function weekIsOver(wk){
   wk = +wk; if(!(wk>=1)) return false;
-  const d = new Date(NFL_2026_WEEK1.getTime());
-  d.setDate(d.getDate() + (wk-1)*7 + 5);
-  d.setHours(4, 0, 0, 0);
-  return Date.now() >= d.getTime();
+  return Date.now() >= weekOverAt(wk);
 }
 /* Per team, over the finished weeks with a projection on record: how far over or under the
    projections it has scored, how many games it was supposed to win, and how the favourite
@@ -12034,7 +12077,11 @@ const RC_VERBS = {
   big:     ['rolled past','put away','had no trouble with','pulled away from'],
   blowout: ['buried','dismantled','ran straight over','left nothing standing against','took the roof off']
 };
-function rcPick(a){ return a[Math.floor(Math.random()*a.length)]; }
+/* Seeded, not random: two phones asking for week 6 must get the same words, or the recap is
+   not a league document but twelve private ones. rcBuild sets the key (season, week, seed) and
+   every pick hashes it with its own position in the text; "Rewrite" bumps the seed. */
+let _rcKey = '', _rcN = 0;
+function rcPick(a){ _rcN++; return a[hashStr(`${_rcKey}|${_rcN}`) % a.length]; }
 function rcVerb(margin){
   if(margin===0)   return rcPick(RC_VERBS.tie);
   if(margin < 3)   return rcPick(RC_VERBS.razor);
@@ -12101,12 +12148,39 @@ function rcWeekHist(yr, wk){
   const wkGames = w => (byWk[String(w)]||[]).map(g=>rcGame(g.ta,g.pa,g.tb,g.pb)).filter(Boolean);
   return rcFacts(wkGames(wk), `Week ${wk}, ${yr}`, wkGames, +wk, null);
 }
-/* plain text on purpose: it renders in the card, copies clean, and posts to chat unchanged */
-function rcBuild(yr, wk){
+/* The headline: the one thing the week will be remembered for, in priority order - a real
+   upset, a beating, a game decided by nothing, a scoreboard-breaking total, a bench crime. */
+let _rcTitle = '';
+function rcTitle(D, X){
+  const n1 = n => n.toFixed(1);
+  const u = (X.upsets||[]).slice().sort((a,b)=>b.projMargin-a.projMargin)[0];
+  if(u && u.projMargin >= 10) return rcPick([
+    `${u.dog} shocks ${u.fav}`, `Upset: ${u.dog} was supposed to lose by ${n1(u.projMargin)}`,
+    `${u.fav} drops one they were supposed to win`]);
+  if(D.blowout.margin >= 40) return rcPick([
+    `${D.blowout.wName} hangs ${n1(D.blowout.margin)} on ${D.blowout.lName}`,
+    `${D.blowout.lName} would like a word with the projections`, `A ${n1(D.blowout.margin)}-point beating`]);
+  if(D.closest.margin > 0 && D.closest.margin < 1.5) return rcPick([
+    `${D.closest.wName} by ${n1(D.closest.margin)}. Somebody check the math.`,
+    `Decided by ${n1(D.closest.margin)}`, `${D.closest.lName} lost by ${n1(D.closest.margin)} and will be hearing about it`]);
+  if(D.top.pts - D.avg >= 35) return rcPick([
+    `${D.top.name} goes nuclear`, `${n1(D.top.pts)}. ${D.top.name}. Good luck.`, `${D.top.name} breaks the scoreboard`]);
+  if(X.bench && X.bench.wouldHaveWon) return rcPick([`${X.bench.name} beats himself`, `Bench crime of the year, so far`]);
+  return rcPick([`${D.top.name} leads the week`, `Week in the books`, `${D.scores.length} teams, one week, no excuses`]);
+}
+/* plain text on purpose: it renders in the card, copies clean, and posts to chat unchanged.
+   `seed` picks the wording (same seed, same words, on every device); `X` is rcExtras - the
+   projections, benches, standings and wire for a live week, null for the archive. */
+function rcBuild(yr, wk, seed, X){
   const D = (String(yr)==='live') ? rcWeekLive(wk) : rcWeekHist(String(yr), wk);
   if(!D) return null;
+  X = X || {};
+  _rcKey = `${yr}|${wk}|${seed||0}`; _rcN = 0;
   const n1 = n => n.toFixed(1);
-  const L = [`${D.label.toUpperCase()} RECAP`, ''];
+  const title = rcTitle(D, X); _rcTitle = title;
+  const L = [`${D.label.toUpperCase()} RECAP`];
+  if(title) L.push(title);
+  L.push('');
 
   L.push(rcPick([
     `${D.top.name} led the week with ${n1(D.top.pts)}, against a league average of ${n1(D.avg)}.`,
@@ -12125,6 +12199,18 @@ function rcBuild(yr, wk){
   D.games.forEach(g=>{
     if(g.win===null){ L.push(`${g.name[0]} and ${g.name[1]} ${rcVerb(0)} at ${n1(g.pts[0])}.`); return; }
     let line = `${g.wName} ${rcVerb(g.margin)} ${g.lName}, ${n1(g.wPts)} to ${n1(g.lPts)}.`;
+    /* the projections had it the other way */
+    const up = X.upsetOf ? X.upsetOf(g) : null;
+    if(up) line += rcPick([
+      ` The projections had ${g.lName} by ${n1(up.projMargin)}. The projections were wrong.`,
+      ` Projected to lose by ${n1(up.projMargin)}. Upset.`,
+      ` Nobody saw that coming, least of all ${g.lName}.`]);
+    /* the points to win were sitting on the bench */
+    const bl = X.benchByName ? X.benchByName[g.lName] : null;
+    if(bl && bl.left > g.margin) line += rcPick([
+      ` ${g.lName} left ${n1(bl.left)} on the bench and lost by ${n1(g.margin)}. Do the math.`,
+      ` The points to win it were on ${g.lName}'s bench the whole time.`,
+      ` ${g.lName} benched ${n1(bl.left)} and lost by ${n1(g.margin)}, which is a choice.`]);
     const sw = D.streaks[g.wName], sl = D.streaks[g.lName];
     if(sw && sw.kind==='W' && sw.run>=3) line += ` That is ${sw.run} straight.`;
     else if(sl && sl.kind==='L' && sl.run>=3) line += ` ${g.lName} has now dropped ${sl.run} in a row.`;
@@ -12132,58 +12218,271 @@ function rcBuild(yr, wk){
   });
   L.push('');
 
+  /* the notes: worst beat and the luckiest win come straight off the scores, so the archive
+     gets them too; the rest need the live season's benches, projections, table and wire */
   if(D.closest.margin>0 && D.closest.margin<8)
     L.push(`- Closest game: ${D.closest.wName} by ${n1(D.closest.margin)} over ${D.closest.lName}.`);
-  L.push(`- Low score of the week: ${D.low.name}, ${n1(D.low.pts)}.`);
+  L.push(rcPick([
+    `- Bum of the week: ${D.low.name}, ${n1(D.low.pts)}. The floor.`,
+    `- Low score of the week: ${D.low.name}, ${n1(D.low.pts)}. Somebody check on him.`,
+    `- ${D.low.name} scored ${n1(D.low.pts)}, which is the least anyone managed all week.`]));
+  const losers = D.games.filter(g=>g.win!==null).map(g=>({name:g.lName, pts:g.lPts})).filter(x=>x.name!==D.low.name).sort((a,b)=>b.pts-a.pts);
+  if(losers[0] && losers[0].pts > D.avg) L.push(`- Worst beat: ${losers[0].name} scored ${n1(losers[0].pts)} and still lost.`);
+  const winners = D.games.filter(g=>g.win!==null).map(g=>({name:g.wName, pts:g.wPts})).sort((a,b)=>a.pts-b.pts);
+  if(winners[0] && winners[0].pts < D.avg){
+    const rank = D.scores.findIndex(s=>s.name===winners[0].name) + 1;
+    L.push(`- Luckiest win: ${winners[0].name} won with ${n1(winners[0].pts)}, the ${rank}${rank===2?'nd':rank===3?'rd':'th'}-best score of the week.`);
+  }
+  if(X.bench) L.push(`- Bench crime: ${X.bench.name} left ${n1(X.bench.left)} on the bench${X.bench.missed?` while ${X.bench.missed} sat`:''}.`);
+  if(X.player) L.push(`- Player of the week: ${X.player.player} (${X.player.team}), ${n1(X.player.pts)}.`);
   const hot = Object.entries(D.streaks).filter(([,s])=>s.kind==='W'&&s.run>=3).sort((a,b)=>b[1].run-a[1].run)[0];
   if(hot) L.push(`- Hottest team: ${hot[0]}, ${hot[1].run} wins in a row.`);
+  const cold = Object.entries(D.streaks).filter(([,s])=>s.kind==='L'&&s.run>=3).sort((a,b)=>b[1].run-a[1].run)[0];
+  if(cold) L.push(`- Coldest: ${cold[0]}, ${cold[1].run} straight losses.`);
   if(D.leader) L.push(`- Top of the table: ${D.leader.name} at ${D.leader.w}-${D.leader.l}${D.leader.t?'-'+D.leader.t:''}, ${n1(D.leader.pf)} points for.`);
+  if(X.clinched && X.clinched.length) L.push(`- Clinched: ${X.clinched.join(', ')}.`);
+  if(X.out && X.out.length) L.push(`- Eliminated: ${X.out.join(', ')}. The Toilet Bowl has a reserved seat.`);
+  if(X.moves){
+    const M = X.moves, s = n => n===1?'':'s';
+    if(M.adds || M.drops) L.push(`- The wire: ${M.adds} pickup${s(M.adds)}${M.waivers?` (${M.waivers} off waivers)`:''}, ${M.drops} drop${s(M.drops)}${M.top?`. ${M.top.team} ${M.top.bid?`paid $${M.top.bid} for`:'grabbed'} ${M.top.player}`:''}.`);
+    M.trades.forEach(t=> L.push(`- Trade: ${t.a} sent ${t.aGave.join(', ')||'nothing'} to ${t.b} for ${t.bGave.join(', ')||'nothing'}.`));
+  }
+  L.push('');
+  L.push(rcPick([
+    `That's the week. Set your lineups, you animals.`,
+    `Recap over. Go argue about it in the chat.`,
+    `See you Sunday. Somebody's going to regret a waiver claim.`,
+    `On to the next one. The bench crimes will continue until morale improves.`,
+    `Numbers don't lie. Managers do.`]));
 
   return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
 }
-function rcGenerate(yr, wk){
-  const t = rcBuild(yr, wk);
-  if(!t){ toast(`No final scores for week ${wk} yet.`); return; }
-  window.muRecap = t; window.muRecapWk = wk; window.muRecapYr = String(yr);
+/* ---- the live-season facts the scores alone cannot give ----
+   Upsets need the projection pair frozen with the score (projOf), the bench crime and the
+   player of the week need the week's stat file, the playoff picture needs the table, and the
+   wire needs the transaction log inside this week's window. All best-effort: a feed that is
+   down just means a shorter recap, never no recap. Cached per week so a redraw is free. */
+const _rcX = {};
+function rcMoves(wk){
+  const end = weekOverAt(wk), start = wk>1 ? weekOverAt(wk-1) : end - 7*86400000;
+  const xs = Object.keys(txMap||{}).map(id=>({id, ...txMap[id]})).filter(x=>x && x.type && !x.undone && +x.at>=start && +x.at<end);
+  const adds = xs.filter(x=>x.type==='add'), drops = xs.filter(x=>x.type==='drop'), trades = xs.filter(x=>x.type==='trade');
+  const top = adds.slice().sort((a,b)=>(+b.bid||0)-(+a.bid||0))[0];
+  return { adds: adds.length, drops: drops.length, waivers: adds.filter(x=>txIsWaiver(x)).length,
+           top: top ? { player: top.player||'', team: top.team||teamName(top.teamIndex), bid: +top.bid||0 } : null,
+           trades: trades.map(x=>({ a: x.team||'', b: x.teamB||'', aGave: x.aGave||[], bGave: x.bGave||[] })) };
+}
+async function rcExtras(wk){
+  const X = { upsets:[], upsetOf:null, benchByName:{}, bench:null, player:null, clinched:[], out:[], moves:null };
+  if(!(S.season && S.season.schedule)) return X;
+  const games = S.season.schedule[String(wk)] || [];
+  const nameOf = ti => (S.teams[ti]||{}).name || teamName(ti);
+  const upsetMap = {};
+  games.forEach((g,m)=>{
+    const [pa,pb] = mScore(String(wk), m); if(pa==null || pb==null || pa===pb) return;
+    const pr = projOf(String(wk), m); if(!pr || pr[0]===pr[1]) return;
+    const favIdx = pr[0]>pr[1] ? 0 : 1, wonIdx = pa>pb ? 0 : 1;
+    if(favIdx===wonIdx) return;
+    const u = { fav: nameOf(g[favIdx]), dog: nameOf(g[wonIdx]), projMargin: Math.round(Math.abs(pr[0]-pr[1])*10)/10 };
+    X.upsets.push(u); upsetMap[u.dog+'|'+u.fav] = u;
+  });
+  X.upsetOf = g => upsetMap[g.wName+'|'+g.lName] || null;
+  try{ const po = poPicture(); if(po) po.forEach(r=>{ if(r.clinched) X.clinched.push(r.name); if(r.out) X.out.push(r.name); }); }catch(e){}
+  try{ X.moves = rcMoves(wk); }catch(e){}
+  try{
+    const yr = (S.season && S.season.year) || curDraftYear();
+    const stats = await fetchWeekStats(yr, wk);
+    if(stats && Object.keys(stats).length){
+      let worst = null, best = null;
+      const margins = {}; games.forEach((g,m)=>{ const [pa,pb] = mScore(String(wk), m); if(pa!=null && pb!=null && pa!==pb){ const l = pa<pb ? g[0] : g[1]; margins[l] = Math.abs(pa-pb); } });
+      (S.teams||[]).forEach((t,i)=>{
+        const b = benchLeft(i, stats, false);
+        if(b && b.left > 0){
+          const missed = b.missed[0] ? b.missed[0].name : '';
+          X.benchByName[nameOf(i)] = { left: b.left, missed };
+          if(!worst || b.left > worst.left) worst = { ti:i, name:nameOf(i), left:b.left, missed, wouldHaveWon: margins[i]!=null && b.left > margins[i] };
+        }
+        const det = teamWeekDetail(i, stats);
+        det.rows.forEach(r=>{ if(r.pts!=null && (!best || r.pts > best.pts)) best = { player:r.name, pts:r.pts, team:nameOf(i) }; });
+      });
+      if(worst && worst.left >= 10) X.bench = worst;
+      X.player = best;
+    }
+  }catch(e){}
+  return X;
+}
+/* the words plus the headline, with the live facts gathered first; the archive gets scores only */
+async function rcCompose(yr, wk, seed){
+  const live = String(yr)==='live';
+  const X = live ? (_rcX[wk] || (_rcX[wk] = await rcExtras(wk))) : null;
+  const text = rcBuild(yr, wk, seed||0, X);
+  return text ? { text, title: _rcTitle } : null;
+}
+/* a board drawn before the extras are in draws without them, and once, quietly, fetches them */
+function rcWarm(wk){
+  if(_rcX[wk] || _rcX['_p'+wk]) return;
+  _rcX['_p'+wk] = true;
+  rcExtras(wk).then(X=>{ _rcX[wk] = X; if(window.currentView==='matchups') renderMatchups(); }).catch(()=>{});
+}
+/* ===================== THE SHARED COPY =====================
+   One recap per week for the whole league, at league/main/recaps/{year}_w{week}, written by
+   the first signed-in device to get there after the week is over (the pulse, from Tuesday
+   4am) - an atomic create, so twelve open apps produce one document. Readers show the shared
+   text; with none yet (the node's rule not deployed, nobody online) they show the words this
+   device would have written, which are the same words, seed 0. A commissioner's Rewrite bumps
+   the seed and overwrites for everyone. */
+function recapsPath(){ return `league/${LEAGUE_ID}/recaps`; }
+let recapsMap = {};
+const recapKey = (yr, wk) => `${yr}_w${wk}`;
+function recapFor(wk, yr){ yr = yr || (S.season && S.season.year) || curDraftYear(); return recapsMap[recapKey(yr, wk)] || null; }
+function latestRecap(){
+  const list = Object.values(recapsMap||{}).filter(r=>r && r.text);
+  list.sort((a,b)=>(+b.yr - +a.yr) || (+b.wk - +a.wk));
+  return list[0] || null;
+}
+let _rcWriting = false; const _rcTried = {};
+async function maybeWriteRecap(){
+  if(_rcWriting || !fbOk() || !window.fbUser || !(S.season && S.season.schedule)) return;
+  const yr = S.season.year || curDraftYear();
+  let wk = 0; for(let w=REG_WEEKS; w>=1; w--){ if(weekIsOver(w) && weekHasScores(w)){ wk = w; break; } }
+  if(!wk) return;
+  const key = recapKey(yr, wk);
+  if(recapsMap[key]) return;
+  if(_rcTried[key] && Date.now()-_rcTried[key] < 10*60*1000) return;     /* a failed write retries in ten minutes */
+  _rcTried[key] = Date.now(); _rcWriting = true;
+  try{
+    const rec = await rcCompose('live', wk, 0);
+    if(!rec) return;
+    const uid = window.fbUser.uid;
+    await window.FB.dbTxn(`${recapsPath()}/${key}`, cur => cur===null
+      ? { yr:+yr, wk:+wk, seed:0, title:rec.title, text:rec.text, at:Date.now(), by:uid, v:1 } : undefined);
+  }catch(e){ /* no rule for the node yet, or offline: the local words still draw */ }
+  finally{ _rcWriting = false; }
+}
+/* the commissioner's chat post, when the setting is on: claimed atomically on the record so
+   two admin devices post once, and only for a recap written in the last three days - flipping
+   the switch on in November must not dump September into the chat */
+let _rcAnnouncing = false;
+async function maybeAnnounceRecap(){
+  if(!recapToChatOn() || !isAdmin() || !fbOk() || !window.fbUser || _rcAnnouncing) return;
+  const r = latestRecap(); if(!r || r.posted || !r.text || Date.now()-(+r.at||0) > 3*86400000) return;
+  _rcAnnouncing = true;
+  try{
+    const res = await window.FB.dbTxn(`${recapsPath()}/${recapKey(r.yr, r.wk)}`, cur => (cur && !cur.posted) ? { ...cur, posted:true, postedAt:Date.now() } : undefined);
+    if(res && res.committed===false) return;
+    const k = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
+    await window.FB.dbSet(chatPath()+'/'+k, { uid: window.fbUser.uid, n:'League Desk', m: r.text, t: Date.now() });
+  }catch(e){}
+  finally{ _rcAnnouncing = false; }
+}
+/* ---- the Home card: the latest recap's headline and opener ---- */
+function renderHomeRecap(){
+  const el = document.getElementById('homeRecap'); if(!el) return;
+  const r = latestRecap();
+  if(!r || !r.text){ el.style.display='none'; el.innerHTML=''; return; }
+  const paras = String(r.text).split('\n\n'), opener = paras[1] || '';
+  el.innerHTML = `<h2>Week ${esc(String(r.wk))} Recap${r.title?`<span class="sub" style="display:block;margin:2px 0 0;font-size:14px">${esc(r.title)}</span>`:''}</h2>
+    <p style="margin:8px 0 10px;max-width:70ch">${esc(opener)}</p>
+    <div class="row" style="gap:8px"><button class="btn ghost" onclick="window.recapWeek=${+r.wk};showView('recaps')">Read the whole thing →</button></div>`;
+  el.style.display='block';
+}
+/* The Recap button: the shared copy when there is one, otherwise written here and now (the
+   archive, or a week nobody has stored yet). Opens the card in full. */
+async function rcGenerate(yr, wk){
+  const live = String(yr)==='live';
+  const stored = live ? recapFor(wk) : null;
+  let rec = stored ? { text: stored.text, title: stored.title||'' } : null;
+  if(!rec){ rec = await rcCompose(yr, wk, window._rcLocalSeed||0); }
+  if(!rec){ toast(`No final scores for week ${wk} yet.`); return; }
+  window.muRecap = rec.text; window.muRecapTitle = rec.title; window.muRecapWk = wk; window.muRecapYr = String(yr);
+  (window.recapOpen = window.recapOpen || new Set()).add(`${yr}_${wk}`);
   renderMatchups();
   const c = document.getElementById('recapCard');
   if(c) c.scrollIntoView({behavior:'smooth', block:'start'});
 }
+/* Rewrite: new words, same numbers. A stored recap is the league's copy, so only a
+   commissioner rewrites it, and for everyone; an unstored one just reshuffles on this device. */
+async function rcRewrite(yr, wk){
+  const live = String(yr)==='live', stored = live ? recapFor(wk) : null;
+  if(stored){
+    if(!requireAdmin()) return;
+    if(!fbOk() || !window.fbUser){ toast('Sign in to rewrite it for everyone.'); return; }
+    const seed = (+stored.seed||0) + 1;
+    const rec = await rcCompose('live', wk, seed);
+    if(!rec) return;
+    try{
+      await window.FB.dbSet(`${recapsPath()}/${recapKey(stored.yr, wk)}`, { ...stored, seed, title:rec.title, text:rec.text, at:Date.now(), by:window.fbUser.uid, rewritten:true });
+      window.muRecap = null; toast('Rewritten for everyone.');
+    }catch(e){ toast("Couldn't save the rewrite — try again."); }
+    return;
+  }
+  window._rcLocalSeed = (window._rcLocalSeed||0) + 1;
+  rcGenerate(yr, wk);
+}
 function rcClose(){ window.muRecap = null; renderMatchups(); }
-function rcCopy(){
-  const t = window.muRecap || ''; if(!t) return;
+function rcToggle(key){
+  const o = (window.recapOpen = window.recapOpen || new Set());
+  if(o.has(key)) o.delete(key); else o.add(key);
+  if(window.muRecap && `${window.muRecapYr}_${window.muRecapWk}`===key && !o.has(key)) window.muRecap = null;
+  renderMatchups();
+}
+/* every card and tab registers the text it is showing, so Copy and Post work from anywhere */
+window._rcShown = {};
+function rcCopyText(key){
+  const t = (window._rcShown||{})[key] || ''; if(!t) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(t).then(()=>toast('Recap copied.'),
       ()=>toast("Couldn't copy — select the text and copy it by hand."));
   } else toast("This browser won't let the page copy — select the text and copy it by hand.");
 }
-async function rcPost(){
+async function rcPostKey(key){
   if(!requireAdmin()) return;
-  const t = window.muRecap; if(!t) return;
+  const t = (window._rcShown||{})[key] || ''; if(!t) return;
   if(!fbOk() || !window.fbUser){ toast('Sign in to post to chat.'); return; }
-  const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
+  const k = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
   try{
-    await window.FB.dbSet(chatPath()+'/'+key, { uid: window.fbUser.uid, n:'League Desk', m:t, t:Date.now() });
+    await window.FB.dbSet(chatPath()+'/'+k, { uid: window.fbUser.uid, n:'League Desk', m:t, t:Date.now() });
     toast('Recap posted to chat.');
   }catch(e){ toast("Couldn't post — try again."); }
 }
-/* `ctx` is the season currently on screen ('live' or a year). A recap written for a different
-   season stays hidden rather than following you around the season dropdown. */
-function recapCardHTML(ctx){
-  if(!window.muRecap || String(window.muRecapYr) !== String(ctx)) return '';
-  const yrArg = JSON.stringify(String(window.muRecapYr)), wkArg = JSON.stringify(String(window.muRecapWk));
+/* The card at the top of the board. `ctx` is the season on screen ('live' or a year) and `wk`
+   the week: a recap written for a different season stays hidden rather than following you
+   around the season dropdown. A live week that is over shows its recap on its own - the shared
+   copy, else the words this device would write - collapsed to the headline and the opener
+   until you ask for the rest. The Recap button's own output opens in full. */
+function recapCardHTML(ctx, wk){
+  const live = String(ctx)==='live';
+  const manual = !!window.muRecap && String(window.muRecapYr)===String(ctx) && (wk==null || String(window.muRecapWk)===String(wk));
+  let text = null, title = '', stored = null, wkShown = wk;
+  if(manual){ text = window.muRecap; title = window.muRecapTitle||''; wkShown = window.muRecapWk; }
+  else if(live && wk!=null){
+    stored = recapFor(wk);
+    if(stored){ text = stored.text; title = stored.title||''; }
+    else if(weekIsOver(wk) && weekHasScores(wk)){ rcWarm(wk); text = rcBuild('live', wk, 0, _rcX[wk]||null); title = _rcTitle; }
+  }
+  if(!text) return '';
+  const key = `${ctx}_${wkShown}`;
+  (window.recapOpen = window.recapOpen || new Set());
+  const open = manual || window.recapOpen.has(key);
+  window._rcShown[key] = text;
+  const paras = String(text).split('\n\n');
+  const shown = open ? text : [paras[0], paras[1]||''].filter(Boolean).join('\n\n') + (paras.length>2 ? '\n\n…' : '');
+  const yrArg = JSON.stringify(String(ctx)), wkArg = JSON.stringify(String(wkShown)), keyArg = JSON.stringify(key);
   return `<div class="card" id="recapCard" style="margin-bottom:18px">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      <span class="eyebrow" style="margin:0">Week ${esc(String(window.muRecapWk))}${String(window.muRecapYr)==='live'?'':' · '+esc(String(window.muRecapYr))} recap</span>
+      <span class="eyebrow" style="margin:0">Week ${esc(String(wkShown))}${live?'':' · '+esc(String(ctx))} recap${stored?` · written ${esc(timeAgo(+stored.at||0))}`:''}</span>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn ghost" onclick='rcGenerate(${yrArg},${wkArg})'>Rewrite</button>
-        <button class="btn ghost" onclick="rcCopy()">Copy</button>
-        <button class="btn admin-only" onclick="rcPost()">Post to chat</button>
-        <button class="btn ghost" onclick="rcClose()">Close</button>
+        <button class="btn ${stored?'admin-only':'ghost'}" onclick='rcRewrite(${yrArg},${wkArg})' title="New words, same numbers">Rewrite</button>
+        <button class="btn ghost" onclick='rcCopyText(${keyArg})'>Copy</button>
+        <button class="btn admin-only" onclick='rcPostKey(${keyArg})'>Post to chat</button>
+        ${manual ? `<button class="btn ghost" onclick="rcClose()">Close</button>`
+                 : `<button class="btn ghost" onclick='rcToggle(${keyArg})'>${open?'Less':'Read it all'}</button>`}
       </div>
     </div>
-    <div class="recap-body">${esc(window.muRecap)}</div>
-    <p class="sub" data-note="recap-rewrite" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>
+    <div class="recap-body">${esc(shown)}</div>
+    ${stored
+      ? `<p class="sub" data-note="recap-auto-card" style="margin:12px 0 0">Written by the app on the Tuesday after the week, from the final scores, the projections, the benches and the wire - the same words on every phone. Rewrite changes the wording, never the numbers.</p>`
+      : `<p class="sub" data-note="recap-rewrite" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>`}
   </div>`;
 }
 /* ===================== THE SEASON SCHEDULE =====================
@@ -12309,7 +12608,7 @@ function renderMatchups(){
   const teamOpts = sel => S.teams.map((t,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(t.name)}</option>`).join('');
   const rows = seasonStandings();
   const anyScores = rows.some(r=>r.w+r.l+r.t>0);
-  el.innerHTML = recapCardHTML('live') + `
+  el.innerHTML = recapCardHTML('live', wk) + `
     <div class="card" style="margin-bottom:18px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
         <div class="row wknav" style="flex-wrap:wrap;gap:8px">
@@ -15476,6 +15775,11 @@ function setLineupLead(v){
   S.lineupLead = n; saveState(); renderScoreAlertSetting();
   toast('Warning '+n+' hour'+(n>1?'s':'')+' before kickoff');
 }
+function recapToChatOn(){ return S.recapToChat === true; }
+function setRecapToChat(on){
+  S.recapToChat = !!on; saveState(); renderScoreAlertSetting();
+  toast(on ? 'Weekly recaps will be posted to chat' : 'Recaps stay off the chat');
+}
 async function testLineupWatch(){
   if(!pushRelay()){ toast('Set the relay URL first.'); return; }
   toast('Asking the relay to check lineups…');
@@ -15509,6 +15813,8 @@ function renderScoreAlertSetting(){
   const la=document.getElementById('setLineupAlerts'); if(la) la.checked=lineupAlertsOn();
   const ll=document.getElementById('lineupAlertsLbl'); if(ll) ll.textContent=lineupAlertsOn()?'On':'Off';
   const ld=document.getElementById('setLineupLead'); if(ld) ld.value=String(lineupLeadHours());
+  const rcc=document.getElementById('setRecapChat'); if(rcc) rcc.checked=recapToChatOn();
+  const rcl=document.getElementById('recapChatLbl'); if(rcl) rcl.textContent=recapToChatOn()?'On':'Off';
   const note=document.getElementById('scoreAlertNote'); if(!note) return;
   const lineupNote = !lineupAlertsOn() ? ' Nobody is warned about a dead lineup.'
     : !scoreRelayOn() ? ' Lineup alerts need "Send from the relay" on - the relay is the only thing awake before kickoff.'
@@ -15547,7 +15853,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · trade analyzer';
+const BUILD_STAMP = '2026-09-06 · weekly recaps write themselves';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

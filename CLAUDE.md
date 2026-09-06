@@ -292,6 +292,36 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Weekly recaps (auto-written)
+
+`rcBuild(yr, wk, seed, X)` writes the week in plain text. It is **deterministic**: `rcPick`
+hashes `(season, week, seed, position-in-text)` with `hashStr`, so every device writes the
+same words; "Rewrite" bumps the seed. Facts beyond the scores come from `rcExtras(wk)` (async,
+best-effort, cached in `_rcX[wk]`): upsets from `projOf`, bench crime and player of the week
+from the week's stat file, clinched/eliminated from `poPicture`, and the wire from `txMap`
+inside the week's window (`weekOverAt(wk-1)`..`weekOverAt(wk)`). `rcTitle` picks the headline
+by priority (upset ≥ 10 projected, blowout ≥ 40, decided by < 1.5, top score 35 over average,
+a bench crime that cost the game).
+
+**One shared copy per week** lives at `league/main/recaps/{year}_w{week}` (`recapsPath`,
+mirror `recapsMap`, `recapFor(wk)`, `latestRecap()`). `maybeWriteRecap` on the one-minute
+pulse: the latest week that `weekIsOver` and `weekHasScores`, no copy yet → compose and
+`dbTxn` an atomic create (first signed-in device wins; a failed write retries in ten minutes).
+The rule is in `push/firebase-rules.json` (`recaps`: create-once by the author, admins may
+overwrite) and **must be pasted into the Firebase console by hand** - until it is, writes
+fail silently and every device shows the identical local words instead (seed 0), so the
+feature degrades to "unstored but consistent". `rcRewrite` on a stored recap is admin-only and
+overwrites for everyone (`rewritten:true`).
+
+Surfaces: the Matchups board (`recapCardHTML('live', wk)`, collapsed to headline + opener,
+"Read it all" toggles `window.recapOpen`), the Recaps tab (`liveRecapsHTML`, week select,
+`window.recapWeek`) and Home (`#homeRecap`, `renderHomeRecap`). Copy / Post to chat read the
+text from `window._rcShown[key]`. **Chat posting is opt-in**: Settings > Push notifications >
+"Post weekly recaps to chat" (`S.recapToChat`, default off); `maybeAnnounceRecap` runs on an
+admin device when a recap arrives, claims `posted` atomically, posts as `League Desk`, and
+only for a recap under three days old. Posting to chat buzzes everyone through the existing
+chat push, which is why it is off by default (CLAUDE.md push rule).
+
 ## Pickups (waiver and streaming suggestions)
 
 Players > **Pickups** (`renderPickups`, panel `#pickView`, sub-tab key `pl-pick`, ghost word
