@@ -1334,39 +1334,50 @@ nav.tabs button{position:relative}
    this line in the one place it should means fighting its basis arithmetic; naming the two rows
    just says what goes where. Who and when on top, the detail and the button underneath. */
 @media(max-width:640px){
-  #wvView .wv-item .faRow{
+  .wv-item .faRow{
     display:grid;
     grid-template-columns:auto auto minmax(0,1fr) auto;
     grid-template-areas:"face pos name pill" "meta meta meta btn";
     align-items:center;gap:6px 9px;padding:8px 4px;
   }
-  #wvView .wv-item .faRow .pface{grid-area:face}
-  #wvView .wv-item .faRow .postag{grid-area:pos}
-  #wvView .wv-item .faRow .wv-rank{grid-area:pos}
+  .wv-item .faRow .pface{grid-area:face}
+  .wv-item .faRow .postag{grid-area:pos}
+  .wv-item .faRow .wv-rank{grid-area:pos}
   /* wraps rather than ellipsizing: the name cell is 135px and the bye chip rides inside it, so
      "Jonathan Taylor BYE 13" was being cut to "Jonathan Tayl..." - and the name is the one thing
      on the row you cannot do without */
-  #wvView .wv-item .faRow .faName{grid-area:name;min-width:0;
+  .wv-item .faRow .faName{grid-area:name;min-width:0;
     white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
-  #wvView .wv-item .faRow .statpill{grid-area:pill;justify-self:end}
+  .wv-item .faRow .statpill{grid-area:pill;justify-self:end}
   /* the line that would not shrink. It wraps now instead of pushing everything sideways. */
-  #wvView .wv-item .faRow .pmeta{grid-area:meta;min-width:0;white-space:normal;line-height:1.35}
-  #wvView .wv-item .faRow .pick,
-  #wvView .wv-item .faRow > .btn,
-  #wvView .wv-item .faRow .wv-move{grid-area:btn;justify-self:end}
+  .wv-item .faRow .pmeta{grid-area:meta;min-width:0;white-space:normal;line-height:1.35}
+  .wv-item .faRow .pick,
+  .wv-item .faRow > .btn,
+  .wv-item .faRow .wv-move{grid-area:btn;justify-self:end}
   /* Claim and Withdraw are the point of the page, so they get a real tap target rather than the
      11px-padded chip they inherit from the desktop table. */
-  #wvView .wv-item .faRow .pick,
-  #wvView .wv-item .faRow > .btn{min-height:38px;padding-left:20px;padding-right:20px;font-size:14px}
+  .wv-item .faRow .pick,
+  .wv-item .faRow > .btn{min-height:38px;padding-left:20px;padding-right:20px;font-size:14px}
   /* The settled list, and the free-agent list on My Team, are a different shape - no face, no
      grid. They only need to be allowed to wrap and to let the meta shrink. #faList earns its way
      in here because adding a projection pill to that row squeezed the player name to a width of
      zero, the same failure the waiver row had. */
-  #wvView .faRow, #faList .faRow{flex-wrap:wrap;row-gap:5px}
-  #wvView .faRow .pmeta, #faList .faRow .pmeta{min-width:0}
+  #wvView .faRow, #pickView .faRow, #faList .faRow{flex-wrap:wrap;row-gap:5px}
+  #wvView .faRow .pmeta, #pickView .faRow .pmeta, #faList .faRow .pmeta{min-width:0}
   /* and the name keeps a floor, so it can wrap but never vanish */
   #faList .faRow .faName{flex:1 1 60%;min-width:110px}
 }
+/* pickups: the "would start for you" badge, and the sections of the Pickups tab. The rows are
+   the waiver wire's (.wv-item .faRow), so they get its phone grid for free. */
+.pk-up{display:inline-block;margin-left:5px;font-family:var(--f-mono);font-size:10.5px;font-weight:700;color:var(--turf-bright);white-space:nowrap;vertical-align:baseline}
+.pk-gain{color:var(--turf-bright);font-weight:700}
+.pk-sec{margin-top:16px}
+.pk-sec .eyebrow{margin:0 0 4px}
+.pk-hole{margin:8px 0 6px}
+.pk-hole-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;margin:0 0 2px;color:var(--chalk)}
+.pk-bench{color:var(--chalk-dim);font-size:12px}
+.pk-yours{font-size:12px;color:var(--chalk-dim);margin:2px 0 6px;font-family:var(--f-mono)}
+.wv-item .faRow.pk-row .pmeta{text-align:left;min-width:0;white-space:normal;line-height:1.35}
 .wv-claimants{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 4px 8px 45px;font-size:12px}
 .wv-lbl{color:var(--chalk-dim);letter-spacing:.03em;text-transform:uppercase;font-size:11px;font-weight:700}
 .wv-cl{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;color:var(--chalk-dim);
@@ -2571,6 +2582,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
     <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
+    <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -2580,6 +2592,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
   <div id="injView" style="display:none"></div>
   <div id="newsView" style="display:none"></div>
   <div id="wvView" style="display:none"></div>
+  <div id="pickView" style="display:none"></div>
   <div class="card" id="plCard">
     <!-- Search, filters and the count pin together as one block: filtering a 900-row list is
          useless if you have to scroll back to the top to do it. One sticky wrapper rather than
@@ -2591,6 +2604,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <select id="plSort" onchange="window.plSort=this.value;renderPlayers()">
         <option value="rank">Sort: Relevance</option>
         <option value="proj">Sort: Projection</option>
+        <option value="gain">Sort: Would start for me</option>
         <option value="name">Sort: Name</option>
         <option value="team">Sort: Team</option>
         <option value="age">Sort: Age</option>
@@ -2630,6 +2644,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
     <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
+    <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -2650,6 +2665,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
     <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
     <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
+    <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
@@ -5149,6 +5165,7 @@ setInterval(()=>{
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
+  if(window.currentView==='players' && window.plTab==='pick') renderPickups();      /* waiver countdowns and fresh lines */
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
   if(typeof maybeExpirePolls==='function') maybeExpirePolls();     /* stamps closed once a poll timer runs out */
   try{ checkRecordAlerts(); }catch(e){}                             /* the record watch rides the same pulse */
@@ -5385,12 +5402,14 @@ function setPlTab(t){
   window.plTab = t;
   syncSubnav();
   const card=document.getElementById('plCard'), inj=document.getElementById('injView'), news=document.getElementById('newsView');
-  const wv=document.getElementById('wvView');
+  const wv=document.getElementById('wvView'), pick=document.getElementById('pickView');
   if(card) card.style.display = t==='all' ? 'block':'none';
   if(inj)  inj.style.display  = t==='inj' ? 'block':'none';
   if(news) news.style.display = t==='news' ? 'block':'none';
   if(wv)   wv.style.display   = t==='wv'  ? 'block':'none';
+  if(pick) pick.style.display = t==='pick' ? 'block':'none';
   if(t==='wv'){ bustWire(); renderWaivers(); }
+  if(t==='pick'){ bustWire(); renderPickups(); }
   if(t==='inj') renderInjuries();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
   updateGhost();
@@ -5579,7 +5598,7 @@ function maybeRefreshWeekProj(){
       const v = window.currentView;
       if(v==='teams') renderTeams();
       else if(v==='matchups'){ renderMatchups(); if(window.muTab==='gc') renderGameCenter(); }
-      else if(v==='players') renderPlayers();
+      else if(v==='players'){ renderPlayers(); renderPickups(); }
     }catch(e){}
   });
 }
@@ -6057,7 +6076,12 @@ function renderPlayers(){
   /* best projection first, because the question is who to pick up. Anyone Sleeper has no
      projection for sinks below everyone who has one rather than sorting as a zero. */
   const pw = p => { const v = projWkPts(p); return v==null ? -1 : v; };
-  rows.sort((a,b)=> sort==='proj'? (pw(b)-pw(a) || a.rank-b.rank)
+  /* "would start for me": the pickup gain first, projection as the tiebreak - the list the
+     Pickups tab shows, sortable here against every filter */
+  const gTi = addTargetTeam();
+  const gw = p => { const g = gTi===null ? null : pickupGain(gTi, p); return g ? g.gain : 0; };
+  rows.sort((a,b)=> sort==='gain'? (gw(b)-gw(a) || pw(b)-pw(a) || a.rank-b.rank)
+                  : sort==='proj'? (pw(b)-pw(a) || a.rank-b.rank)
                   : sort==='name'? a.name.localeCompare(b.name)
                   : sort==='team'? (a.team.localeCompare(b.team)||a.rank-b.rank)
                   : sort==='age' ? ((a.age||199)-(b.age||199)||a.rank-b.rank)
@@ -6075,7 +6099,7 @@ function renderPlayers(){
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
       <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}</span></span></td>
       <td style="font-family:var(--f-mono)">${esc(p.team)}</td>
-      <td class="pl-proj">${projWkTxt(p)}</td>
+      <td class="pl-proj">${projWkTxt(p)}${canAdd?pickupBadgeHTML(p, addTi):''}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${byeCellHTML(null, p.team)}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.age??'—'}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${p.exp==null?'—':(p.exp===0?'R':p.exp)}</td>
@@ -8070,7 +8094,7 @@ function showView(v){
   if(v==='players'){ ensurePlayers(); setPlTab(window.plTab||'all');
     /* this view never asked for the projections before, so the column it now has would have sat
        empty unless you happened to open Teams or Matchups first */
-    waitForProj('pl', ()=>{ if(window.currentView==='players'){ renderPlayers(); renderWaivers(); } }); }
+    waitForProj('pl', ()=>{ if(window.currentView==='players'){ renderPlayers(); renderWaivers(); renderPickups(); } }); }
   if(v==='trades') renderTradeCenter();
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
@@ -8095,7 +8119,7 @@ function updateGhost(){
   const v = window.currentView; if(!v) return;
   let label = GHOST_LABEL[v] || '';
   if(v==='matchups' && window.muTab==='gc') label = 'GAME CENTER';
-  if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='news') label='PLAYER NEWS'; }
+  if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='news') label='PLAYER NEWS'; else if(window.plTab==='pick') label='PICKUPS'; else if(window.plTab==='wv') label='WAIVERS'; }
   if(v==='teams' && window.teamsSub==='my') label = 'MY TEAM';
   if(v==='trades' && window.trTab==='moves') label = 'TRANSACTIONS';
   const sec = document.getElementById('view-' + (v==='mock' ? 'draft' : v));
@@ -13242,7 +13266,11 @@ function projWeekPoints(pid, pos, wk){
    one implementation - two copies would eventually disagree about a FLEX and nobody would ever
    find out. */
 function optimalLineup(ti, ptsOfPlayer){
-  const roster = teamRoster(ti).filter(p=>(S.lineups[ti]||{})[p.playerId]!=='IR');
+  return optimalLineupOf(teamRoster(ti).filter(p=>(S.lineups[ti]||{})[p.playerId]!=='IR'), ptsOfPlayer);
+}
+/* the same solver over any list of picks, so a would-be pickup can be tried in the lineup
+   before anyone presses Add (see pickupGain) */
+function optimalLineupOf(roster, ptsOfPlayer){
   const scored = roster.map(p=>({...p, pts: ptsOfPlayer(p)}));
   const pool = scored.slice().sort((a,b)=>(b.pts??-1)-(a.pts??-1));
   const cap = k => +S.roster[k]||0;
@@ -13269,6 +13297,179 @@ function bestLineup(ti){
   /* callers of this one have always read .proj */
   return { plan: r.plan, scored: r.scored.map(p=>({...p, proj:p.pts})),
            haveProj: r.scored.filter(p=>p.pts!=null).length, total: r.total };
+}
+/* ===================== PICKUPS =====================
+   "Would this guy start for me?" is the only question anyone asks the waiver wire, and the
+   Players tab answered it with a column of projections you had to compare against your own
+   roster in your head. So: try him in the lineup. pickupGain drops a candidate into the
+   team's roster, runs the same solver the Best lineup button uses, and reports what the
+   best possible lineup gains and who gets benched for it. FLEX falls out of that for free -
+   a WR who only beats your third receiver still starts if your FLEX is weaker - and a bye or
+   an injured starter (null projection, counted as 0) is exactly the kind of seat a pickup
+   fills. The Pickups tab lists the holes, the upgrades and the streamers; the Players table
+   and the My Team free-agent list carry the same number as a small badge.
+
+   Cached per team and week on the roster, the lineup map and the projection file's stamp,
+   so scoring 200 candidates on the Players tab costs one solver run each and nothing twice. */
+let _pkCache = { key:'' };
+function pickupBase(ti){
+  const wk = projWeekNow();
+  const roster = teamRoster(ti).filter(p=>(S.lineups[ti]||{})[p.playerId]!=='IR');
+  const key = JSON.stringify([ti, wk, (PROJ_WEEKS[wk]||{}).at||0, roster.map(p=>p.playerId), S.lineups[ti]||null, S.roster]);
+  if(_pkCache.key !== key){
+    const pts = p => projWeekPoints(p.playerId, p.pos, wk);
+    _pkCache = { key, ti, wk, roster, pts, base: optimalLineupOf(roster, pts), gains:{} };
+  }
+  return _pkCache;
+}
+/* what adding p would do to the team's best lineup this week: {gain, slot, over} - the
+   projected points gained, the slot he would start in, and the starter he pushes out (null
+   when he fills an empty seat). null when he would not start or gains under half a point. */
+function pickupGain(ti, p){
+  if(!Number.isInteger(ti) || !statsLoaded || !p) return null;
+  const id = String(p.id || p.playerId || p.pid || ''), pos = p.pos || '';
+  if(!id || !SLOT_ELIG[pos]) return null;
+  const c = pickupBase(ti);
+  if(Object.prototype.hasOwnProperty.call(c.gains, id)) return c.gains[id];
+  const v = projWeekPoints(id, pos, c.wk);
+  let out = null;
+  if(v!=null && v>0 && !c.roster.some(q=>q.playerId===id)){
+    const cand = { playerId:id, name:p.name||'', pos, nfl:p.team||p.nfl||'' };
+    const withHim = optimalLineupOf([...c.roster, cand], q => q.playerId===id ? v : c.pts(q));
+    const gain = Math.round((withHim.total - c.base.total)*10)/10;
+    if(gain >= 0.5 && withHim.started.includes(id)){
+      const outId = c.base.started.find(x=>!withHim.started.includes(x));
+      const over = outId ? c.roster.find(q=>q.playerId===outId) : null;
+      /* nobody benched means a seat got filled - and not necessarily the one he sits in: an
+         RB pickup can take RB while the injured RB slides across to the empty FLEX, so the seat
+         that gained a body is the one to name */
+      const seats = plan => { const n={}; Object.values(plan).forEach(s=>{ if(s!=='BN') n[s]=(n[s]||0)+1; }); return n; };
+      const b = seats(c.base.plan), w = seats(withHim.plan);
+      const filled = over ? null : (Object.keys(w).find(s=>(w[s]||0) > (b[s]||0)) || withHim.plan[id]);
+      out = { gain, slot: withHim.plan[id], filled, over: over ? { name: over.name, pos: over.pos, pts: c.pts(over) } : null };
+    }
+  }
+  c.gains[id] = out;
+  return out;
+}
+function pickupWhy(g){
+  if(!g) return '';
+  return g.over ? `over ${g.over.name}${g.over.pts==null ? ' (not playing)' : ''}` : `fills your empty ${g.filled || g.slot}`;
+}
+/* the badge beside a projection on the Players table and the free-agent list */
+function pickupBadgeHTML(p, ti){
+  if(ti==null) ti = addTargetTeam();
+  const g = pickupGain(ti, p); if(!g) return '';
+  return ` <span class="pk-up" title="Would start for you at ${g.slot} this week: ${signed1(g.gain)} projected ${esc(pickupWhy(g))}">▲${g.gain.toFixed(1)}</span>`;
+}
+function renderPickups(){
+  const el = document.getElementById('pickView'); if(!el) return;
+  if(el.style.display==='none') return;                        /* the pulse calls this; skip when hidden */
+  const redraw = ()=>{ if(window.currentView==='players' && window.plTab==='pick') renderPickups(); };
+  if(!poolReady || !statsLoaded){
+    el.innerHTML = `<div class="card"><h2>Pickups</h2><p class="sub" style="margin:0">Loading the player pool and this week's projections…</p></div>`;
+    if(!statsLoaded) waitForProj('pick', redraw);
+    return;
+  }
+  const ti = addTargetTeam();
+  const wk = projWeekNow(), wk2 = (wk && wk < REG_WEEKS) ? wk+1 : 0;
+  const season = +((S.season && S.season.year)) || PROJ_SEASON;
+  /* next week's file and both slates: drawn without them, redrawn once they land */
+  const oppKey = w => `${season}-${w}`;
+  if(wk && !NFL_OPP[oppKey(wk)]) loadOpponents(season, wk).then(redraw, ()=>{});
+  if(wk2 && !NFL_OPP[oppKey(wk2)]) loadOpponents(season, wk2).then(redraw, ()=>{});
+  const nextReady = wk2 ? projWeekReady(wk2, redraw) && !!(PROJ_WEEKS[wk2] && PROJ_WEEKS[wk2].data) : false;
+  const oppNow = wk ? NFL_OPP[oppKey(wk)] || null : null, oppNext = wk2 ? NFL_OPP[oppKey(wk2)] || null : null;
+  const oppTxt = (team, map, w) => { const t = oppLabel(team, map); if(t) return t; return (w && byeWeekOfTeam(team)===w) ? 'BYE' : ''; };
+  const rostered = rosteredIds();
+  const avail = POOL.filter(p => p && p.team && p.team!=='FA' && !rostered.has(p.id));
+  const pNow = p => projWeekPoints(p.id, p.pos, wk);
+  const pNext = p => nextReady ? projWeekPoints(p.id, p.pos, wk2) : null;
+  const fmt = v => v==null ? '—' : v.toFixed(1);
+  const hasTeam = ti!==null;
+  /* the gain, and why: the solver's own reason, or the hole's when a row sits under one */
+  const gainTxt = (p, why) => { if(!hasTeam) return ''; const g = pickupGain(ti, p); return g ? ` · <b class="pk-gain">${signed1(g.gain)} ${esc(why || pickupWhy(g))}</b>` : ''; };
+  const row = (p, why) => {
+    const wv = onWaivers(p.id), w = wv ? wireEntry(p.id) : null;
+    const meta = [esc(p.team||''), esc(oppTxt(p.team, oppNow, wk))].filter(Boolean).join(' ')
+      + (wv ? ` · on waivers, clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p, why);
+    return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
+      <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
+      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${byeTagHTML(p.id, p.team)}</span>
+      <span class="pmeta">${meta}</span>
+      <span class="statpill pl-projpill" title="Projected this week under this league's rules">${fmt(pNow(p))} proj</span>
+      ${hasTeam ? `<button class="pick" onclick="addFromPlayers('${p.id}', event)">${wv?'Claim':'Add'}</button>` : ''}
+    </div></div>`;
+  };
+  /* ---- the team line ---- */
+  let head = '';
+  if(!hasTeam){
+    head = `<div class="notice" style="margin:0 0 12px">Claim your team on the Teams tab and this page will say who would start for you. The streamers below are for everyone.</div>`;
+  }else{
+    const faab = faabOn() ? ` · $${faabLeft(ti)} of $${faabBudget()} FAAB left` : '';
+    head = `<p class="sub" style="margin:0 0 8px">For <b>${esc(teamName(ti))}</b> · week ${wk||1} projections${faab}</p>`;
+  }
+  /* ---- holes: a starter on bye, out, or a seat with nobody in it ---- */
+  let holes = '';
+  if(hasTeam){
+    const lu = ensureLineup(ti), iss = lineupIssues(ti);
+    const list = [ ...iss.empty.map(s=>({ slot:s, who:null, why:'empty' })),
+                   ...iss.bye.map(b=>({ slot:b.slot, who:b, why:'bye' })),
+                   ...iss.out.map(b=>({ slot:b.slot, who:b, why:b.why })) ];
+    if(list.length){
+      /* each hole gets its own three names: two RB holes should read as six backs, not the same
+         three twice */
+      const used = new Set();
+      holes = `<div class="pk-sec"><div class="eyebrow">Holes to plug · ${list.length}</div>` + list.map(h=>{
+        const eligible = p => (SLOT_ELIG[p.pos]||[]).includes(h.slot);
+        const best = avail.filter(p=>eligible(p) && !used.has(p.id) && pNow(p)!=null && pNow(p)>0).sort((a,b)=>pNow(b)-pNow(a)).slice(0,3);
+        best.forEach(p=>used.add(p.id));
+        const bench = teamRoster(ti).filter(p=>lu[p.playerId]==='BN' && eligible(p))
+          .map(p=>({p, v: projWeekPoints(p.playerId, p.pos, wk)})).filter(x=>x.v!=null && x.v>0).sort((a,b)=>b.v-a.v)[0];
+        const what = h.who ? `<b>${esc(h.who.name)}</b> is ${h.why==='bye'?'on bye':esc(h.why)}` : `nobody in the seat`;
+        const why = h.who ? `instead of ${h.who.name}` : `fills your empty ${h.slot}`;
+        return `<div class="pk-hole"><div class="pk-hole-h"><span class="postag pos-${h.slot==='FLEX'?'wr':String(h.slot).toLowerCase()}" style="--pc:var(--${h.slot==='FLEX'?'wr':String(h.slot).toLowerCase()})">${esc(h.slot)}</span> ${what}${bench?` · <span class="pk-bench">on your bench: ${esc(bench.p.name)} ${bench.v.toFixed(1)}</span>`:''}</div>
+          ${best.length ? best.map(p=>row(p, why)).join('') : `<p class="sub" style="margin:4px 0 0">Nobody available projects for that slot.</p>`}</div>`;
+      }).join('') + `</div>`;
+    }
+  }
+  /* ---- upgrades: anyone who would start for you, best gain first ---- */
+  let ups = '';
+  if(hasTeam){
+    const cands = avail.filter(p=>pNow(p)!=null && pNow(p)>=1).sort((a,b)=>pNow(b)-pNow(a)).slice(0,120);
+    const scored = cands.map(p=>({p, g: pickupGain(ti, p)})).filter(x=>x.g).sort((a,b)=>b.g.gain-a.g.gain).slice(0,10);
+    ups = `<div class="pk-sec"><div class="eyebrow">Would start for you · ${scored.length?scored.length:'nobody'}</div>` +
+      (scored.length ? scored.map(x=>row(x.p)).join('')
+        : `<p class="sub" style="margin:4px 0 0">Nobody on the wire beats your starters this week. Your lineup's as good as the pool lets it be.</p>`) + `</div>`;
+  }
+  /* ---- streamers: defences and kickers by this week's matchup, with next week's beside it ---- */
+  const yours = pos => { if(!hasTeam) return null; const c = pickupBase(ti);
+    const id = c.base.started.find(x=>{ const q=c.roster.find(r=>r.playerId===x); return q && q.pos===pos; });
+    const q = id ? c.roster.find(r=>r.playerId===id) : null; return q ? { q, v: c.pts(q) } : null; };
+  const stream = (pos, label) => {
+    const top = avail.filter(p=>p.pos===pos && pNow(p)!=null && pNow(p)>0).sort((a,b)=>pNow(b)-pNow(a)).slice(0,6);
+    const mine = yours(pos);
+    const mineTxt = mine ? `<p class="pk-yours">Yours: <b>${esc(mine.q.name)}</b> ${fmt(mine.v)} ${esc(oppTxt(mine.q.nfl, oppNow, wk))}${wk2?` · next ${fmt(nextReady?projWeekPoints(mine.q.playerId, mine.q.pos, wk2):null)} ${esc(oppTxt(mine.q.nfl, oppNext, wk2))}`:''}</p>`
+      : (hasTeam ? `<p class="pk-yours">You don't have a ${label.toLowerCase()} starting.</p>` : '');
+    const rows = top.map(p=>{
+      const wv = onWaivers(p.id), w = wv ? wireEntry(p.id) : null;
+      const nx = wk2 ? ` · next ${fmt(pNext(p))} ${esc(oppTxt(p.team, oppNext, wk2))}` : '';
+      const meta = `${esc(oppTxt(p.team, oppNow, wk)||p.team)}${nx}` + (wv ? ` · clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p);
+      return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
+        <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
+        <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+        <span class="pmeta">${meta}</span>
+        <span class="statpill pl-projpill" title="Projected this week">${fmt(pNow(p))} proj</span>
+        ${hasTeam ? `<button class="pick" onclick="addFromPlayers('${p.id}', event)">${wv?'Claim':'Add'}</button>` : ''}
+      </div></div>`;
+    }).join('');
+    return `<div class="pk-sec"><div class="eyebrow">${label} streamers</div>${mineTxt}${rows || `<p class="sub" style="margin:4px 0 0">Nothing available projects this week.</p>`}</div>`;
+  };
+  const streamers = stream('DEF', 'Defence') + stream('K', 'Kicker');
+  el.innerHTML = `<div class="card"><h2>Pickups</h2>
+    <p class="sub" data-note="pk-intro" style="margin:2px 0 10px">Who on the wire would start for you this week, what plugs the holes in your lineup, and the defences and kickers worth streaming - this week's matchup with next week's beside it, so you're not picking up a bye. Every number is this week's projection under this league's rules, and the badge on the Players tab says the same thing.</p>
+    ${head}${holes}${ups}${streamers}
+  </div>`;
 }
 /* What the week actually cost you: the best lineup the roster could have produced, scored on
    the real numbers, minus what was actually started. Retrospective on purpose - locks and
@@ -14374,7 +14575,7 @@ function renderFreeAgents(ti){
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
       <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
       <span class="pmeta">${p.team||''}</span>${byeTagHTML(null, p.team)}
-      <span class="statpill pl-projpill" title="Projected points a week under this league's rules">${projWkTxt(p)} proj</span>
+      <span class="statpill pl-projpill" title="Projected points a week under this league's rules">${projWkTxt(p)} proj${pickupBadgeHTML(p, ti)}</span>
       ${onWaivers(p.id)
         ? `<span class="statpill" title="On waivers">${esc(waiverClearLabel((wireEntry(p.id)||{}).until))}</span>
            <button class="pick" onclick="claimWaiver('${p.id}')">Claim</button>`
@@ -15185,7 +15386,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · projected vs actual, luck report';
+const BUILD_STAMP = '2026-09-06 · pickups: who would start for you, streamers';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

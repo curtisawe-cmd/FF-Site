@@ -292,6 +292,36 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Pickups (waiver and streaming suggestions)
+
+Players > **Pickups** (`renderPickups`, panel `#pickView`, sub-tab key `pl-pick`, ghost word
+PICKUPS). Everything on it is one question asked of the lineup solver: **would this guy start
+for me this week?**
+
+- `optimalLineup(ti, pts)` now delegates to `optimalLineupOf(roster, pts)`, the same solver over
+  any list of picks. `pickupGain(ti, p)` drops candidate `p` into the team's roster, re-solves,
+  and returns `{gain, slot, filled, over}` - projected points gained, the slot he lands in, the
+  empty seat he fills (`filled`, which is not always his own slot: an RB pickup can take RB while
+  the injured RB slides to the empty FLEX), or the starter he benches (`over`, with `pts:null`
+  meaning that starter is not playing). Null under half a point or if he would not start. Cached
+  in `_pkCache` per team/week/roster/lineup/file stamp, so the Players table scores 200 rows for
+  one solver run each.
+- The tab: **Holes to plug** (from `lineupIssues` after `ensureLineup`; three distinct names per
+  hole, phrased "instead of X" or "fills your empty SLOT", plus the best bench option), **Would
+  start for you** (top ten by gain from the 120 best-projected available players), and **Defence
+  / Kicker streamers** (top six by this week's projection with the opponent from `loadOpponents`
+  for this week and next, next week's projection via `projWeekReady(wk+1)`, and "Yours:" for the
+  current starter). Buttons go through `addFromPlayers(pid, event)`, which routes to the waiver
+  claim or the add-with-drop flow itself. No claimed team = notice + streamers only.
+- Candidates come from `POOL` minus `rosteredIds()` (never `PLAYERS`, and never the Players tab's
+  own "taken" set, which forgets cut board picks): the add path resolves players from `POOL`.
+- The same gain shows as a `.pk-up` badge (`pickupBadgeHTML`) beside the projection on the
+  Players table and the My Team free-agent list, and the Players table has a **Sort: Would start
+  for me** option (`plSort==='gain'`).
+- Rows are the waiver wire's `.wv-item .faRow` (the phone grid rules were un-scoped from
+  `#wvView` so `#pickView` shares them). Re-rendered by `setPlTab('pick')`, the one-minute
+  pulse, `maybeRefreshWeekProj` and the projections-arrived callback in `showView('players')`.
+
 ## Trades
 
 Offers live at `league/main/tradeOffers`, votes at `league/main/tradeVetoes` - separate
