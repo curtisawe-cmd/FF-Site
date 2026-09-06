@@ -254,6 +254,44 @@ and `p.team||p.nfl`, because roster picks and pool players use different field n
 Passing a pick to a version that only read `p.id` produced `.../thumb/undefined.jpg`,
 404'd, and silently fell back to initials. Keep it tolerant.
 
+## Projected vs actual, and luck
+
+Projections used to vanish the moment a score existed, and nothing recorded them: a played
+week's projection recomputed later was **today's** lineup against that week's file (there is
+no per-week lineup history anywhere in `S`). So the number is captured when the score is:
+
+- `postLiveScores` adds `proj: { g0:[a,b], g1:[a,b], ... }` to the live week node from
+  `weekProjPairs(wk)` (this device's `PROJ_WEEKS` file) **only while the week is being played**;
+  from Tuesday it carries forward the last post's `proj` (same season only) - the live post
+  keeps running until Thursday and a Tuesday waiver or trade must not re-project a finished
+  week from a lineup that never played. The node is a full replace. Keys are `g0..g5`, **not**
+  `0..5`: an all-integer-keyed object comes back from Firebase as an array and `weekHasScores`
+  would read it as a score. The projection fetch is raced against 8s so a stalled Sleeper never
+  blocks the score post.
+- `autoScoreWeek` freezes `S.season.proj[wk][m] = [a,b]` beside the official score: live pair,
+  then the pair already frozen, then this device's own only while the week is still on. A
+  finished week is never re-projected from today's roster. Syncs with the rest of `S.season`;
+  wiped with it on Regenerate.
+- `projOf(wk, m)` resolves official then live. `weekIsOver(wk)` (**Tuesday 04:00 local** after
+  the slate, calendar arithmetic so the November clock change cannot land it inside Monday
+  Night Football) is the **only** gate on every over/under verdict - the matchups line, the
+  pills, both Game Center headers and `projReport`. An official score does not shortcut it: the
+  commissioner can press Auto-score on a Sunday afternoon, and that is still a half-played week.
+- Matchups board: a done game keeps its pills (`.mu-pj` with `em` over/under and the `Upset`
+  tag on the underdog's pill on phones; the `.mu-proj` line with both deltas and the tag on
+  desktop). Equal projections are "pick 'em": no favourite pill, no upset. Game Center:
+  `.gc-ptot` under the desktop total, `.h2h-hproj` under the phone total, both via `projPair`
+  which looks up the **schedule index** (Game Center reorders games so yours is first), shows
+  no pair for a finished week that has none on record (that would be today's roster), and
+  withholds the verdict when the stat feed is down (`noStats`).
+- `projReport()` (cached like `allPlayFor` - both keys now include the schedule - plus an
+  hourly term so `weekIsOver` flips) gives per team: `vs` (points over projection),
+  `projW/projL` (games projected to win), `favL` (chokes) and `dogW` (upsets). The Luck report
+  card (`allPlayCardHTML`, kept its name) ranks by all-play and shows two deliberately
+  separate numbers: **luck** = real wins minus the wins the all-play rate would give over the
+  same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
+  need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
+
 ## Trades
 
 Offers live at `league/main/tradeOffers`, votes at `league/main/tradeVetoes` - separate

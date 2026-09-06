@@ -2071,6 +2071,44 @@ table.standings col.c-ap{width:96px}
   .ap-row{gap:7px;padding:6px 0}
   .ap-rec{font-size:12px} .ap-pctv{display:none} .ap-nm{font-size:13px}
 }
+/* the luck report: the all-play row with a second line for the projection side */
+.lk-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.lk-row:last-child{border-bottom:none}
+.lk-body{flex:1;min-width:0}
+.lk-top{display:flex;align-items:baseline;gap:9px;min-width:0}
+.lk-sub{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:11px;color:var(--chalk-dim);margin-top:1px;line-height:1.35}
+.lk-sub b{font-family:var(--f-mono);font-weight:600;color:var(--chalk)}
+.lk-sub i{font-style:normal;opacity:.85}
+.lk-calls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.lk-call{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"label label" "mark name" "val val";align-items:center;column-gap:7px;row-gap:2px;
+  padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);min-width:0}
+.lk-call > :first-child{grid-area:label}
+.lk-call > :nth-child(2){grid-area:mark}
+.lk-clabel{font-family:var(--f-ui);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--chalk-dim)}
+.lk-cnm{grid-area:name;font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lk-cval{grid-area:val;font-family:var(--f-mono);font-size:15px;font-weight:700}
+.lk-cval.up{color:var(--turf-bright)} .lk-cval.down{color:var(--charge)}
+@media(max-width:560px){
+  .lk-row{gap:7px;padding:6px 0} .lk-top .ap-nm{font-size:13px} .lk-top .ap-rec{font-size:12px} .lk-sub{font-size:10.5px}
+  .lk-calls{grid-template-columns:1fr 1fr;gap:6px}
+}
+/* projected beside actual: the over/under inside a pill and on the centred line, and the upset tag */
+.mu-pj em{font-style:normal;font-size:11px;font-weight:700;margin-left:2px}
+.mu-pj em.up{color:var(--turf-bright)} .mu-pj em.down{color:var(--charge)}
+/* inside the filled favourite pill the tint sits on the wash and drops under AA; the sign
+   already says which way it went, so the delta takes the pill's own colour there */
+.mu-pj.fav em{color:inherit}
+.mu-proj b.up{color:var(--turf-bright)} .mu-proj b.down{color:var(--charge)}
+.mu-upset{display:inline-block;font-family:var(--f-ui);font-weight:800;font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--charge);border:1px solid var(--charge);border-radius:4px;padding:0 5px;vertical-align:middle}
+.mu-pj .mu-upset{margin-left:5px;font-size:8.5px;padding:0 4px;line-height:1.5}
+:root[data-theme="dark"] .lk-cval.down,:root[data-theme="dark"] .mu-pj:not(.fav) em.down{color:#ff7a8a}
+/* the projected total under the score in both Game Center headers */
+.gc-totwrap{display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto;min-width:0}
+.gc-side:last-of-type .gc-totwrap{align-items:flex-start}
+.gc-ptot{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);white-space:nowrap;line-height:1.2}
+.gc-ptot b,.h2h-hproj b{font-weight:700} .gc-ptot b.up,.h2h-hproj b.up{color:var(--turf-bright)} .gc-ptot b.down,.h2h-hproj b.down{color:var(--charge)}
+.h2h-hproj{font-family:var(--f-mono);font-size:10px;color:var(--chalk-dim);white-space:nowrap;line-height:1.2}
 @media (max-width:640px){
   /* NOT table-layout:auto — with nowrap cells that grows the table past the card (was 79px
      off-screen at 375px). Keep fixed layout, shrink the number columns, and let the long
@@ -7147,7 +7185,7 @@ const TYPE_ROLES = {
   body:{ label:'Body text', hint:'Paragraphs, tables, form labels', def:'Barlow',
     sel:'body, p, td, label, .sub, .gc-pl, .gc-meta' },
   mono:{ label:'Numbers & stats', hint:'Scores, clocks, standings, the draft rail', def:'IBM Plex Mono',
-    sel:'.eyebrow, .gc-band, .clock, .board .rnd, .sticker .mt, .prow .pmeta, .tabbadge, .teamcard .num, .bgame .brow .bpts, .statpill, .prize-pot, .tk-pts, .gc-tot, .gc-pts, .gc-stat, .gc-jnum, .wk-date, .inj-sev' }
+    sel:'.eyebrow, .gc-band, .clock, .board .rnd, .sticker .mt, .prow .pmeta, .tabbadge, .teamcard .num, .bgame .brow .bpts, .statpill, .prize-pot, .tk-pts, .gc-tot, .gc-ptot, .h2h-hproj, .gc-pts, .gc-stat, .gc-jnum, .wk-date, .inj-sev, .lk-sub b' }
 };
 function typeCfg(){
   const t = (S && S.typography) || {};
@@ -8402,8 +8440,16 @@ function homeTiles(){
       go:()=>showView('draft') },
     { ic:TAB_ICONS.matchups,   name:'Matchups',    sub: wk>=1?('Week '+wk+' head to head'):'Head-to-head scoreboards',
       go:()=>showView('matchups') },
-    { ic:HOME_ICONS.standings, name:'Standings',   sub:'Wins, points, all-play',
-      go:()=>{ showView('matchups'); try{ setMuTab('st'); }catch(e){} } },
+    { ic:HOME_ICONS.standings, name:'Standings',   sub:'Wins, points, luck',
+      /* the standings live at the bottom of the matchups board - there is no 'st' tab, and
+         asking for one used to blank the whole page */
+      go:()=>{ showView('matchups'); try{ setMuTab('board'); }catch(e){}
+        setTimeout(()=>{ const h=[...document.querySelectorAll('#matchupsView h2')].find(x=>/Standings/i.test(x.textContent)); if(!h) return;
+          /* the site header and the matchups tab strip are both pinned; without a margin the
+             heading lands underneath them and the tap seems to have gone nowhere */
+          const hdr = (document.querySelector('header.top')||{}).offsetHeight||0, vh = (document.querySelector('#view-matchups .viewhead')||{}).offsetHeight||0;
+          h.style.scrollMarginTop = (hdr + vh + 12) + 'px';
+          h.scrollIntoView({behavior:'smooth',block:'start'}); }, 60); } },
     { ic:HOME_ICONS.myteam,    name:'My Team',     sub: (mi!==null && S.teams[mi]) ? S.teams[mi].name : 'Pick your team',
       go:()=>{ showView('teams'); window.teamsSub='my'; renderTeams(); } },
     { ic:TAB_ICONS.teams,      name:'All Teams',   sub: N()+' rosters, starters & bench',
@@ -10848,19 +10894,49 @@ async function renderGameCenter(){
      its own column of players. The card's desktop header is hidden at this width - one header,
      not two - and this one stays glued to the top of the card while the rows scroll under it,
      so you never lose track of which side is yours. */
+  /* The team's projected total for the header, both layouts. A played week keeps the pair it
+     was played under (projOf); this week projects the lineups as they stand. The over/under
+     verdict waits for the week to be over, like the matchups board. Game Center reorders the
+     games so yours is first, so the schedule index is looked up, not assumed. */
+  const sched = (S.season && S.season.schedule && S.season.schedule[wk]) || [];
+  const projPair = (ax, bx) => {
+    if(!showProj) return null;
+    const mi = sched.findIndex(x=>x && x[0]===ax && x[1]===bx);
+    const kept = mi>=0 ? projOf(wk, mi) : null;
+    /* the verdict needs a real total to judge: a stat-feed outage shows every team at 0.0 and
+       a red -104.0 under it would be a lie about the feed, not the team */
+    if(kept) return { pair: kept, verdict: weekIsOver(wk) && !noStats };
+    /* no pair on record: project the lineups as they stand only while the week is still being
+       played - for a finished week that is today's roster against an old file, the number the
+       matchups board also refuses to show */
+    if(weekIsOver(wk) || (mi>=0 && officialScore(wk, mi))) return null;
+    if(statsLoaded && wkProjReady && PROJ_WEEKS[wk] && PROJ_WEEKS[wk].data){
+      const a = projectedTotal(ax, wk), b = projectedTotal(bx, wk);
+      if(a || b) return { pair:[a,b], verdict:false };
+    }
+    return null;
+  };
+  const projLine = (pp, side, total) => {
+    if(!pp) return '';
+    const v = pp.pair[side], d = Math.round((total - v)*10)/10;
+    return `proj ${v.toFixed(1)}${pp.verdict?` <b class="${d>=0?'up':'down'}">${signed1(d)}</b>`:''}`;
+  };
   const h2hHead = (ax, bx, A, B) => {
     const tA=S.teams[ax]||{}, tB=S.teams[bx]||{};
     const aw = A.total>B.total, bw = B.total>A.total;
     const sub = (t,ti) => [t.manager||'', gcRec[ti]||''].filter(Boolean).join(' · ');
+    const pp = projPair(ax, bx);
     return `<div class="h2h-head">
       <div class="h2h-ht l">
         <div class="h2h-htop">${teamMarkHTML(tA,34)}<span class="h2h-htot${aw?' win':''}">${A.total.toFixed(1)}</span></div>
+        ${pp?`<div class="h2h-hproj">${projLine(pp,0,A.total)}</div>`:''}
         <div class="h2h-hname">${esc(tA.name||'?')}</div>
         <div class="h2h-hmgr">${esc(sub(tA,ax))}</div>
       </div>
       <div class="h2h-hvs">VS</div>
       <div class="h2h-ht r">
         <div class="h2h-htop"><span class="h2h-htot${bw?' win':''}">${B.total.toFixed(1)}</span>${teamMarkHTML(tB,34)}</div>
+        ${pp?`<div class="h2h-hproj">${projLine(pp,1,B.total)}</div>`:''}
         <div class="h2h-hname">${esc(tB.name||'?')}</div>
         <div class="h2h-hmgr">${esc(sub(tB,bx))}</div>
       </div>
@@ -10918,11 +10994,12 @@ async function renderGameCenter(){
     const A=teamWeekDetail(g[0],stats), B=teamWeekDetail(g[1],stats);
     const tA=S.teams[g[0]], tB=S.teams[g[1]];
     const aWin=A.total>B.total, bWin=B.total>A.total;
+    const pp = projPair(g[0], g[1]);
     return `<section class="gc-card"><div class="card" style="padding:0;overflow:hidden">
       <div class="gc-head">
-        <span class="gc-side">${teamMarkHTML(tA,42)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span></span>
+        <span class="gc-side">${teamMarkHTML(tA,42)}<span class="nm">${esc(tA?.name||'?')}</span><span class="gc-totwrap"><span class="gc-tot ${aWin?'win':''}">${A.total.toFixed(1)}</span>${pp?`<span class="gc-ptot">${projLine(pp,0,A.total)}</span>`:''}</span></span>
         <span class="gc-vs">VS</span>
-        <span class="gc-side"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
+        <span class="gc-side"><span class="gc-totwrap"><span class="gc-tot ${bWin?'win':''}">${B.total.toFixed(1)}</span>${pp?`<span class="gc-ptot">${projLine(pp,1,B.total)}</span>`:''}</span><span class="nm">${esc(tB?.name||'?')}</span>${teamMarkHTML(tB,42)}</span>
       </div>
       ${(()=>{ try{ return rivalryBannerHTML(g[0], g[1]); }catch(e){ return ''; } })()}
       <div class="wp-desk">${winBarHTML(A.total, B.total, false, noStats?'Win probability · no stats yet':'Win probability')}</div>
@@ -10978,6 +11055,22 @@ async function autoScoreWeek(wk, statSeason, silent){
       S.season.scores[wk][m] = [A.total, B.total];
       scored++;
     });
+    /* freeze the projection beside the official score: the live post's pair first (the lineup
+       that actually played), then whatever was frozen before, and this device's own only
+       while the week is still being played - a finished week is never re-projected from
+       today's roster, a missing projection being honest where a recomputed one is not */
+    let mine = null;
+    if(!weekIsOver(wk)){ try{ await Promise.race([loadWeekProj(wk), new Promise(r=>setTimeout(r, 8000))]); mine = weekProjPairs(wk); }catch(e){} }
+    S.season.proj = S.season.proj || {};
+    S.season.proj[wk] = S.season.proj[wk] || {};
+    const liveNode = (liveScoresMap && liveScoresMap[wk]) || {};
+    const live = (+liveNode.season === season || !liveNode.season) ? liveNode.proj : null;
+    games.forEach((g,m)=>{
+      const lp = live && live['g'+m], kept = S.season.proj[wk][m], mp = mine && mine['g'+m];
+      const real = p => p && (+p[0] || +p[1]);
+      const pr = real(lp) ? lp : real(kept) ? kept : real(mp) ? mp : null;
+      if(pr) S.season.proj[wk][m] = [+pr[0], +pr[1]];
+    });
     S.season.autoScored = S.season.autoScored || {};
     S.season.autoScored[wk] = { at: Date.now(), season };
     saveState();
@@ -10999,6 +11092,21 @@ async function postLiveScores(wk, season){
   if(!stats || !Object.keys(stats).length) return false;
   const payload = { at: Date.now(), by: window.fbUser.uid, season: +season || +S.season.year || 2026 };
   games.forEach((g,m)=>{ payload[m] = [ teamWeekDetail(g[0],stats).total, teamWeekDetail(g[1],stats).total ]; });
+  /* The projections the week is being played under ride with the score (see projOf). This
+     device's while the week is still being played; once it is over (Tuesday) the pair from
+     the last post is what carries forward - the live post keeps running until Thursday, and a
+     waiver claim or trade processed on Tuesday would otherwise rewrite a finished week's
+     projection from a lineup that never played. The node is a full replace, so leaving the
+     pair out would erase what somebody else recorded; a pair from another season is not
+     carried, since the node outlives the schedule that made it. Never waits on the network
+     for this: the score post must go out whether or not Sleeper answers in time. */
+  if(!PROJ_WEEKS[+wk] && !weekIsOver(wk)){
+    try{ await Promise.race([loadWeekProj(wk), new Promise(r=>setTimeout(r, 8000))]); }catch(e){}
+  }
+  const prev = liveScoresMap && liveScoresMap[wk];
+  const proj = (!weekIsOver(wk) && weekProjPairs(wk))
+            || (prev && prev.proj && +prev.season === +payload.season ? prev.proj : null);
+  if(proj) payload.proj = proj;
   await window.FB.dbSet(`${livePath()}/${wk}`, payload);
   return true;
 }
@@ -11611,7 +11719,7 @@ let _apCache = { key:'', rows:null };
 /* The standings table asks for this once per row; recomputing the whole season each time is
    wasteful, and the answer only moves when a score does. */
 function allPlayFor(ti){
-  const key = JSON.stringify([S.season&&S.season.scores, liveScoresMap, (S.teams||[]).length]);
+  const key = JSON.stringify([S.season&&S.season.schedule, S.season&&S.season.scores, liveScoresMap, (S.teams||[]).length]);
   if(_apCache.key !== key){ _apCache = { key, rows: allPlayRows() }; }
   return (_apCache.rows||[])[ti] || { w:0,l:0,t:0,games:0,pct:0 };
 }
@@ -11623,6 +11731,81 @@ function luckWins(r){
   const played = r.w + r.l + r.t;
   return Math.round((r.w - ap.pct*played) * 10) / 10;
 }
+/* ===================== PROJECTED vs ACTUAL =====================
+   What every team was projected to score, kept beside what it did. Nothing recorded this
+   before: projections lived in memory and a lineup is only ever "now", so a played week's
+   projection recomputed later was today's roster against last month's file - a traded player
+   simply vanished from it. The number is captured when the score is: the live post carries it
+   (any member's device, every three minutes, so the last post of the week is the lineup that
+   actually played) and Auto-score freezes it beside the official score. Stored as [a,b] per
+   matchup like the scores themselves: S.season.proj[wk][m] official, liveScores/{wk}.proj.g{m}
+   provisional. The live key is 'g0'..'g5', not 0..5 - an all-integer-keyed object comes back
+   from Firebase as an array and weekHasScores would read a projection as a score. */
+function projOf(wk, m){
+  const ok = p => Array.isArray(p) && p.length===2 && p[0]!=null && p[1]!=null && (+p[0] || +p[1]);
+  const o = S.season && S.season.proj && S.season.proj[wk] && S.season.proj[wk][m];
+  if(ok(o)) return [+o[0], +o[1]];
+  const w = liveScoresMap && liveScoresMap[wk], l = w && w.proj && w.proj['g'+m];
+  if(ok(l)) return [+l[0], +l[1]];
+  return null;
+}
+/* This device's pairs for a week - only when the week's file is in, and never zeros. A device
+   without the file says nothing rather than publishing 0-0 over somebody else's real numbers. */
+function weekProjPairs(wk){
+  const pw = PROJ_WEEKS[+wk];
+  if(!pw || !pw.data) return null;
+  const games = (S.season && S.season.schedule && S.season.schedule[wk]) || [];
+  const out = {}; let any = false;
+  games.forEach((g,m)=>{
+    const a = projectedTotal(g[0], +wk), b = projectedTotal(g[1], +wk);
+    if(a || b){ out['g'+m] = [a, b]; any = true; }
+  });
+  return any ? out : null;
+}
+/* A week is over from 4am on the Tuesday after it: the Thursday-to-Monday slate has been
+   played, Monday night's overtime is long done, and what a team scored against its projection
+   is a fact rather than a half-time score. Until then the projection is shown without a
+   verdict. Calendar days, not 86,400,000s: the clocks go back in November and a millisecond
+   count would land the flip at 11pm Monday, in the fourth quarter of Monday Night Football.
+   Rescheduled Tuesday games are rare enough to wear. */
+function weekIsOver(wk){
+  wk = +wk; if(!(wk>=1)) return false;
+  const d = new Date(NFL_2026_WEEK1.getTime());
+  d.setDate(d.getDate() + (wk-1)*7 + 5);
+  d.setHours(4, 0, 0, 0);
+  return Date.now() >= d.getTime();
+}
+/* Per team, over the finished weeks with a projection on record: how far over or under the
+   projections it has scored, how many games it was supposed to win, and how the favourite
+   fared - a win as the underdog is an upset, a loss as the favourite is a choke. Cached like
+   allPlayFor, on everything the answer can move with. */
+let _prCache = { key:'', rows:null };
+function projReport(){
+  const key = JSON.stringify([S.season&&S.season.schedule, S.season&&S.season.scores, S.season&&S.season.proj, liveScoresMap, (S.teams||[]).length, Math.floor(Date.now()/3600000)]);
+  if(_prCache.key === key && _prCache.rows) return _prCache.rows;
+  const rows = (S.teams||[]).map((t,i)=>({ i, games:0, vs:0, projW:0, projL:0, favW:0, favL:0, dogW:0, dogL:0 }));
+  Object.entries((S.season && S.season.schedule) || {}).forEach(([wk,games])=>{
+    (games||[]).forEach((g,m)=>{
+      const [pa,pb] = mScore(wk,m); if(pa==null || pb==null) return;
+      if(!weekIsOver(wk)) return;                                /* a live Sunday is not a verdict */
+      const pr = projOf(wk,m); if(!pr) return;
+      const A = rows[g[0]], B = rows[g[1]]; if(!A || !B) return;
+      A.games++; B.games++;
+      A.vs += pa - pr[0]; B.vs += pb - pr[1];
+      if(pr[0] === pr[1]) return;                                /* no favourite, no upset */
+      const fav = pr[0] > pr[1] ? A : B, dog = fav===A ? B : A;
+      fav.projW++; dog.projL++;
+      if(pa === pb) return;
+      const favWon = (fav===A) === (pa > pb);
+      if(favWon){ fav.favW++; dog.dogL++; } else { fav.favL++; dog.dogW++; }
+    });
+  });
+  rows.forEach(r=>{ r.vs = Math.round(r.vs*10)/10; });
+  _prCache = { key, rows };
+  return rows;
+}
+function projReportFor(ti){ return projReport()[ti] || { i:ti, games:0, vs:0, projW:0, projL:0, favW:0, favL:0, dogW:0, dogL:0 }; }
+const signed1 = n => (n>0?'+':n<0?'−':'') + Math.abs(n).toFixed(1);
 /* The Toilet Bowl: lowest score of the most recent scored week wears the crown until somebody
    earns it off them. Derived from the scores on every render - no state to desync. */
 function toiletBowlTeam(){
@@ -12091,17 +12274,34 @@ function renderMatchups(){
            Best lineup button optimises, so the board and the roster never disagree. THIS
            week's file, so a week-7 matchup already has week 7's byes and injuries out of it;
            held back until that week's file is in rather than drawn from the season average */
+        /* A played game keeps the projection it was played under (projOf: frozen with the
+           official score, or riding the live post); the number stays on the board beside the
+           final so the whole season reads as forecast against result. */
+        const kept = done ? projOf(wk, m) : null;
         const canProj = !done && statsLoaded && wkProjReady;
-        const prA = canProj ? projectedTotal(g[0], +wk) : null;
-        const prB = canProj ? projectedTotal(g[1], +wk) : null;
+        const prA = kept ? kept[0] : canProj ? projectedTotal(g[0], +wk) : null;
+        const prB = kept ? kept[1] : canProj ? projectedTotal(g[1], +wk) : null;
         const edge = (prA!=null && prB!=null && (prA||prB)) ? (prA>=prB?0:1) : null;
-        const projTag = (edge!=null)
-          ? `<div class="mu-proj">Projected ${prA.toFixed(1)} &ndash; ${prB.toFixed(1)} · edge <b>${esc((S.teams[g[edge]]||{}).name||'')}</b></div>` : '';
+        /* dead-even projections have no favourite: nobody gets the filled pill, and a win is
+           not an upset (the Luck report skips those games for the same reason) */
+        const tied = edge!=null && prA===prB;
+        const favIdx = tied ? null : edge;
+        /* the verdict - how far over or under, and whether the favourite fell - waits for the
+           week to be over (weekIsOver, Tuesday); an official score typed in on a Sunday
+           afternoon is still a half-played week */
+        const verdict = done && edge!=null && weekIsOver(wk);
+        const dA = verdict ? Math.round((pa-prA)*10)/10 : null, dB = verdict ? Math.round((pb-prB)*10)/10 : null;
+        const upset = verdict && !tied && pa!==pb && ((edge===0) !== (pa>pb));
+        const dTag = d => `<b class="${d>=0?'up':'down'}">${signed1(d)}</b>`;
+        const projTag = (edge==null) ? ''
+          : verdict
+          ? `<div class="mu-proj">Projected ${prA.toFixed(1)} &ndash; ${prB.toFixed(1)} · ${esc((S.teams[g[0]]||{}).name||'')} ${dTag(dA)} · ${esc((S.teams[g[1]]||{}).name||'')} ${dTag(dB)}${upset?' · <span class="mu-upset">Upset</span>':''}</div>`
+          : `<div class="mu-proj">Projected ${prA.toFixed(1)} &ndash; ${prB.toFixed(1)} · ${tied ? "pick 'em" : `edge <b>${esc((S.teams[g[edge]]||{}).name||'')}</b>`}</div>`;
         const aWin = done && pa>pb, bWin = done && pb>pa;
         /* On a phone the same two numbers sit under their own score boxes instead of on one
            centred line (see .mu-pj) - the favourite's pill is filled and carries the marker. */
         const pj = (v, which) => (edge!=null)
-          ? `<span class="mu-pj ${which}${edge===(which==='a'?0:1)?' fav':''}"><i>Proj${edge===(which==='a'?0:1)?' \u25B2':''}</i>${v.toFixed(1)}</span>` : '';
+          ? `<span class="mu-pj ${which}${favIdx===(which==='a'?0:1)?' fav':''}"><i>Proj${favIdx===(which==='a'?0:1)?' \u25B2':''}</i>${v.toFixed(1)}${verdict?`<em class="${(which==='a'?dA:dB)>=0?'up':'down'}">${signed1(which==='a'?dA:dB)}</em>`:''}${(upset && favIdx!==(which==='a'?0:1))?'<span class="mu-upset">Upset</span>':''}</span>` : '';
         const side = (ti,win,other,right) => {
           if(edit) return `<span class="mu-team${right?' r':''}"><select onchange="setMatchTeam('${wk}',${m},${other},+this.value)">${teamOpts(ti)}</select></span>`;
           const t = S.teams[ti];
@@ -12143,29 +12343,65 @@ function renderMatchups(){
 /* The neutral table. Ranking by all-play is the whole point - it is the order the season would
    have if nobody drew an easy week, and putting the real record beside it is what turns a
    number into an argument. */
+/* The Luck report. Grew out of the all-play card and still ranks by the all-play record; what
+   it adds is the projection side of the same argument. Two numbers, kept apart on purpose:
+   LUCK is real wins minus all-play wins - what the schedule handed you. VS PROJ is real points
+   minus projected points - what your players handed you. A team can be lucky and bad, or good
+   and robbed, and this is the card that says which. Callouts name the extremes in the league's
+   own voice. */
 function allPlayCardHTML(rows){
   const ap = allPlayRows().filter(r=>r.games);
   if(!ap.length) return '';
   ap.sort((a,b)=> b.pct-a.pct || b.w-a.w);
   const realRank = {}; rows.forEach((r,i)=>realRank[r.i]=i+1);
   const byIdx = {}; rows.forEach(r=>byIdx[r.i]=r);
+  const pr = projReport();
+  const anyProj = pr.some(r=>r.games);
+  const rec = (w,l,t) => `${w}-${l}${t?'-'+t:''}`;
+  /* the extremes: only named when the number actually leans, and never off a one-game sample -
+     a team's all-play "games" are its eleven comparisons a week, so the sample is the REAL
+     record, not that */
+  const luckOf = r => { const real = byIdx[r.i]; return real ? luckWins(real) : null; };
+  const played = r => { const x = byIdx[r.i]; return x ? x.w + x.l + x.t : 0; };
+  const lucky = ap.filter(r=>luckOf(r)!=null && played(r)>=2).sort((a,b)=>luckOf(b)-luckOf(a));
+  const over = pr.filter(r=>r.games>=2).sort((a,b)=>b.vs-a.vs);
+  const call = (label, r, value, cls) => r ? `<div class="lk-call"><span class="lk-clabel">${label}</span>${teamMarkHTML(S.teams[r.i], 22)}<span class="lk-cnm">${esc((S.teams[r.i]||{}).name||'')}</span><b class="lk-cval ${cls}">${value}</b></div>` : '';
+  const callouts = [
+    lucky.length && luckOf(lucky[0]) >= 0.5 ? call('Luckiest', lucky[0], signed1(luckOf(lucky[0]))+' W', 'up') : '',
+    lucky.length && luckOf(lucky[lucky.length-1]) <= -0.5 ? call('Robbed', lucky[lucky.length-1], signed1(luckOf(lucky[lucky.length-1]))+' W', 'down') : '',
+    over.length && over[0].vs >= 5 ? call('Overachiever', over[0], signed1(over[0].vs)+' vs proj', 'up') : '',
+    over.length && over[over.length-1].vs <= -5 ? call('Fraud', over[over.length-1], signed1(over[over.length-1].vs)+' vs proj', 'down') : '',
+  ].filter(Boolean).join('');
   return `<div class="card" style="margin-top:18px">
-    <h2>All-play standings</h2>
-    <p class="sub" data-note="allplay-intro" style="margin:2px 0 10px">Everyone's score against everyone else's, every week. This is the table you would have if the schedule never did you a favour, so the gap between a team's two records is how lucky it has been.</p>
+    <h2>Luck report</h2>
+    <p class="sub" data-note="luck-intro" style="margin:2px 0 10px">All-play is everyone's score against everyone else's, every week - the record you'd have if the schedule never did you a favour. <b>Luck</b> is your real wins minus the wins your all-play rate says you'd have over the same games. <b>Proj</b> is what the projections said going in: the games you were supposed to win, and how far over or under them you've actually scored.</p>
+    ${callouts?`<div class="lk-calls">${callouts}</div>`:''}
     ${ap.map((r,i)=>{
       const real = byIdx[r.i] || {w:0,l:0,t:0};
       const lk = luckWins(real);
       const moved = (realRank[r.i]||0) - (i+1);
-      return `<div class="ap-row">
+      const p = pr[r.i] || projReportFor(r.i);
+      /* a dead-even number is not worth a chip - "0.0 luck" is noise, not a verdict */
+      const chip = (v, unit, title) => (v==null || Math.abs(v) < 0.05) ? '' : ` <span class="ap-luck ${v>0?'up':'down'}" title="${esc(title)}">${signed1(v)}${unit}</span>`;
+      const upsets = [p.dogW?`${p.dogW} upset${p.dogW>1?'s':''}`:'', p.favL?`${p.favL} choke${p.favL>1?'s':''}`:''].filter(Boolean).join(', ');
+      return `<div class="lk-row">
         <span class="ap-rk">${i+1}</span>
         ${teamMarkHTML(S.teams[r.i], 26)}
-        <span class="ap-nm">${esc(r.name)}${moved?` <span class="ap-luck ${moved>0?'up':'down'}" title="${moved>0?`${moved} place${moved===1?'':'s'} better than the real standings`:`${-moved} place${moved===-1?'':'s'} worse than the real standings`}">${moved>0?'\u25b2':'\u25bc'}${Math.abs(moved)}</span>`:''}</span>
-        <span class="ap-real">real ${real.w}-${real.l}${real.t?'-'+real.t:''}${
-          lk===null||Math.abs(lk)<0.5?'':` <span class="ap-luck ${lk>0?'up':'down'}">${lk>0?'+':''}${Math.round(lk)}</span>`}</span>
-        <span class="ap-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span>
-        <span class="ap-pctv">${Math.round(r.pct*100)}%</span>
+        <div class="lk-body">
+          <div class="lk-top">
+            <span class="ap-nm">${esc(r.name)}${moved?` <span class="ap-luck ${moved>0?'up':'down'}" title="${moved>0?`${moved} place${moved===1?'':'s'} better than the real standings`:`${-moved} place${moved===-1?'':'s'} worse than the real standings`}">${moved>0?'\u25b2':'\u25bc'}${Math.abs(moved)}</span>`:''}</span>
+            <span class="ap-rec" title="All-play record">${rec(r.w,r.l,r.t)}</span>
+            <span class="ap-pctv">${Math.round(r.pct*100)}%</span>
+          </div>
+          <div class="lk-sub">
+            <span>real <b>${rec(real.w,real.l,real.t)}</b>${lk===null?'':chip(lk,' luck','Real wins minus the wins your all-play rate would give over the same games: what the schedule gave or cost you')}</span>
+            ${p.games?`<span>proj <b>${rec(p.projW,p.projL,0)}</b>${upsets?` <i>${upsets}</i>`:''}</span><span>${chip(p.vs,' vs proj',`Scored ${signed1(p.vs)} against the projections over ${p.games} game${p.games>1?'s':''}`)}</span>`
+              : (anyProj ? '' : '')}
+          </div>
+        </div>
       </div>`;
     }).join('')}
+    ${anyProj?'':`<p class="sub" style="margin:10px 0 0;font-size:12px">The proj side fills in from the Tuesday after each week - a week's projections are kept beside its scores from here on.</p>`}
   </div>`;
 }
 
@@ -14949,7 +15185,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · lineup alerts before kickoff';
+const BUILD_STAMP = '2026-09-06 · projected vs actual, luck report';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
