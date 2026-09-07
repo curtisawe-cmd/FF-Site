@@ -16501,8 +16501,9 @@ function draftReadiness(){
     keepersIn = (d.picks||[]).filter(x=>+x.pickIndex>=0 && roundForPick(+x.pickIndex)===0 && !x.cut).length;
   }catch(e){}
 
-  let started=false, picks=0;
-  try{ const d=realDraft(); started=!!d.started; picks=(d.picks||[]).filter(x=>+x.pickIndex>=0).length; }catch(e){}
+  let started=false, picks=0, finished=false, locked=false;
+  try{ const d=realDraft(); started=!!d.started; finished=!!d.finished; picks=(d.picks||[]).filter(x=>+x.pickIndex>=0).length; }catch(e){}
+  try{ locked = seasonStarted(); }catch(e){}
 
   /* NOT S.pushAppId: it falls back to a constant in the page, so the raw setting reads empty
      on a league where push is working. The accessors are what the sending code actually uses. */
@@ -16511,7 +16512,7 @@ function draftReadiness(){
   try{ relayOk = !!String(pushRelay()||'').trim(); }catch(e){}
   const pushOn = appOk && relayOk;
 
-  return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks,
+  return { n, claimed, unclaimed, stranded, doubled, keeperOn, keepersIn, started, picks, finished, locked,
            pushOn, appOk, relayOk, accounts: accounts.length,
            cap: (()=>{ try{ return managerCap(); }catch(e){ return n; } })() };
 }
@@ -16572,21 +16573,31 @@ function renderReadyCard(){
                  : 'The App ID is missing under Push notifications.'),
     r.pushOn ? 'ready' : 'not set'));
 
-  rows.push(row(r.started ? 'warn' : 'ok', 'Draft board',
-    r.started ? r.picks + ' picks already made. Reset it before the real draft if this was a test.'
-              : 'Clean and waiting.',
-    r.started ? 'in progress' : 'clean'));
+  /* a finished board is a result, not a warning - and once the season has started it is the
+     league's rosters, which is the one state this card exists to reach */
+  rows.push(r.locked
+    ? row('ok', 'Draft board', r.picks + ' picks locked in as the rosters on ' + esc(seasonStartedLabel()) + '.', 'season under way')
+    : r.finished
+      ? row('warn', 'Draft board', 'Draft complete, ' + r.picks + ' picks. Press Start The Season in the Draft room to lock the rosters in.', 'complete')
+      : row(r.started ? 'warn' : 'ok', 'Draft board',
+          r.started ? r.picks + ' picks already made. Reset it before the real draft if this was a test.'
+                    : 'Clean and waiting.',
+          r.started ? 'in progress' : 'clean'));
 
   /* missing keepers stopped being a blocker when the draft stopped waiting on them */
   const blocking = r.claimed.length < r.n || r.doubled.length > 0;
   let days = '';
-  try{ days = Math.max(0, Math.ceil((draftAt().getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
+  if(r.locked) days = 'season under way';
+  else if(r.finished) days = 'draft complete';
+  else try{ days = Math.max(0, Math.ceil((draftAt().getTime()-Date.now())/86400000)) + ' days to the draft'; }catch(e){}
 
   el.innerHTML = `<div class="rd-head"><h2 style="margin:0">Draft readiness</h2>
       <span class="rd-count">${esc(days)}</span></div>
-    <p class="sub" data-note="ready-intro" style="margin:4px 0 12px">${blocking
+    ${r.locked
+      ? `<p class="sub" data-note="ready-intro-season" style="margin:4px 0 12px">Worked out from the live league. The draft is done and the rosters are locked in - what is left here is the season's plumbing.</p>`
+      : `<p class="sub" data-note="ready-intro" style="margin:4px 0 12px">${blocking
       ? 'Worked out from the live league. The items below are the ones that make draft day harder than it needs to be.'
-      : 'Worked out from the live league. Nothing is standing in the way of draft day.'}</p>
+      : 'Worked out from the live league. Nothing is standing in the way of draft day.'}</p>`}
     ${rows.join('')}`;
   try{ paintNotes(); }catch(e){}
 }
