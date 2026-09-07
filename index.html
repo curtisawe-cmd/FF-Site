@@ -2424,6 +2424,9 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .sw-bench{font-size:11.5px;color:var(--chalk-dim);padding:4px 0 0;line-height:1.35}
 .sw-bench b{color:var(--chalk)} .sw-bench.bad{color:var(--charge)} .sw-bench.bad b{color:var(--charge)}
 .bw-row.me{background:var(--turf-wash);border-radius:6px;padding-left:4px}
+/* the commissioner managing another team: the bar and the card both say so, in red */
+.cm-bar.on{border-left-color:var(--charge)}
+.myteam-card.cm-on{outline:2px solid var(--charge);outline-offset:-2px}
 .bw-you{font-style:normal;font-family:var(--f-ui);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--turf)}
 .sw-line{margin:10px 0 0;font-size:13.5px;line-height:1.4}
 .sw-line b{color:var(--turf)}
@@ -6013,7 +6016,13 @@ function openPlayer(id){
 }
 function closePlayer(){ const ov=document.getElementById('playerModal'); if(ov) ov.style.display='none'; }
 /* the team the signed-in user adds to (their claimed team; commissioners fall back to the device pick) */
-function addTargetTeam(){ const ti = myTeamIdx(); return (Number.isInteger(ti) && canEditTeam(ti)) ? ti : null; }
+/* the team an Add or a Claim goes to: the commissioner's managed team while that switch is on
+   (see commishAsTeam), else this device's own */
+function addTargetTeam(){
+  const as = (typeof commishAsTeam==='function') ? commishAsTeam() : null;
+  const ti = as!=null ? as : myTeamIdx();
+  return (Number.isInteger(ti) && canEditTeam(ti)) ? ti : null;
+}
 /* add from the Players tab — routes through addWithDrop, which forces a drop when the roster is full */
 function addFromPlayers(pid, ev){
   if(ev){ ev.stopPropagation(); }
@@ -15843,15 +15852,45 @@ function renderFreeAgents(ti){
     </div>`).join('') || `<p class="sub" style="margin:8px 0 0">No available players match.</p>`)
     + (fa.length>40 ? `<p class="sub" style="margin:8px 0 0">Showing 40 of ${fa.length} — search to narrow.</p>` : '');
 }
+/* ===================== COMMISSIONER: MANAGE A TEAM =====================
+   Fixing a lineup for someone at the bar is the commissioner's job, and the permission has
+   always been there (canEditTeam says yes to an admin for any team) - what was missing was a
+   way to reach another roster's page. This is that: a switch on My Team, per device and per
+   session, that points the page and every Add button at the chosen team. Nothing about the
+   writes changes; each move is logged under the commissioner's account against that team. */
+function commishAsTeam(){
+  const n = window.commishAs;
+  return (isAdmin() && Number.isInteger(n) && (S.teams||[])[n] && n!==myTeamIdx()) ? n : null;
+}
+function commishManage(v){
+  if(!requireAdmin()) return;
+  const n = (v===''||v==null) ? null : +v;
+  window.commishAs = (Number.isInteger(n) && (S.teams||[])[n] && n!==myTeamIdx()) ? n : null;
+  window.teamsSub = 'my'; renderTeams();
+  toast(window.commishAs!=null ? `Managing ${teamName(window.commishAs)} as commissioner` : 'Back to your own team');
+}
+function commishBarHTML(own, asTi){
+  if(!isAdmin()) return '';
+  return `<div class="notice cm-bar${asTi!=null?' on':''}" style="max-width:760px;margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <span>${asTi!=null
+      ? `<b>Commissioner:</b> editing <b>${esc(teamName(asTi))}</b>'s roster. Every move goes in the log under your name.`
+      : `<b>Commissioner:</b> manage any team's roster from here.`}</span>
+    <span class="row" style="gap:6px;align-items:center">
+      <select onchange="commishManage(this.value)" style="max-width:220px"><option value="">My own team</option>${(S.teams||[]).map((t,i)=> i===own ? '' : `<option value="${i}" ${i===asTi?'selected':''}>${esc(t.name)}${t.manager?` (${esc(t.manager)})`:''}</option>`).join('')}</select>
+      ${asTi!=null?`<button class="btn ghost" style="padding:4px 12px" onclick="commishManage('')">Done</button>`:''}
+    </span>
+  </div>`;
+}
 function renderMyTeam(){
   const el = document.getElementById('myTeamView');
-  const mi = myTeamIdx();
+  const own = myTeamIdx(), asTi = commishAsTeam();
+  const mi = asTi!=null ? asTi : own;
   const locked = Number.isInteger((typeof myTeamIndex==='function')?myTeamIndex():null);  /* claimed manager can't switch teams */
   const sel = locked ? '' : `<select onchange="store.set('ffl_my_team', this.value);renderTeams()">
     <option value="" ${mi===null?'selected':''}>\u2014 pick your team \u2014</option>
     ${S.teams.map((t,i)=>`<option value="${i}" ${i===mi?'selected':''}>${esc(t.name)}${t.manager?` (${esc(t.manager)})`:''}</option>`).join('')}</select>`;
   if(mi===null || !S.teams[mi]){
-    el.innerHTML = `<div class="card" style="max-width:560px"><h2>Whose team is this device?</h2>
+    el.innerHTML = commishBarHTML(own, asTi) + `<div class="card" style="max-width:560px"><h2>Whose team is this device?</h2>
       <p class="sub" style="margin-bottom:10px">Each manager picks their own team here \u2014 the choice sticks on this device.</p>${sel}</div>`;
     return;
   }
@@ -15931,11 +15970,12 @@ function renderMyTeam(){
   const irRows = irFilled.map(p=>playerRow(p,'IR')).join('')
     + Array(Math.max(0,(+S.roster.IR||0)-irFilled.length)).fill(emptyRow('IR')).join('');
   el.innerHTML = `
+    ${commishBarHTML(own, asTi)}
     <div id="myTeamSweat" style="display:none;max-width:760px"></div>
-    <div class="card myteam-card" style="max-width:760px">
+    <div class="card myteam-card${asTi!=null?' cm-on':''}" style="max-width:760px">
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
-        <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,72)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
+        <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,72)}<div style="min-width:0"><div class="eyebrow">${asTi!=null?'Managing as commissioner':'My Team'}</div><h2 style="margin:0">${esc(t.name)}</h2>
         <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}${(()=>{ try{ const o = st && statsLoaded ? playoffOddsFor(mi) : null; return o ? ` \u00B7 <span title="Simulated from here - the full table is on the Playoffs tab">${o.po>=10?Math.round(o.po):o.po.toFixed(1)}% playoffs \u00B7 ${o.title>=10?Math.round(o.title):o.title.toFixed(1)}% title</span>` : ''; }catch(e){ return ''; } })()}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px">${(brandingLocked()&&!isAdmin())?`<span title="${S.lockBranding?'The commissioner has locked team names and logos':'Names and logos are locked while the season runs'}" style="color:var(--chalk-dim)">Name &amp; logo locked 🔒</span>`:`<label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · <a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
         ${sel}
       </div>
@@ -16697,7 +16737,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · trash talk with receipts';
+const BUILD_STAMP = '2026-09-07 · commissioner can manage any roster';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

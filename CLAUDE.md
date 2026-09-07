@@ -99,6 +99,15 @@ before pushing.
   While it is on, `isAdmin()` is false - worth remembering when a permission bug only
   reproduces on one device.
 
+**The commissioner can manage any roster.** My Team carries a bar for admins (`commishBarHTML`)
+with a team select; `commishManage(ti)` sets `window.commishAs` (memory only - it resets on
+reload on purpose, so nobody stays pointed at someone else's team by accident) and the page
+renders that team with the same lineup selects, add-with-drop and free-agent list a manager
+gets, outlined in red. `commishAsTeam()` is the switch; `addTargetTeam()` (Players, Pickups,
+waiver claims) follows it, so every Add and Claim goes to the managed team. Writes are
+unchanged: `canEditTeam` already said yes to an admin, moves are logged under the admin's uid
+with `admin:true`, and `lockGuard` still asks before pushing through a locked move.
+
 **Role is per device.** `isAdmin()` reads `ffl_role` from that browser's localStorage and is
 not synced, so the same account can be commissioner on a laptop and a viewer on a phone.
 That asymmetry explains most "it works for me" reports.
