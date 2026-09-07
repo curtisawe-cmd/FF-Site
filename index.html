@@ -16224,8 +16224,12 @@ function renderWaivers(){
       </dl>
     </div>`;
 
+  /* the wire first: who is on waivers is what the tab is opened for, and it was sitting under
+     the priority list and the how-it-works notes */
   el.innerHTML = `
     ${blockedHTML}
+    <div class="card"><h2>On waivers</h2>${wireHTML}</div>
+    ${mineHTML}
     ${budgetHTML}
     <div class="card">
       <h2>Waiver priority${faabOn()?'' :you}</h2>
@@ -16234,8 +16238,7 @@ function renderWaivers(){
         ? 'Under FAAB this order only breaks a tied bid. Win a claim and you still drop to the back, so tied bids do not keep falling the same way. Dropped players sit here {waitTime} before anyone can add them outright.'
         : 'Worst record picks first. Win a claim and you drop to the back. Dropped players sit here {waitTime} before anyone can add them outright.'}</p>
     </div>
-    <div class="card"><h2>On waivers</h2>${wireHTML}</div>
-    ${mineHTML}${settledHTML}`;
+    ${settledHTML}`;
 }
 
 function freeAgents(q){
