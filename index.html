@@ -2731,8 +2731,6 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <div>
       <div class="roundnow" id="roundNow" aria-live="polite"></div>
       <div class="boardscroll"><div class="board" id="board"></div></div>
-      <!-- the grades, and the recap once the board is full: under the board, beside the pool -->
-      <div id="draftGrades" style="display:none"></div>
     </div>
     <div class="pool">
       <div class="poolhead">
@@ -5171,7 +5169,6 @@ function startLeagueSync(){
   window.FB.dbOn(recapsPath(), (m)=>{
     recapsMap = m||{};
     try{ renderHomeRecap(); }catch(e){}
-    try{ if(window.currentView==='draft' || window.currentView==='mock') renderDraftGrades(); }catch(e){}
     try{ if(window.currentView==='matchups') renderMatchups(); }catch(e){}
     try{ if(window.currentView==='recaps') renderRecaps(); }catch(e){}
     try{ maybeAnnounceRecap(); }catch(e){}
@@ -9397,7 +9394,6 @@ function refreshDraftUI(){
     document.getElementById('onClockTeam').textContent = 'Ready when you are';
   }
   renderBoard(); renderPool(); renderRosterMini(); renderRoundNow();
-  try{ renderDraftGrades(); }catch(e){}
   try{ if(D.finished) maybeWriteDraftRecap(); }catch(e){}   /* the draft recap, the moment the board fills */
 }
 /* big animated round number in the top middle of the board — re-pops when the round changes */
@@ -13136,8 +13132,7 @@ function recapCardHTML(ctx, wk){
 }
 /* ===================== DRAFT GRADES AND THE DRAFT RECAP =====================
    The moment the board fills, every roster gets a grade and the app writes the draft up in
-   the same voice as the weekly recaps - the grades run live while the draft is on, as a
-   "so far" that moves with every pick.
+   the same voice as the weekly recaps.
 
    THE NUMBER. A pick is scored on his season projection above the replacement line at his
    position - the last starter in a league this size, drawn against the whole pool the way
@@ -13160,9 +13155,9 @@ function recapCardHTML(ctx, wk){
 
    Shared like the weekly recap: league/main/recaps/{year}_draft, kind 'draft', wk 0, written
    by the first signed-in device to see the real board finished (an atomic create), admins
-   overwrite on Rewrite. Surfaces: the Draft room (grades so far while it runs, the recap
-   underneath once it is done - a mock board grades too, and never stores), the Recaps tab,
-   and Home until week 1's recap takes the card over. */
+   overwrite on Rewrite. Surfaces: the Recaps tab (grades and the recap, above the weekly card)
+   and Home until week 1's recap takes the card over. The Draft room itself stays the board and
+   the player list, nothing else - the commissioner asked for exactly that. */
 const DR_STEAL_PTS = 10;      /* season points over slot before a pick gets called a steal or a reach */
 const DR_KD_SCALE = 0.25;     /* kickers and defenses count at a quarter: their projections are noise, and nobody's draft was won by a defense */
 let _drLinesCache = { key:'', lines:null };
@@ -13370,16 +13365,15 @@ async function maybeWriteDraftRecap(){
 }
 function drRedraw(){
   const v = window.currentView;
-  try{ if(v==='draft' || v==='mock') renderDraftGrades(); }catch(e){}
   try{ if(v==='recaps') renderRecaps(); }catch(e){}
   try{ if(v==='home') renderHomeRecap(); }catch(e){}
 }
 function drToggle(){ window.drOpen = !window.drOpen; drRedraw(); }
 /* Rewrite: new words on the stored facts. Admin-only and for everyone once it is stored;
-   a mock board or an unstored one just reshuffles on this device. */
-async function drRewrite(mock){
+   an unstored one just reshuffles on this device. */
+async function drRewrite(){
   const yr = curDraftYear();
-  const stored = mock ? null : draftRecapFor(yr);
+  const stored = draftRecapFor(yr);
   if(stored){
     if(!requireAdmin()) return;
     if(!fbOk() || !window.fbUser){ toast('Sign in to rewrite it for everyone.'); return; }
@@ -13409,7 +13403,7 @@ function draftGradesHTML(F, opts){
       <span class="dg-nums"><span class="dg-num"><b>${t.over>0?'+':''}${Math.round(t.over)}</b><small>over slot</small></span><span class="dg-num"><b>${(+t.projWk||0).toFixed(1)}</b><small>proj/wk</small></span></span>
     </div>`;
   }).join('');
-  const head = F.done ? `Draft grades${opts.mock?' · mock':''} · final` : `Draft grades · so far, through round ${F.throughRound}`;
+  const head = F.done ? `Draft grades · final` : `Draft grades · so far, through round ${F.throughRound}`;
   return `<div class="card dg-card" id="draftGradesCard"${opts.style?` style="${opts.style}"`:''}>
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <span class="eyebrow" style="margin:0">${head}</span>
@@ -13427,11 +13421,11 @@ function draftRecapCardHTML(o){
   const shown = open ? o.text : [paras[0], paras[1]||''].filter(Boolean).join('\n\n') + (paras.length>2 ? '\n\n…' : '');
   return `<div class="card" id="draftRecapCard" style="${o.style||'margin-top:12px'}">
     <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      <span class="eyebrow" style="margin:0">${esc(String(o.yr))} draft recap${o.mock?' · mock':''}${st?` · written ${esc(timeAgo(+st.at||0))}${st.rewritten?', rewritten by the commissioner':''}`:''}</span>
+      <span class="eyebrow" style="margin:0">${esc(String(o.yr))} draft recap${st?` · written ${esc(timeAgo(+st.at||0))}${st.rewritten?', rewritten by the commissioner':''}`:''}</span>
       <div class="row" style="gap:8px;flex-wrap:wrap">
-        <button class="btn ${st?'admin-only':'ghost'}" onclick="drRewrite(${o.mock?'true':'false'})" title="New words, same numbers">Rewrite</button>
+        <button class="btn ${st?'admin-only':'ghost'}" onclick="drRewrite()" title="New words, same numbers">Rewrite</button>
         <button class="btn ghost" onclick='rcCopyText(${JSON.stringify(o.key)})'>Copy</button>
-        ${o.mock ? '' : `<button class="btn admin-only" onclick='rcPostKey(${JSON.stringify(o.key)})'>Post to chat</button>`}
+        <button class="btn admin-only" onclick='rcPostKey(${JSON.stringify(o.key)})'>Post to chat</button>
         <button class="btn ghost" onclick="drToggle()">${open?'Less':'Read it all'}</button>
       </div>
     </div>
@@ -13440,34 +13434,6 @@ function draftRecapCardHTML(o){
       ? `<p class="sub" data-note="draft-recap-stored" style="margin:12px 0 0;font-size:12px">Written by the app the moment the board filled, from the season projections as they stood that night - the same words on every phone. Rewrite changes the wording, never the grades.</p>`
       : `<p class="sub" data-note="draft-recap-local" style="margin:12px 0 0;font-size:12px">Written from the board and the season projections. Rewrite changes the wording, never the grades.</p>`}
   </div>`;
-}
-/* the Draft room: under the board, beside the pool. Redrawn on every refreshDraftUI, so the
-   facts are cached on the board and the DOM is only touched when the HTML actually changed -
-   a redraw a second would otherwise eat a text selection or a button press mid-tap. */
-function renderDraftGrades(){
-  const el = document.getElementById('draftGrades'); if(!el) return;
-  const d = D, mock = draftMode!=='real', first = firstDraftIndex();
-  const paint = html => { if(el._dgHtml === html) return; el._dgHtml = html; el.innerHTML = html; el.style.display = html ? 'block' : 'none'; };
-  if(!d.started || !(d.picks||[]).some(p=>+p.pickIndex>=first)) return paint('');
-  const yr = curDraftYear();
-  const stored = (!mock && d.finished) ? draftRecapFor(yr) : null;
-  let F = (stored && stored.facts && stored.facts.order) ? stored.facts : null;
-  if(!F){
-    if(!statsLoaded || !poolReady){
-      paint(`<div class="card dg-card" style="margin-top:12px"><div class="eyebrow">Draft grades</div><p class="sub" style="margin:0">Grading the board once the projections load…</p></div>`);
-      waitForProj('dg', ()=>{ if(window.currentView==='draft' || window.currentView==='mock') renderDraftGrades(); });
-      return;
-    }
-    F = drFacts(d);
-    if(!F) return paint('');
-  }
-  let html = draftGradesHTML(F, { mock, style:'margin-top:12px' });
-  if(d.finished){
-    const key = mock ? 'mock_draft' : draftRecapKey(yr);
-    const text = stored ? stored.text : drBuild(yr, window._drLocalSeed||0, F);
-    if(text) html += draftRecapCardHTML({ key, text, stored, yr, mock });
-  }
-  paint(html);
 }
 /* the Recaps tab: the real board only, above the week-by-week card */
 function draftRecapTabHTML(){
@@ -13484,7 +13450,7 @@ function draftRecapTabHTML(){
     text = drBuild(yr, window._drLocalSeed||0, F);
   }
   if(!F || !text) return '';
-  return `<div style="max-width:860px;margin-bottom:18px">${draftGradesHTML(F, { style:'margin-bottom:12px' })}${draftRecapCardHTML({ key: draftRecapKey(yr), text, stored, yr, mock:false, style:'' })}</div>`;
+  return `<div style="max-width:860px;margin-bottom:18px">${draftGradesHTML(F, { style:'margin-bottom:12px' })}${draftRecapCardHTML({ key: draftRecapKey(yr), text, stored, yr, style:'' })}</div>`;
 }
 /* the Home card's grade strip: every team's letter in grade order, so the card says who won
    the draft without a click */
@@ -17196,7 +17162,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · draft grades and recap';
+const BUILD_STAMP = '2026-09-07 · draft room is the board only';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

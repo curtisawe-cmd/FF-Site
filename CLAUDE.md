@@ -490,12 +490,11 @@ the real board (`realDraft()`), loading projections first if it has to; a failed
 ten minutes. `latestRecap()` sorts by year then week, so the draft recap (week 0) holds Home only
 until week 1's recap exists.
 
-Surfaces: the Draft room `#draftGrades` under the board (`renderDraftGrades` on every
-`refreshDraftUI`, DOM touched only when the HTML changed; "so far, through round N" while the
-draft runs, the recap card once it is done; a **mock board grades too and never stores**, key
-`mock_draft`), the Recaps tab (`draftRecapTabHTML` above the week-by-week card; the weekly list
-filters `kind!=='draft'`), and Home (`renderHomeRecap` branch with the grade strip
-`draftGradeStripHTML`). Copy / Post to chat reuse `rcCopyText` / `rcPostKey`; `drRewrite`,
+Surfaces: the Recaps tab (`draftRecapTabHTML` above the week-by-week card; the weekly list
+filters `kind!=='draft'`) and Home (`renderHomeRecap` branch with the grade strip
+`draftGradeStripHTML`). **Nothing draws in the Draft room** - the commissioner wants that page to
+be the board and the player list only; `refreshDraftUI` still calls `maybeWriteDraftRecap` so
+the shared copy is written the moment the board fills. Mock boards are not graded. Copy / Post to chat reuse `rcCopyText` / `rcPostKey`; `drRewrite`,
 `drToggle` (`window.drOpen`), `drRedraw`. Chat posting follows the weekly opt-in
 (`maybeAnnounceRecap` posts whichever recap is latest, draft included).
 
