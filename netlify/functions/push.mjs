@@ -7,6 +7,7 @@
      {watchNow: true}     run the watcher this second and report what it found
      {lineupNow: true}    run the lineup check this second and report who it would tell
      {swingNow: true}     run the swing watch this second and report the odds it sees
+     {benchNow: true}     run the bench watch this second and report who it would shame
      {diag: true}         say what is configured, without ever revealing the key
 
    Why this exists at all: OneSignal refuses to be sent from a browser, and the REST key must
@@ -23,7 +24,7 @@
    ============================================================ */
 
 import { getStore } from '@netlify/blobs';
-import { runScoreWatch, runLineupWatch, runSwingWatch } from './lib/score.mjs';
+import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch } from './lib/score.mjs';
 
 const SEGMENTS = ['Total Subscriptions', 'Active Subscriptions', 'Subscribed Users', 'All'];
 
@@ -70,6 +71,11 @@ export default async (request) => {
   /* and the swing watch: the live odds it sees for every matchup right now */
   if (body && body.swingNow === true) {
     const res = await runSwingWatch(store());
+    return json({ ran: true, ...res });
+  }
+  /* and the bench watch: who it would shame, or why not yet */
+  if (body && body.benchNow === true) {
+    const res = await runBenchWatch(store());
     return json({ ran: true, ...res });
   }
 

@@ -2406,6 +2406,10 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .sw-need{font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--turf);white-space:nowrap;min-width:64px;text-align:right}
 .sw-need.ok{color:var(--turf-bright)}
 .sw-none,.sw-done{font-size:11.5px;color:var(--chalk-dim);padding:4px 0}
+.sw-bench{font-size:11.5px;color:var(--chalk-dim);padding:4px 0 0;line-height:1.35}
+.sw-bench b{color:var(--chalk)} .sw-bench.bad{color:var(--charge)} .sw-bench.bad b{color:var(--charge)}
+.bw-row.me{background:var(--turf-wash);border-radius:6px;padding-left:4px}
+.bw-you{font-style:normal;font-family:var(--f-ui);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--turf)}
 .sw-line{margin:10px 0 0;font-size:13.5px;line-height:1.4}
 .sw-line b{color:var(--turf)}
 @media(max-width:560px){
@@ -3184,6 +3188,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <div class="setrow"><label title="Before kickoff, buzz a manager whose lineup has a starter who is out, on IR, suspended, on bye, or not projected to play - or an empty slot. Each manager hears only about their own team, once per problem per week. Sent from the relay, so it needs 'Send from the relay' on.">Lineup alerts</label><label class="cswitch"><input type="checkbox" id="setLineupAlerts" onchange="setLineupAlerts(this.checked)"><span class="track"></span><span class="lbl" id="lineupAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="How long before a player's kickoff the warning goes out. A bye or an empty slot is warned about before the next game of the week.">Warn (hours before kickoff)</label><input type="number" step="1" min="1" max="48" id="setLineupLead" style="max-width:110px" onchange="setLineupLead(this.value)"></div>
       <div class="setrow"><label title="While games are on, buzz both managers in a matchup when its live win probability moves 25 points in 20 minutes - one losing it, one taking it. Once per matchup per half hour at most, never before kickoff or after the last whistle. Sent from the relay, so it needs 'Send from the relay' on.">Swing alerts</label><label class="cswitch"><input type="checkbox" id="setSwingAlerts" onchange="setSwingAlerts(this.checked)"><span class="track"></span><span class="lbl" id="swingAlertsLbl">Off</span></label></div>
+      <div class="setrow"><label title="Monday at 9am, whoever left the most points on the bench that week gets told - the number, who sat, who started instead, and whether it cost the game. Only if it was ten points or more, only the worst offender. Sent from the relay, so it needs 'Send from the relay' on.">Bench crime push</label><label class="cswitch"><input type="checkbox" id="setBenchAlerts" onchange="setBenchAlerts(this.checked)"><span class="track"></span><span class="lbl" id="benchAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="The app writes up every week on the Tuesday after it. With this on, a commissioner device also drops it into the league chat as League Desk - which buzzes everyone the way any chat message does. Off, it only shows on the Matchups board, the Recaps tab and Home.">Post weekly recaps to chat</label><label class="cswitch"><input type="checkbox" id="setRecapChat" onchange="setRecapToChat(this.checked)"><span class="track"></span><span class="lbl" id="recapChatLbl">Off</span></label></div>
     </div>
     <div class="row admin-only" style="gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -3191,6 +3196,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <button class="btn ghost" onclick="testRelayWatch()">Run the watcher now</button>
       <button class="btn ghost" onclick="testLineupWatch()" title="Run the lineup check on the relay right now and say who it would tell">Check lineups now</button>
       <button class="btn ghost" onclick="testSwingWatch()" title="Run the swing watch on the relay right now and show the odds it sees">Check swings now</button>
+      <button class="btn ghost" onclick="testBenchWatch()" title="Run the bench watch on the relay right now and say who it would shame">Check bench now</button>
     </div>
     <p class="sub" id="scoreAlertNote" style="margin:8px 0 0;font-size:12px;opacity:.75"></p>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
@@ -3388,6 +3394,7 @@ const DEFAULTS = {
   lineupLead: 2,         /* hours before kickoff to say so */
   recapToChat: false,    /* drop the week's auto-written recap into chat from a commissioner device */
   swingAlerts: true,     /* buzz both managers when a matchup's live odds swing 25 points in 20 minutes */
+  benchAlerts: true,     /* Monday 9am push to whoever left the most on the bench, if it was ten points or more */
   scoreRelay: false,     /* let the relay watch on a schedule, so alerts land with every app shut */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
@@ -7588,7 +7595,7 @@ const SETTING_LABELS={
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
   scoreAlerts:'score alerts', scoreAlertMin:'score alerts', scoreRelay:'score alerts',
-  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps', swingAlerts:'swing alerts',
+  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps', swingAlerts:'swing alerts', benchAlerts:'bench alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -11548,7 +11555,9 @@ function buildScoreSnapshot(){
     /* the lineup check needs each starter's NFL team (kickoff, bye), his injury tag, and how
        many starting slots have nobody in them - all things only the app knows */
     let open = 0; try{ open = lineupIssues(ti).empty.length; }catch(e){}
-    return { ti, name: t.name||('Team '+(ti+1)), uid: uidForTeam(ti) || '', open,
+    /* the whole roster with slots, for the bench watch's best-possible lineup */
+    let roster = []; try{ const lu = S.lineups[ti]||{}; roster = teamRoster(ti).map(pl=>({ id:String(pl.playerId), pos:pl.pos||'', name:pl.name||'', nfl:String(pl.nfl||'').toUpperCase(), slot: lu[pl.playerId]||'BN' })); }catch(e){}
+    return { ti, name: t.name||('Team '+(ti+1)), uid: uidForTeam(ti) || '', open, roster,
              players: picks.map(pl=>{ const id=String(pl.playerId); const meta=findPlayerMeta(id)||{};
                /* proj: this week's line, for the swing watch's live odds - null when the file
                   is not in yet, and the watch treats that as nothing still to come */
@@ -11564,6 +11573,9 @@ function buildScoreSnapshot(){
               Thursday-night opener gets its warning), and how far ahead to give it */
            lineup: lineupAlertsOn() && scoreRelayOn(), lineupWeek: projWeekNow() || 0, lead: lineupLeadHours(),
            swing: swingAlertsOn() && scoreRelayOn(), games,
+           /* the bench watch: Monday 9am local of the week being played (the week is over at
+              Tuesday 4am, so nineteen hours before that), with the slot caps to solve with */
+           bench: benchAlertsOn() && scoreRelayOn(), benchAt: wk ? weekOverAt(wk) - 19*3600000 : 0, slots: S.roster || {},
            url: location.origin + location.pathname,
            teams: teams.filter(t=>t.uid && (t.players.length || t.open)) };
 }
@@ -11606,7 +11618,7 @@ async function checkScoreAlerts(){
      lineups it was handed: a manager fixing his lineup at noon on his own phone is exactly the
      device that should tell the relay about it. */
   if(scoreRelayOn()){
-    if(scoreAlertsOn() || lineupAlertsOn() || swingAlertsOn()){
+    if(scoreAlertsOn() || lineupAlertsOn() || swingAlertsOn() || benchAlertsOn()){
       /* the snapshot carries this week's projections for the swing watch; make sure the file
          is on its way so the next post has them (never waits on it) */
       try{ const pw = projWeekNow(); if(pw && !PROJ_WEEKS[pw]) loadWeekProj(pw); }catch(e){}
@@ -13092,6 +13104,7 @@ function renderMatchups(){
         </div>`;
       }).join('')}
     </div>
+    <div id="benchWatch"></div>
     <div class="card">
       <h2>2026 Standings</h2>
       <p class="sub" style="margin-bottom:10px">${(+S.divisions>0?'Grouped by division. ':'') + (anyScores? 'Sorted by wins, then points for. Official tiebreaker is head-to-head \u2014 commissioner has final say on ties.' : 'Fills in as weekly scores get entered.')}</p>
@@ -13099,6 +13112,7 @@ function renderMatchups(){
     </div>
     ${poPictureHTML()}
     ${allPlayCardHTML(rows)}`;
+  try{ renderBenchWatch(); }catch(e){}       /* the live bench crimes, drawn in once the stats are here */
   /* every path that changes a score already calls this one, so the bracket rides along rather
      than needing a hook of its own on each of them */
   try{ if(window.muTab==='po') renderPlayoffs(); }catch(e){}
@@ -14354,6 +14368,41 @@ function benchLeft(ti, stats, noStats){
     .sort((a,b)=>pts(b)-pts(a));
   return { actual, best: best.total, left: Math.max(0, left), missed };
 }
+/* the bench crime with names and numbers: who sat, who started instead, and what it cost */
+function benchDetail(ti, stats){
+  const b = benchLeft(ti, stats, false); if(!b) return null;
+  const pts = p => { const st = stats[p.playerId]; return st ? Math.round((scoreWeekStats(st, p.pos)||0)*10)/10 : 0; };
+  const lu = (S.lineups||{})[ti] || {}, roster = teamRoster(ti);
+  const best = optimalLineup(ti, pts);
+  const started = roster.filter(p=>{ const s=lu[p.playerId]; return s && s!=='BN' && s!=='IR'; });
+  const instead = started.filter(p=>!best.started.includes(p.playerId)).sort((a,b)=>pts(a)-pts(b))[0] || null;
+  return { ...b, top: b.missed[0] ? { name:b.missed[0].name, pts:pts(b.missed[0]) } : null, instead: instead ? { name:instead.name, pts:pts(instead) } : null };
+}
+function benchLineHTML(d){
+  if(!d || d.left < 0.05) return '';
+  return `<b>${d.left.toFixed(1)}</b> left on the bench${d.top?` — ${esc(d.top.name)} (${d.top.pts.toFixed(1)}) sat`:''}${d.instead?`, ${esc(d.instead.name)} (${d.instead.pts.toFixed(1)}) started`:''}`;
+}
+/* the live Bench watch card on the matchups board: every team's bench crime so far this week,
+   worst first, while the games are on - drawn after the board, since it needs the stat file */
+async function renderBenchWatch(){
+  const el = document.getElementById('benchWatch'); if(!el) return;
+  const wk = currentNflWeek();
+  if(!wk || weekIsOver(wk) || String(window.muWeek||1)!==String(wk) || !(S.season && S.season.schedule)){ el.innerHTML=''; return; }
+  const token = String(Date.now()); el.dataset.token = token;
+  try{
+    const stats = await fetchWeekStats(+(S.season.year)||PROJ_SEASON, wk);
+    if(el.dataset.token !== token) return;
+    if(!stats || !Object.keys(stats).length){ el.innerHTML=''; return; }
+    const mine = myTeamIdx();
+    const rows = (S.teams||[]).map((t,i)=>({ i, d: benchDetail(i, stats) })).filter(x=>x.d && x.d.left>=0.05).sort((a,b)=>b.d.left-a.d.left);
+    if(!rows.length){ el.innerHTML=''; return; }
+    el.innerHTML = `<div class="card" style="margin-bottom:18px">
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap"><h2 style="margin:0">Bench watch</h2><span class="sub" style="margin:0">Week ${wk} · live · worst first</span></div>
+      <p class="sub" data-note="bench-watch" style="margin:4px 0 8px">What each lineup has left on the bench so far - the best lineup the roster could have fielded on the real numbers, minus what it started. The worst of it gets a push on Monday morning.</p>
+      ${rows.slice(0,8).map(x=>`<div class="shame-row bw-row${x.i===mine?' me':''}"><span class="shame-tag">${x.d.left.toFixed(1)}</span><span>${teamMarkHTML(S.teams[x.i],24)}<b>${esc(teamName(x.i))}</b>${x.i===mine?' <em class="bw-you">you</em>':''} <span style="color:var(--chalk-dim)">${x.d.top?`${esc(x.d.top.name)} (${x.d.top.pts.toFixed(1)}) sat`:''}${x.d.instead?`, ${esc(x.d.instead.name)} (${x.d.instead.pts.toFixed(1)}) started`:''}</span></span></div>`).join('')}
+    </div>`;
+  }catch(e){ el.innerHTML=''; }
+}
 function benchLeftHTML(ti, stats, noStats){
   const b = benchLeft(ti, stats, noStats);
   if(!b) return '';
@@ -14531,7 +14580,10 @@ async function sweatData(ti){
   try{ await loadKickoffs(); }catch(e){}
   const mine = sweatSide(ti, stats, wk, oppMap), theirs = sweatSide(opp, stats, wk, oppMap);
   let LW = null; try{ LW = liveWinModel(ti, opp, stats, wk); }catch(e){}
-  return { wk, m, ti, opp, mine, theirs, LW };
+  /* the bench so far, both sides: the crime as it stands, before Monday makes it official */
+  let benchMine = null, benchTheirs = null;
+  try{ if(stats && Object.keys(stats).length){ benchMine = benchDetail(ti, stats); benchTheirs = benchDetail(opp, stats); } }catch(e){}
+  return { wk, m, ti, opp, mine, theirs, LW, benchMine, benchTheirs };
 }
 /* what each of my remaining players needs for the week, everyone else on my side hitting his line */
 function sweatNeeds(D){
@@ -14545,7 +14597,10 @@ function sweatCardHTML(D){
   if(!D) return '';
   if(D.none) return `<div class="card sw-card"><div class="eyebrow">Week ${esc(String(D.wk))}</div><p class="sub" style="margin:4px 0 0">No game for you this week.</p></div>`;
   const tMe = S.teams[D.ti]||{}, tOp = S.teams[D.opp]||{};
-  const LW = D.LW, state = LW ? LW.state : 'pre';
+  /* without the scoreboard the model says nothing; then a week with points and nobody left is
+     a final, and anything else is still ahead */
+  const LW = D.LW, state = LW ? LW.state
+    : ((D.mine.left.length + D.theirs.left.length === 0 && D.mine.scored + D.theirs.scored > 0) ? 'final' : 'pre');
   const bar = !LW ? winBarHTML(D.mine.exp, D.theirs.exp, false, 'Win probability · from projections')
     : state==='final' ? winBarHTML(D.mine.scored, D.theirs.scored, true, 'Final')
     : state==='live' ? winBarHTML(0, 0, false, 'Live win probability', { pct: LW.pA, sub: liveWinSub(LW.a.exp, LW.b.exp, LW.a.left+LW.a.playing, LW.b.left+LW.b.playing) })
@@ -14561,11 +14616,12 @@ function sweatCardHTML(D){
       ${mine ? `<span class="sw-need${n && n.need<=x.pts?' ok':''}">${esc(needTxt)}</span>` : ''}
     </div>`;
   };
-  const col = (side, mine, t) => `<div class="sw-col">
+  const col = (side, mine, t, bench) => `<div class="sw-col">
     <div class="sw-team">${teamMarkHTML(t, 24)}<span>${esc(t.name||'?')}${mine?' <em>you</em>':''}</span></div>
     <div class="sw-tot"><b>${side.scored.toFixed(1)}</b> scored · <b>${side.exp.toFixed(1)}</b> on pace · ${side.left.length} to play</div>
     ${side.left.length ? side.left.slice().sort((a,b)=>(a.kick||0)-(b.kick||0)).map(x=>row(x, mine)).join('') : `<div class="sw-none">Everyone's done.</div>`}
     ${side.done.length ? `<div class="sw-done">${side.done.length} done · ${side.done.reduce((t,x)=>t+x.pts,0).toFixed(1)} pts</div>` : ''}
+    ${bench && bench.left>=0.05 ? `<div class="sw-bench${bench.left>=10?' bad':''}">Bench so far: ${benchLineHTML(bench)}</div>` : ''}
   </div>`;
   const diff = Math.round((D.mine.exp - D.theirs.exp)*10)/10;
   let line = '';
@@ -14588,7 +14644,7 @@ function sweatCardHTML(D){
       <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="showView('matchups');setMuTab('gc')">Game Center</button>
     </div>
     ${bar}
-    <div class="sw-grid">${col(D.mine, true, tMe)}${col(D.theirs, false, tOp)}</div>
+    <div class="sw-grid">${col(D.mine, true, tMe, D.benchMine)}${col(D.theirs, false, tOp, D.benchTheirs)}</div>
     <p class="sw-line">${line}</p>
   </div>`;
 }
@@ -16361,6 +16417,25 @@ function setLineupLead(v){
   S.lineupLead = n; saveState(); renderScoreAlertSetting();
   toast('Warning '+n+' hour'+(n>1?'s':'')+' before kickoff');
 }
+function benchAlertsOn(){ return S.benchAlerts !== false; }
+function setBenchAlerts(on){
+  S.benchAlerts = !!on; saveState(); renderScoreAlertSetting();
+  toast(on ? 'Bench crime push on' : 'Bench crime push off');
+}
+async function testBenchWatch(){
+  if(!pushRelay()){ toast('Set the relay URL first.'); return; }
+  toast('Asking the relay about the benches…');
+  try{
+    const r = await fetch(pushRelay(), { method:'POST', headers:{'Content-Type':'application/json'},
+                                         body: JSON.stringify({ benchNow:true }) });
+    const txt = await r.text();
+    let j={}; try{ j=JSON.parse(txt); }catch(e){}
+    if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
+    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped+(j.to?' (to '+j.to+')':'')); return; }
+    if(j.note){ toast(`Relay checked: ${j.note}${j.worst?` — worst was ${j.worst.name} at ${(+j.worst.left).toFixed(1)}`:''}`); return; }
+    toast(`Relay ${j.sent?'sent the bench crime to':'found'} ${j.worst.name}: ${(+j.worst.left).toFixed(1)} left on the bench`);
+  }catch(e){ toast('Could not reach the relay.'); }
+}
 function swingAlertsOn(){ return S.swingAlerts !== false; }
 function setSwingAlerts(on){
   S.swingAlerts = !!on; saveState(); renderScoreAlertSetting();
@@ -16418,6 +16493,8 @@ function renderScoreAlertSetting(){
   const la=document.getElementById('setLineupAlerts'); if(la) la.checked=lineupAlertsOn();
   const ll=document.getElementById('lineupAlertsLbl'); if(ll) ll.textContent=lineupAlertsOn()?'On':'Off';
   const ld=document.getElementById('setLineupLead'); if(ld) ld.value=String(lineupLeadHours());
+  const bn=document.getElementById('setBenchAlerts'); if(bn) bn.checked=benchAlertsOn();
+  const bnl=document.getElementById('benchAlertsLbl'); if(bnl) bnl.textContent=benchAlertsOn()?'On':'Off';
   const sw=document.getElementById('setSwingAlerts'); if(sw) sw.checked=swingAlertsOn();
   const swl=document.getElementById('swingAlertsLbl'); if(swl) swl.textContent=swingAlertsOn()?'On':'Off';
   const rcc=document.getElementById('setRecapChat'); if(rcc) rcc.checked=recapToChatOn();
@@ -16460,7 +16537,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · swing alerts';
+const BUILD_STAMP = '2026-09-07 · bench watch';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

@@ -394,6 +394,100 @@ export async function runSwingWatch(store) {
   return { sent, week: snap.week, matchups: odds.map(o => ({ a: o.A.name, b: o.B.name, pA: o.pA, over: o.over })) };
 }
 
+/* ============================================================
+   BENCH WATCH - the Monday morning shame.
+
+   Once Sunday is in the books, the best lineup each roster could have fielded on the real
+   numbers minus what it actually started is the week's bench crime, and the worst offender
+   in the league hears about it - once, on the Monday morning the snapshot names, and only if
+   it cost ten points or more. Same solver as the app (dedicated slots first, then FLEX) over
+   the roster the snapshot carries, slots and all. The app shows the same number on the Home
+   shame report and the Sunday sweat card; this is the one that finds you in the morning.
+   ============================================================ */
+const SLOT_ELIG = { QB:['QB'], RB:['RB','FLEX'], WR:['WR','FLEX'], TE:['TE','FLEX'], K:['K'], DEF:['DEF'] };
+export function optimalLineupOf(roster, ptsOf, slots) {
+  const cap = k => +((slots || {})[k]) || 0;
+  const pool = roster.map(p => ({ p, pts: +ptsOf(p) || 0 })).sort((a, b) => b.pts - a.pts);
+  const taken = new Set(); let total = 0;
+  ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].forEach(slot => {
+    for (let n = 0; n < cap(slot); n++) {
+      const pick = pool.find(x => !taken.has(x.p.id) && (SLOT_ELIG[x.p.pos] || []).includes(slot));
+      if (!pick) break; taken.add(pick.p.id); total += pick.pts;
+    }
+  });
+  for (let n = 0; n < cap('FLEX'); n++) {
+    const pick = pool.find(x => !taken.has(x.p.id) && (SLOT_ELIG[x.p.pos] || []).includes('FLEX'));
+    if (!pick) break; taken.add(pick.p.id); total += pick.pts;
+  }
+  return { started: [...taken], total: Math.round(total * 10) / 10 };
+}
+/* Pure. Every team's bench crime for the week from the snapshot's rosters, worst first. */
+export function benchCrimes(snapshot, stats) {
+  const r1 = n => Math.round(n * 10) / 10;
+  const out = [];
+  (snapshot.teams || []).forEach(t => {
+    const roster = (t.roster || []).filter(p => p && p.slot !== 'IR');
+    if (!roster.length) return;
+    const pts = p => r1(+scoreWeek(stats[p.id], p.pos, snapshot.scoring) || 0);
+    const starters = roster.filter(p => p.slot && p.slot !== 'BN');
+    if (!starters.length) return;
+    const actual = r1(starters.reduce((s, p) => s + pts(p), 0));
+    const best = optimalLineupOf(roster, pts, snapshot.slots);
+    const on = new Set(starters.map(p => p.id));
+    const missed = best.started.filter(id => !on.has(id)).map(id => roster.find(p => p.id === id)).filter(Boolean)
+      .map(p => ({ name: p.name, pts: pts(p) })).sort((a, b) => b.pts - a.pts);
+    const instead = starters.filter(p => !best.started.includes(p.id)).map(p => ({ name: p.name, pts: pts(p) })).sort((a, b) => a.pts - b.pts)[0] || null;
+    out.push({ ti: t.ti, uid: t.uid || '', name: t.name || '', actual, best: best.total, left: Math.max(0, r1(best.total - actual)), missed, instead });
+  });
+  return out.sort((a, b) => b.left - a.left);
+}
+export function benchText(c, result) {
+  const who = c.missed[0] ? `${c.missed[0].name} (${c.missed[0].pts.toFixed(1)}) sat` : 'the points sat';
+  const inst = c.instead ? ` while ${c.instead.name} (${c.instead.pts.toFixed(1)}) started` : '';
+  const tail = result === 'lost' ? ' You lost. Do the math.' : result === 'won' ? ' You won anyway. Lucky.' : '';
+  return { title: 'Bench crime of the week', body: `You left ${c.left.toFixed(1)} on the bench: ${who}${inst}.${tail}` };
+}
+export async function runBenchWatch(store) {
+  if (!store) return { skipped: 'no blob store' };
+  let snap;
+  try { snap = await store.get('snapshot', { type: 'json' }); } catch { return { skipped: 'store read failed' }; }
+  if (!snap) return { skipped: 'no snapshot yet - open the league app once' };
+  if (!snap.bench) return { skipped: 'bench alerts are switched off in the league settings' };
+  if (!snap.week || !snap.season) return { skipped: 'no live week' };
+  if (!snap.benchAt || Date.now() < +snap.benchAt) return { skipped: 'not Monday morning yet', week: snap.week };
+  if (snap.at && Date.now() - snap.at > 14 * 864e5) return { skipped: 'snapshot too old' };
+  const key = `bs_${snap.season}_${snap.week}`;
+  let mark = null;
+  try { mark = await store.get(key, { type: 'json' }); } catch {}
+  if (mark && mark.sentAt) return { skipped: 'already sent', week: snap.week, to: mark.name };
+  let stats;
+  try {
+    const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${snap.season}/${snap.week}`);
+    if (!r.ok) return { skipped: 'sleeper ' + r.status };
+    stats = await r.json();
+  } catch { return { skipped: 'sleeper unreachable' }; }
+  if (!stats || !Object.keys(stats).length) return { skipped: 'no stats yet' };
+  const crimes = benchCrimes(snap, stats);
+  const worst = crimes[0];
+  if (!worst || worst.left < 10) {
+    try { await store.setJSON(key, { sentAt: Date.now(), name: '', none: true }); } catch {}
+    return { sent: 0, week: snap.week, note: 'nobody left ten points on the bench', worst: worst ? { name: worst.name, left: worst.left } : null };
+  }
+  /* did it cost the game? the matchup's other side, on the same real numbers */
+  let result = '';
+  const g = (snap.games || []).find(x => x[0] === worst.ti || x[1] === worst.ti);
+  if (g) {
+    const oppTi = g[0] === worst.ti ? g[1] : g[0];
+    const opp = crimes.find(c => c.ti === oppTi);
+    if (opp) result = worst.actual > opp.actual ? 'won' : worst.actual < opp.actual ? 'lost' : '';
+  }
+  const msg = benchText(worst, result);
+  let sent = 0;
+  if (worst.uid) { try { if (await pushOne(worst.uid, msg.title, msg.body, snap.url)) sent++; } catch {} }
+  try { await store.setJSON(key, { sentAt: Date.now(), name: worst.name, left: worst.left, sent }); } catch {}
+  return { sent, week: snap.week, worst: { name: worst.name, left: worst.left, missed: worst.missed.slice(0, 2), instead: worst.instead, result } };
+}
+
 /* ESPN's scoreboard for the week: {TEAM: kickoffMs}. Cached six hours - the fixture list is
    a fact about the week, and a game moving is a rare enough thing to wait six hours for. */
 async function weekKickoffs(store, season, week) {

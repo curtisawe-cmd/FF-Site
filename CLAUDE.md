@@ -111,13 +111,15 @@ gated on team identity must re-render when the claim arrives.
 
 ## Push notifications
 
-Six triggers only, and nothing else should be added without asking: **new chat message**
+Seven triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
 accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
 watcher), **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
 slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below)
-and **swing alerts** (a matchup's live odds move 25 points in 20 minutes while a game is on,
-both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts below).
+**swing alerts** (a matchup's live odds move 25 points in 20 minutes while a game is on,
+both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts below) and the
+**bench crime push** (Monday 9am to the week's worst offender, ten points or more, from the
+scheduled watcher - added 2026-09-07, see Bench watch below).
 
 The chain has five links and every one of them broke at least once on 2026-08-01. In order:
 
@@ -308,6 +310,23 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   separate numbers: **luck** = real wins minus the wins the all-play rate would give over the
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
+
+## Bench watch
+
+Live: `benchDetail(ti, stats)` wraps `benchLeft` with who sat (`top`) and who started instead
+(`instead`); `benchLineHTML` prints it. It rides the Sunday sweat card (both sides, red at ten
+points) and the **Bench watch** card on the matchups board (`#benchWatch`, `renderBenchWatch`,
+async after `renderMatchups`, live week only, worst first, your row highlighted).
+
+Monday: `runBenchWatch` in `netlify/functions/lib/score.mjs` (same cron; `POST {benchNow:true}`
+/ Settings > "Check bench now"). The snapshot now carries each team's full `roster` with slots
+and `slots` (`S.roster`), `bench` (the setting) and `benchAt` (Monday 09:00 local = `weekOverAt`
+minus 19h). After that hour, once per week (`bs_{season}_{week}`), it runs `benchCrimes` - a
+port of `optimalLineupOf` (dedicated slots then FLEX, keep it in step) over each roster on the
+real stats - and pushes "Bench crime of the week" to the worst offender if he left ten or
+more, with who sat, who started instead, and whether he lost the matchup. Setting
+`S.benchAlerts` (default on). MNF is not in yet at 9am Monday; the number is Sunday's, and the
+Home shame report shows the final one.
 
 ## The Sunday sweat card
 

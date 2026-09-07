@@ -14,7 +14,7 @@
    ============================================================ */
 
 import { getStore } from '@netlify/blobs';
-import { runScoreWatch, runLineupWatch, runSwingWatch } from './lib/score.mjs';
+import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch } from './lib/score.mjs';
 
 export default async () => {
   let store = null;
@@ -27,9 +27,12 @@ export default async () => {
   /* and the swing watch, which returns before fetching anything unless a game is in progress */
   let swing;
   try { swing = await runSwingWatch(store); } catch (e) { swing = { error: String(e && e.message || e) }; }
+  /* and the Monday morning bench crime, which is one read of the store until its hour comes */
+  let bench;
+  try { bench = await runBenchWatch(store); } catch (e) { bench = { error: String(e && e.message || e) }; }
   /* Netlify keeps these in the function log, which is where to look when a Sunday goes quiet */
-  console.log('[BBL score-watch]', JSON.stringify({ ...result, lineup, swing }));
-  return new Response(JSON.stringify({ ...result, lineup, swing }), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[BBL score-watch]', JSON.stringify({ ...result, lineup, swing, bench }));
+  return new Response(JSON.stringify({ ...result, lineup, swing, bench }), { headers: { 'Content-Type': 'application/json' } });
 };
 
 export const config = { schedule: '*/2 * * * *' };
