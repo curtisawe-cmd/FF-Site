@@ -311,6 +311,20 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Trash talk with receipts
+
+In the chat, the 📋 button or `@name` in the box opens `#receiptsPanel` (`renderReceiptsPanel`,
+`receiptsCandidates` over managers and team names, arrow keys / Enter / Escape via
+`chatMentionKey`, the `@query` tracked by `chatMentionQuery`). `insertReceipts(ti)` builds
+`receiptsData(ti)` (async: lifetime record against the picker's own team via `h2hPair`, the
+season line with rank, points rank, streak and `playoffOddsFor`, `luckWins`, `projReportFor`,
+bench crimes over finished weeks, the Toilet Bowl crown) and drops `receiptsText` into the
+message - plain text starting with `RC_MARK` ("📋 Receipts on "), so it posts, copies and
+pushes like any message; `chatBodyHTML` draws everything from the mark on as a
+`.chat-receipt` block. Bench crimes read each finished week's `bench` array from the stored
+recap (written by `maybeWriteRecap` from `rcExtras`' `benchByName`, the lineups as they stood
+that Tuesday) and only fall back to `benchLeft` on today's lineups for weeks with no recap.
+
 ## Bench watch
 
 Live: `benchDetail(ti, stats)` wraps `benchLeft` with who sat (`top`) and who started instead

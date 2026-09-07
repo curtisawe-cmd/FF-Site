@@ -2384,6 +2384,21 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .wp.live .wp-lbl::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--charge);margin:0 5px 1px 0;animation:wp-pulse 1.4s ease-in-out infinite}
 @keyframes wp-pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .wp-sub{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);margin-top:4px;text-align:center;font-variant-numeric:tabular-nums}
+/* receipts in the chat: the picker above the box, the card as a block in a bubble */
+.receipts-panel{margin:6px 0 4px;padding:6px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);max-height:240px;overflow-y:auto}
+.rp-head{font-family:var(--f-ui);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--chalk-dim);padding:2px 6px 6px}
+.rp-row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:6px 8px;cursor:pointer;color:var(--chalk);font:inherit;min-width:0}
+.rp-row:hover,.rp-row.sel{background:var(--turf-wash)}
+.rp-nm{font-weight:700;font-size:13px;white-space:nowrap}
+.rp-team{font-size:12px;color:var(--chalk-dim);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-receipt{font-family:var(--f-mono);font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;padding:7px 9px;border-radius:8px;
+  background:rgba(0,0,0,.08);border-left:3px solid currentColor}
+@media(max-width:560px){
+  .chat-receipt{font-size:11px} .rp-team{display:none}
+  /* three icon buttons and Send left the box a sliver wide on a phone: the box takes its own
+     line, the buttons sit under it */
+  #chatMsg,#chatName{flex:1 1 100% !important;max-width:none !important}
+}
 /* the Sunday sweat card */
 .sw-card{margin:0 0 18px;max-width:760px}
 .sw-card .wp{background:transparent;border-bottom:none;padding:8px 0 0}
@@ -2842,15 +2857,19 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <div id="chatList" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px 0 12px"></div>
     <div id="chatPending" style="display:none;padding:8px 0 0"></div>
     <div id="emojiPanel" class="emoji-panel" style="display:none"></div>
+    <!-- receipts: pick a manager (or type @name) and their record against you, their season,
+         their luck and their bench crimes drop into the message as a card -->
+    <div id="receiptsPanel" class="receipts-panel" style="display:none"></div>
     <div class="row" style="border-top:1px solid var(--line);padding-top:12px;gap:6px;align-items:flex-end">
       <!-- hidden by syncChatIdentity when signed in: you post under your manager name, so the box
            is dead weight — but it stays in the DOM because sendChat and renderChat read it -->
       <input type="text" id="chatName" placeholder="Your name" style="max-width:120px" onchange="store.set('ffl_chat_name', this.value)">
       <textarea id="chatMsg" rows="1" placeholder="Say something regrettable…"
         style="flex:1;min-width:0;resize:none;overflow-y:hidden;max-height:120px;line-height:1.35"
-        oninput="autoGrowChat(this)"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
+        oninput="autoGrowChat(this);chatMentionCheck(this)"
+        onkeydown="if(chatMentionKey(event)) return; if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
         onpaste="chatPaste(event)"></textarea>
+      <button class="btn ghost chat-ico" title="Receipts on a manager - their record against you, their season, their bench crimes. Or type @ and a name." onclick="toggleReceipts()">📋</button>
       <button class="btn ghost chat-ico" title="Emoji" onclick="toggleEmoji()">☺</button>
       <label class="btn ghost chat-ico" title="Send a photo or GIF">🖼<input type="file" accept="image/*" style="display:none" onchange="chatPickImage(event)"></label>
       <button class="btn" onclick="sendChat()">Send</button>
@@ -9541,6 +9560,137 @@ const CHAT_EMOJI = ('🏈 😂 🤣 💀 🔥 😭 😤 🤡 🖕 😈 🙄 😏
   +'👍 👎 👏 🙌 💪 🤝 🫵 ✌️ 🤞 🙏 💯 ⚡ 🚨 🎯 🏆 🥇 🥈 🥉 💰 🤑 📉 📈 '
   +'😎 🥱 😴 🤠 🤓 🥴 😵 🫣 😬 😅 😉 😘 🤔 🧐 😳 🥹 😡 🤬 🗑️ 🚮 '
   +'🐐 🐍 🦆 🦃 🐔 🍗 🍺 🍻 🌮 🍕 💩 🎣 ⛳ 🛋️ 🩼 🧊 ❄️ ☠️ 🪦 🎉').split(' ').filter(Boolean);
+/* ===================== TRASH TALK WITH RECEIPTS =====================
+   Type @ and a name in the chat, or tap the clipboard, and a manager's card drops into the
+   message: their lifetime record against you, their season and where it is heading, their
+   luck, how they have done against the projections, what they have left on the benches this
+   year, and the crown if they are wearing it. Every line is a number the app already keeps -
+   this only puts them where the argument is. The card is plain text in the message, so it
+   posts, copies and pushes like anything else; the renderer just draws it as a block. */
+const RC_MARK = '📋 Receipts on ';
+const ordinal = n => n + (n%100>=11 && n%100<=13 ? 'th' : ['th','st','nd','rd'][n%10] || 'th');
+async function receiptsData(ti){
+  const t = (S.teams||[])[ti]; if(!t) return null;
+  const them = liveMgrOf(ti) || t.name || teamName(ti);
+  const mi = myTeamIdx(); const me = (Number.isInteger(mi) && mi!==ti) ? (liveMgrOf(mi) || '') : '';
+  const L = [];
+  const p1 = v => v>=99.95 ? '100%' : v<=0.05 ? '0%' : (v>=10 ? Math.round(v) : v.toFixed(1)) + '%';
+  /* lifetime, against me */
+  if(me && me!==them){
+    const r = h2hPair(me, them);
+    if(r) L.push(`vs me all-time: ${h2hLead(r, me, them)}${r.run && r.run.n>=2 && r.run.kind!=='T' ? ` · ${r.run.kind==='W'?me:them} has won ${r.run.n} straight` : ''} · last ${h2hLastTxt(r, me, them)}`);
+    else L.push('vs me all-time: never played. Yet.');
+  }
+  /* the season, and where it is going */
+  try{
+    const rows = seasonStandings(), idx = rows.findIndex(r=>r.i===ti), r = rows[idx];
+    if(r){
+      const played = r.w + r.l + r.t;
+      const pfRank = rows.slice().sort((a,b)=>b.pf-a.pf).findIndex(x=>x.i===ti) + 1;
+      /* the run they are on, off the schedule */
+      let run = { kind:'', n:0 };
+      Object.keys(S.season.schedule||{}).map(Number).sort((a,b)=>a-b).forEach(w=>{
+        (S.season.schedule[w]||[]).forEach((g,m)=>{
+          if(g[0]!==ti && g[1]!==ti) return;
+          const [pa,pb] = mScore(String(w), m); if(pa==null || pb==null || !(weekIsOver(w) || officialScore(String(w), m))) return;
+          const mine = g[0]===ti ? pa : pb, theirs = g[0]===ti ? pb : pa;
+          const k = mine>theirs ? 'W' : mine<theirs ? 'L' : 'T';
+          run = run.kind===k ? { kind:k, n:run.n+1 } : { kind:k, n:1 };
+        });
+      });
+      const od = statsLoaded ? playoffOddsFor(ti) : null;
+      L.push(`this season: ${r.w}-${r.l}${r.t?'-'+r.t:''}${played?`, ${ordinal(idx+1)} of ${rows.length}, ${ordinal(pfRank)} in points`:''}${run.n>=2 && run.kind!=='T' ? ` · ${run.kind==='W'?'won':'lost'} ${run.n} straight` : ''}${od ? ` · ${p1(od.po)} playoffs, ${p1(od.title)} title` : ''}`);
+      const lk = luckWins(r);
+      if(lk!=null && Math.abs(lk)>=0.5) L.push(`luck: ${signed1(lk)} wins the schedule ${lk>0?'handed them':'took off them'}`);
+      const pr = projReportFor(ti);
+      if(pr.games) L.push(`vs projection: ${signed1(pr.vs)} over ${pr.games} game${pr.games===1?'':'s'}${pr.favL?`, ${pr.favL} choke${pr.favL>1?'s':''} as the favourite`:''}${pr.dogW?`, ${pr.dogW} upset${pr.dogW>1?'s':''}`:''}`);
+    }
+  }catch(e){}
+  /* the benches: what the recap recorded for each finished week (the lineup as it stood then),
+     the stat file for any week without one */
+  try{
+    const yr = +(S.season && S.season.year) || PROJ_SEASON;
+    const weeks = Object.keys(S.season.schedule||{}).map(Number).filter(w=>w>=1 && w<=REG_WEEKS && weekIsOver(w) && weekHasScores(w)).sort((a,b)=>a-b);
+    let total = 0, worst = null, counted = 0;
+    const need = [];
+    weeks.forEach(w=>{
+      const rec = recapFor(w); const row = rec && Array.isArray(rec.bench) ? rec.bench.find(b=>b && b.name===t.name) : null;
+      if(rec && Array.isArray(rec.bench)){ counted++; if(row && row.left>0){ total += row.left; if(!worst || row.left>worst.left) worst = { w, left:row.left, who:row.missed||'' }; } }
+      else need.push(w);
+    });
+    if(need.length){
+      const stats = await Promise.all(need.map(w=>fetchWeekStats(yr, w).catch(()=>null)));
+      need.forEach((w,i)=>{ const st = stats[i]; if(!st || !Object.keys(st).length) return; counted++;
+        const b = benchLeft(ti, st, false); if(b && b.left>0){ total += b.left; if(!worst || b.left>worst.left) worst = { w, left:b.left, who:b.missed[0]?b.missed[0].name:'' }; } });
+    }
+    if(counted) L.push(`bench crimes: ${total.toFixed(1)} left on the bench this year${worst?` · worst wk ${worst.w}, ${worst.left.toFixed(1)}${worst.who?` (${worst.who} sat)`:''}`:''}`);
+  }catch(e){}
+  try{ const tb = toiletBowlTeam(); if(tb && tb.ti===ti) L.push(`currently wearing the Toilet Bowl crown: ${tb.pts.toFixed(1)} in week ${tb.wk} 🚽`); }catch(e){}
+  return { ti, name: t.name, mgr: them, lines: L };
+}
+function receiptsText(D){
+  return `${RC_MARK}${D.mgr}${D.name && D.name!==D.mgr ? ` (${D.name})` : ''}\n` + (D.lines.length ? D.lines.map(l=>'· '+l).join('\n') : '· nothing on file. Suspicious.');
+}
+/* ---- the picker: a list of managers, filtered by what follows the @ ---- */
+function receiptsCandidates(q){
+  const s = String(q||'').trim().toLowerCase();
+  return (S.teams||[]).map((t,i)=>({ i, name:t.name||teamName(i), mgr: liveMgrOf(i)||'' }))
+    .filter(x=>!s || x.mgr.toLowerCase().startsWith(s) || x.name.toLowerCase().startsWith(s) || x.mgr.toLowerCase().includes(s));
+}
+function renderReceiptsPanel(q, fromMention){
+  const p = document.getElementById('receiptsPanel'); if(!p) return;
+  const list = receiptsCandidates(q);
+  window._rcFrom = !!fromMention; window._rcSel = 0;
+  if(!list.length){ p.style.display='none'; return; }
+  p.innerHTML = `<div class="rp-head">Receipts on…${fromMention?'':' <span class="sub" style="margin:0">or type @ and a name</span>'}</div>` +
+    list.map((x,k)=>`<button class="rp-row${k===0?' sel':''}" data-ti="${x.i}" onclick="insertReceipts(${x.i})">${teamMarkHTML(S.teams[x.i], 22)}<span class="rp-nm">${esc(x.mgr||'?')}</span><span class="rp-team">${esc(x.name)}</span></button>`).join('');
+  p.style.display='block';
+}
+function toggleReceipts(){
+  const p = document.getElementById('receiptsPanel'); if(!p) return;
+  if(p.style.display==='block'){ p.style.display='none'; return; }
+  const e = document.getElementById('emojiPanel'); if(e) e.style.display='none';
+  renderReceiptsPanel('', false);
+}
+/* @name in the box: the panel follows what is typed after the @ */
+function chatMentionQuery(el){
+  const v = el.value.slice(0, el.selectionStart);
+  const m = /(^|\s)@([^\s@]{0,24})$/.exec(v);
+  return m ? { q: m[2], start: v.length - m[0].length + m[1].length } : null;
+}
+function chatMentionCheck(el){
+  const mq = chatMentionQuery(el);
+  if(mq) renderReceiptsPanel(mq.q, true);
+  else if(window._rcFrom){ const p=document.getElementById('receiptsPanel'); if(p) p.style.display='none'; window._rcFrom=false; }
+}
+function chatMentionKey(ev){
+  const p = document.getElementById('receiptsPanel');
+  if(!p || p.style.display!=='block') return false;
+  const rows = [...p.querySelectorAll('.rp-row')]; if(!rows.length) return false;
+  if(ev.key==='ArrowDown' || ev.key==='ArrowUp'){
+    ev.preventDefault();
+    window._rcSel = ((window._rcSel||0) + (ev.key==='ArrowDown'?1:-1) + rows.length) % rows.length;
+    rows.forEach((r,k)=>r.classList.toggle('sel', k===window._rcSel)); return true;
+  }
+  if(ev.key==='Enter' || ev.key==='Tab'){ ev.preventDefault(); insertReceipts(+rows[window._rcSel||0].dataset.ti); return true; }
+  if(ev.key==='Escape'){ ev.preventDefault(); p.style.display='none'; return true; }
+  return false;
+}
+async function insertReceipts(ti){
+  const el = document.getElementById('chatMsg'), p = document.getElementById('receiptsPanel');
+  if(p) p.style.display='none';
+  if(!el) return;
+  if(!statsLoaded){ toast('Pulling the receipts…'); try{ await loadCareerStats(); }catch(e){} }
+  const D = await receiptsData(ti); if(!D){ toast('Nothing on file.'); return; }
+  const card = receiptsText(D);
+  const mq = chatMentionQuery(el);
+  let v = el.value;
+  if(mq){ v = v.slice(0, mq.start) + v.slice(el.selectionStart); }
+  v = v.trim();
+  el.value = (v ? v + '\n\n' : '') + card;
+  autoGrowChat(el); el.focus(); el.selectionStart = el.selectionEnd = el.value.length;
+  window._rcFrom = false;
+}
 function toggleEmoji(){
   const p=document.getElementById('emojiPanel'); if(!p) return;
   if(p.style.display==='flex'){ p.style.display='none'; return; }
@@ -9631,6 +9781,12 @@ function chatBodyHTML(x){
   const looksImg = urlOnly && ( /\.(gif|png|jpe?g|webp)(\?|$)/i.test(urlOnly[0])
                              || /(giphy\.com|tenor\.com|imgur\.com\/[A-Za-z0-9]+\.)/i.test(urlOnly[0]) );
   let html = '';
+  /* a receipts card in the message: whatever was typed above it, then the card as a block */
+  const rc = raw.indexOf(RC_MARK);
+  if(rc >= 0){
+    const before = raw.slice(0, rc).trim(), card = raw.slice(rc);
+    return (before ? `<div>${esc(before)}</div>` : '') + `<div class="chat-receipt">${esc(card)}</div>` + (x.img ? `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">` : '');
+  }
   if(raw && !(looksImg)) html += `<div>${esc(raw)}</div>`;
   if(looksImg) html += `<img class="chat-img" src="${esc(urlOnly[0])}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:this.src}))">`;
   if(x.img) html += `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">`;
@@ -12756,8 +12912,12 @@ async function maybeWriteRecap(){
     const rec = await rcCompose('live', wk, 0);
     if(!rec) return;
     const uid = window.fbUser.uid;
+    /* every team's bench crime for the week rides along, as it stood when the recap was
+       written - the lineups move on, and the receipts want the number that was true then */
+    const bx = (_rcX[wk] && _rcX[wk].benchByName) || {};
+    const bench = Object.keys(bx).map(name=>({ name, left: +bx[name].left || 0, missed: String(bx[name].missed||'') }));
     await window.FB.dbTxn(`${recapsPath()}/${key}`, cur => cur===null
-      ? { yr:+yr, wk:+wk, seed:0, title:rec.title, text:rec.text, at:Date.now(), by:uid, v:1 } : undefined);
+      ? { yr:+yr, wk:+wk, seed:0, title:rec.title, text:rec.text, at:Date.now(), by:uid, v:1, bench } : undefined);
   }catch(e){ /* no rule for the node yet, or offline: the local words still draw */ }
   finally{ _rcWriting = false; }
 }
@@ -16537,7 +16697,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · bench watch';
+const BUILD_STAMP = '2026-09-07 · trash talk with receipts';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
