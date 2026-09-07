@@ -292,6 +292,27 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Playoff odds
+
+`playoffOdds()` is a Monte Carlo of the rest of the regular season plus the bracket
+(`PO_SIMS` = 4000, weekly spread `PO_SD` = 21). Settled games (score on the board and
+`weekIsOver` or official) go in as fixed; every other game is two Gaussian draws around each
+side's projection for that week - the current week from the live post's expected finals with
+the spread shrunk to each side's share still to come (`liveScoresMap[wk].live.g{m}`, fresh
+within 30 min) or `projectedTotal` (the lineup as set), later weeks from `optimalLineupOf` over
+the roster with `tradeWeekPts` (weekly file, else season average, byes zero). Seeding is the
+standings sort (wins, then points for); `poSpots()` make it; byes fill to the next power of
+two; the bracket is `seedPairs`, playoff games drawn off each roster's average strength over
+`poWeeks()`. **Deterministic**: `mulberry32(hashStr(key))`, so every phone gets the same odds;
+cached on scores, proj, live stamps, the weekly file stamp, `S.lineups`, roster limits, spots,
+weeks, team names and the hour. Per team: `po`, `bye`, `seed1`, `fin`, `title`, `avgSeed`,
+`expW`, and `swing` = playoff odds if the team wins / loses its game this week.
+
+Shown as the Playoff odds card at the top of the Playoffs tab (`playoffOddsHTML`, `.od-*`
+rows; the "This week" swing column hides on phones), as a percentage on every Playoff picture
+row (`.po-odds`), and in the My Team header line (`playoffOddsFor`). Uses `waitForProj('poodds')`
+when projections are not in yet.
+
 ## Rivalries and head-to-head history
 
 `h2hAll(from, to)` is the record between every pair of **managers** (team names are mapped

@@ -785,6 +785,31 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 .po-nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:13.5px}
 .po-rec{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);white-space:nowrap}
 .po-st{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.po-odds{font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--turf);font-variant-numeric:tabular-nums}
+/* the playoff odds card: one row a team, the playoff chance as a bar */
+.od-head{display:grid;grid-template-columns:minmax(0,1fr) 120px repeat(auto-fit,minmax(0,1fr));}
+.od-head,.od-row{display:grid;grid-template-columns:minmax(0,1fr) 128px 52px 52px 118px;gap:8px;align-items:center}
+.od-head{font-family:var(--f-ui);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--chalk-dim);padding:0 0 4px;border-bottom:1px solid var(--line)}
+.od-head > span:not(:first-child),.od-row .od-pct,.od-row .od-swing{text-align:right}
+.od-row{padding:7px 0;border-bottom:1px solid var(--line)}
+.od-row:last-child{border-bottom:none}
+.od-team{display:flex;align-items:center;gap:8px;min-width:0}
+.od-nm{min-width:0;display:flex;flex-direction:column;font-weight:600;font-size:13.5px;line-height:1.2}
+.od-nm,.od-nm small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.od-nm small{font-family:var(--f-mono);font-weight:400;font-size:10.5px;color:var(--chalk-dim)}
+.od-bar{position:relative;display:block;height:20px;border-radius:5px;background:var(--line);overflow:hidden}
+.od-bar i{position:absolute;inset:0 auto 0 0;background:var(--turf-bright);opacity:.55}
+.od-bar b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--chalk);font-variant-numeric:tabular-nums}
+.od-row.in .od-bar i{background:var(--turf);opacity:.8} .od-row.in .od-bar b{color:var(--on-turf)}
+.od-row.out .od-team{opacity:.6}
+.od-pct{font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--chalk)}
+.od-title{font-weight:700}
+.od-swing{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);white-space:nowrap;font-variant-numeric:tabular-nums}
+@media(max-width:640px){
+  .od-head,.od-row{grid-template-columns:minmax(0,1fr) 92px 44px 44px;gap:6px}
+  .od-head > span:nth-child(5),.od-row .od-swing{display:none}   /* this week's swing is a desktop column; the bar and the title carry the phone */
+  .od-nm{font-size:12.5px} .od-nm small{font-size:10px} .od-bar{height:18px} .od-bar b{font-size:11px} .od-pct{font-size:11.5px}
+}
 .po-chip{font-family:var(--f-ui);font-weight:800;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
   border-radius:4px;padding:2px 7px;white-space:nowrap}
 .po-chip.cl{background:var(--turf);color:var(--on-turf)}
@@ -11914,7 +11939,7 @@ function renderPlayoffs(){
       ${third}
     </div>`;
   })() : '';
-  el.innerHTML = `<div class="card">
+  el.innerHTML = playoffOddsHTML() + `<div class="card">
     <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
       <h2 style="margin:0">If the season ended today</h2>
       <span class="sub" style="margin:0">Top ${P.N} of ${P.rows.length} get in</span>
@@ -11926,10 +11951,138 @@ function renderPlayoffs(){
   ${P.wksPlayed ? poPictureHTML() : ''}
   ${cons}`;
 }
+/* ===================== PLAYOFF ODDS =====================
+   The rest of the season, played out four thousand times. Every game still to be settled is
+   two scores drawn around what each side projects for that week - this week from the lineups
+   and live scores as they stand, later weeks from the best lineup each roster can field off
+   its projections, byes included - and every played-out season is seeded the way the
+   standings are (wins, then points for), the top N in, a bracket from seedPairs with byes
+   where the field is short of a power of two, playoff games drawn the same way off each
+   roster's projected strength. Deterministic: the draws come from a generator seeded on the
+   inputs, so every phone shows the same odds and a redraw never wobbles them; a score, a
+   lineup or a fresh projection file moves them. Cached on those inputs (and the hour). */
+const PO_SIMS = 4000, PO_SD = 21;                /* a fantasy team's week is about ±21 around its projection */
+let _poOddsCache = { key:'', out:null };
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function playoffOdds(){
+  if(!(S.season && S.season.schedule) || !statsLoaded) return null;
+  const teams = S.teams||[], N = teams.length; if(N < 2) return null;
+  const now = projWeekNow();
+  /* seed every lineup map first: projectedTotal does it anyway, and doing it after the key
+     was built would change the key and throw the cache away on the very next call */
+  teams.forEach((t,ti)=>{ try{ ensureLineup(ti); }catch(e){} });
+  const liveSig = liveScoresMap ? Object.keys(liveScoresMap).map(k=>[k, (liveScoresMap[k]||{}).at||0]) : [];
+  const key = JSON.stringify([S.season.scores, S.season.proj, liveSig, (PROJ_WEEKS[now]||{}).at||0, S.lineups, S.roster, poSpots(), poWeeks(), now, teams.map(t=>t.name), Math.floor(Date.now()/3600000)]);
+  if(_poOddsCache.key === key && _poOddsCache.out) return _poOddsCache.out;
+  const rnd = mulberry32(hashStr(key) || 1);
+  const gauss = () => { let u = 0, v = 0; while(u===0) u = rnd(); while(v===0) v = rnd(); return Math.sqrt(-2*Math.log(u)) * Math.cos(2*Math.PI*v); };
+  /* what is settled, and what is still to be played */
+  const rec = teams.map(()=>({ w:0, l:0, t:0, pf:0 }));
+  const remaining = [];
+  const rosters = teams.map((t,ti)=>teamRoster(ti).filter(p=>(S.lineups[ti]||{})[p.playerId]!=='IR'));
+  const strength = (ti, w) => optimalLineupOf(rosters[ti], p=>tradeWeekPts(p, w)).total;
+  const sched = S.season.schedule;
+  Object.keys(sched).map(Number).filter(n=>n>=1 && n<=REG_WEEKS).sort((a,b)=>a-b).forEach(w=>{
+    (sched[w]||[]).forEach((g,m)=>{
+      const [pa,pb] = mScore(String(w), m);
+      if(g[0]==null || g[1]==null || !teams[g[0]] || !teams[g[1]]) return;
+      const settled = pa!=null && pb!=null && (weekIsOver(w) || !!officialScore(String(w), m));
+      if(settled){
+        rec[g[0]].pf += pa; rec[g[1]].pf += pb;
+        if(pa>pb){ rec[g[0]].w++; rec[g[1]].l++; } else if(pb>pa){ rec[g[1]].w++; rec[g[0]].l++; } else { rec[g[0]].t++; rec[g[1]].t++; }
+        return;
+      }
+      let ea, eb, sa = PO_SD, sb = PO_SD;
+      if(w === now){
+        /* the week being played: the live post's expected finals when it has them, with the
+           spread shrunk to the share of each side still to come; else the lineups as set */
+        const lv = liveScoresMap && liveScoresMap[w] && liveScoresMap[w].live && liveScoresMap[w].live['g'+m];
+        if(lv && lv.ea!=null && lv.eb!=null && Date.now()-liveStamp(w) < 30*60000){
+          ea = +lv.ea; eb = +lv.eb;
+          const share = (e, s) => Math.max(0, e - (s||0)) / Math.max(1, e);
+          sa = Math.max(1.5, PO_SD * Math.sqrt(share(ea, pa))); sb = Math.max(1.5, PO_SD * Math.sqrt(share(eb, pb)));
+        } else { ea = Math.max(pa||0, projectedTotal(g[0], w)); eb = Math.max(pb||0, projectedTotal(g[1], w)); }
+      } else { ea = strength(g[0], w); eb = strength(g[1], w); }
+      remaining.push({ w, m, a:g[0], b:g[1], ea, eb, sa, sb });
+    });
+  });
+  const spots = Math.max(1, Math.min(N-1, poSpots()));
+  let size = 2; while(size < spots) size *= 2;
+  const byes = size - spots;
+  const pairs = seedPairs(size);
+  const poW = poWeeks();
+  const poStr = teams.map((t,ti)=>{ const v = poW.map(w=>strength(ti, w)); return v.length ? v.reduce((x,y)=>x+y,0)/v.length : strength(ti, REG_WEEKS); });
+  const cnt = teams.map(()=>({ po:0, bye:0, seed1:0, title:0, fin:0, seedSum:0, winSum:0, cW:0, cWpo:0, cL:0, cLpo:0 }));
+  const playGame = (a, b) => { if(a==null) return b; if(b==null) return a;
+    const A = poStr[a] + PO_SD*gauss(), B = poStr[b] + PO_SD*gauss(); return A >= B ? a : b; };
+  for(let s=0; s<PO_SIMS; s++){
+    const R = teams.map((t,ti)=>({ i:ti, w:rec[ti].w, l:rec[ti].l, t:rec[ti].t, pf:rec[ti].pf }));
+    const curWon = {};
+    remaining.forEach(g=>{
+      const A = g.ea + g.sa*gauss(), B = g.eb + g.sb*gauss();
+      if(A>B){ R[g.a].w++; R[g.b].l++; } else if(B>A){ R[g.b].w++; R[g.a].l++; } else { R[g.a].t++; R[g.b].t++; }
+      R[g.a].pf += A; R[g.b].pf += B;
+      if(g.w===now){ curWon[g.a] = A>B; curWon[g.b] = B>A; }
+    });
+    R.sort((x,y)=> y.w-x.w || y.pf-x.pf);
+    const inPO = {};
+    R.forEach((r,idx)=>{ const c = cnt[r.i]; c.seedSum += idx+1; c.winSum += r.w;
+      if(idx < spots){ c.po++; inPO[r.i] = true; if(idx===0) c.seed1++; if(idx < byes) c.bye++; } });
+    const seeded = R.slice(0, spots).map(r=>r.i);
+    let field = pairs.map(([a,b])=>playGame(seeded[a-1], seeded[b-1]));
+    while(field.length > 2){ const next=[]; for(let i=0;i<field.length;i+=2) next.push(playGame(field[i], field[i+1])); field = next; }
+    if(field.length===2){ cnt[field[0]].fin++; cnt[field[1]].fin++; cnt[playGame(field[0], field[1])].title++; }
+    else if(field.length===1) cnt[field[0]].title++;
+    Object.keys(curWon).forEach(ti=>{ const c = cnt[ti]; if(curWon[ti]){ c.cW++; if(inPO[ti]) c.cWpo++; } else { c.cL++; if(inPO[ti]) c.cLpo++; } });
+  }
+  const pct = n => Math.round(n/PO_SIMS*1000)/10;
+  const out = { sims:PO_SIMS, spots, byes, now, left: remaining.length, settledAll: !remaining.length,
+    rows: teams.map((t,ti)=>{ const c = cnt[ti]; return {
+      i:ti, name:t.name||teamName(ti), w:rec[ti].w, l:rec[ti].l, t:rec[ti].t,
+      po:pct(c.po), bye:pct(c.bye), seed1:pct(c.seed1), fin:pct(c.fin), title:pct(c.title),
+      avgSeed: Math.round(c.seedSum/PO_SIMS*10)/10, expW: Math.round(c.winSum/PO_SIMS*10)/10,
+      swing: (c.cW>0 && c.cL>0) ? { win: Math.round(c.cWpo/c.cW*100), lose: Math.round(c.cLpo/c.cL*100) } : null }; }) };
+  out.rows.sort((a,b)=> b.po-a.po || b.title-a.title || b.expW-a.expW);
+  _poOddsCache = { key, out };
+  return out;
+}
+function playoffOddsFor(ti){ const O = playoffOdds(); return O ? O.rows.find(r=>r.i===ti) || null : null; }
+/* the card: every team's chances, the bracket byes when the field has them, and what this
+   week's game is worth to each side */
+function playoffOddsHTML(){
+  let O = null; try{ O = playoffOdds(); }catch(e){ O = null; }
+  if(!O){
+    if(!statsLoaded) waitForProj('poodds', ()=>{ if(window.currentView==='matchups') renderPlayoffs(); });
+    return `<div class="card od-card" style="margin-bottom:18px"><h2>Playoff odds</h2><p class="sub" style="margin:0">${statsLoaded?'No schedule yet.':'Loading projections…'}</p></div>`;
+  }
+  const showBye = O.byes > 0, showSwing = O.rows.some(r=>r.swing) && !O.settledAll;
+  const p1 = v => v>=99.95 ? '100%' : v<=0.05 ? '0%' : (v>=10 ? Math.round(v) : v.toFixed(1)) + '%';
+  const rows = O.rows.map(r=>{
+    const sw = r.swing ? `<span class="od-swing" title="Playoff odds if ${esc(r.name)} wins this week, and if it loses">W ${r.swing.win}% · L ${r.swing.lose}%</span>` : `<span class="od-swing"></span>`;
+    return `<div class="od-row${r.po>=99.95?' in':r.po<=0.05?' out':''}">
+      <span class="od-team">${teamMarkHTML(S.teams[r.i], 26)}<span class="od-nm">${esc(r.name)}<small>${r.w}-${r.l}${r.t?'-'+r.t:''} · ${r.expW.toFixed(1)} exp. wins · avg seed ${r.avgSeed.toFixed(1)}</small></span></span>
+      <span class="od-bar" title="${p1(r.po)} to make the playoffs"><i style="width:${Math.max(0, Math.min(100, r.po))}%"></i><b>${p1(r.po)}</b></span>
+      ${showBye?`<span class="od-pct" title="First-round bye">${p1(r.bye)}</span>`:''}
+      <span class="od-pct od-title" title="Wins the whole thing">${p1(r.title)}</span>
+      ${showSwing?sw:''}
+    </div>`;
+  }).join('');
+  return `<div class="card od-card" style="margin-bottom:18px">
+    <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">Playoff odds</h2>
+      <span class="sub" style="margin:0">${O.sims.toLocaleString()} seasons from here${O.left?` · ${O.left} game${O.left===1?'':'s'} still to play`:' · regular season complete'}</span>
+    </div>
+    <p class="sub" data-note="po-odds" style="margin:4px 0 10px">The rest of the schedule, played out ${O.sims.toLocaleString()} times: this week from the lineups and live scores as they stand, the weeks after from the best lineup each roster can field off its projections, byes included. Top ${O.spots} make it, seeded on wins then points for; the bracket is played out too for the title. Same numbers on every phone, and they move when a score, a lineup or a projection does.</p>
+    <div class="od-head"><span></span><span>Playoffs</span>${showBye?'<span>Bye</span>':''}<span>Title</span>${showSwing?'<span>This week</span>':''}</div>
+    ${rows}
+  </div>`;
+}
 function poPictureHTML(){
   const pic = poPicture(); if(!pic) return '';
   const SPOTS = Math.max(1, Math.min(pic.length-1, poSpots()));
   const anyLeft = pic.some(r=>r.rem>0);
+  let odds = null; try{ odds = statsLoaded ? playoffOdds() : null; }catch(e){ odds = null; }
+  const oddsOf = ti => { const r = odds && odds.rows.find(x=>x.i===ti); return r ? `<span class="po-odds" title="Playoff odds · ${r.title>=10?Math.round(r.title):r.title.toFixed(1)}% to win it all">${r.po>=99.95?'100':r.po<=0.05?'0':r.po>=10?Math.round(r.po):r.po.toFixed(1)}%</span>` : ''; };
   const rows = pic.map((r,idx)=>{
     const chips=[];
     if(r.clinched) chips.push('<span class="po-chip cl">In</span>');
@@ -11944,7 +12097,7 @@ function poPictureHTML(){
       <span class="po-seed">${r.seed}</span>
       <span class="po-nm">${esc(r.name||teamName(r.i))}</span>
       <span class="po-rec">${r.w}-${r.l}${r.t?'-'+r.t:''}</span>
-      <span class="po-st">${mag}${chips.join('')}</span>
+      <span class="po-st">${oddsOf(r.i)}${mag}${chips.join('')}</span>
     </div>`;
   }).join('');
   return `<div class="card" style="margin-bottom:18px">
@@ -11952,7 +12105,7 @@ function poPictureHTML(){
     <p class="sub" data-note="po-picture" style="margin:0 0 10px">Top ${SPOTS} make the bracket. The other ${pic.length-SPOTS} go to the consolation, which is not nothing here: winning it is the first pick in the draft. <b>In</b> and <b>Consolation</b> are settled, they cannot come undone. <b>Magic</b> is how many more of your wins, or losses by the best team still outside, it takes to be settled, and either one counts.</p>
     ${rows}
     ${anyLeft?'':'<p class="sub" style="margin:10px 0 0">Regular season complete.</p>'}
-    <p class="sub" data-note="po-tiebreak" style="margin:10px 0 0">Level records are split on points for, and there is no knowing that in advance, so anyone who can match your record counts against you here. Two teams chasing you might also play each other, which this does not try to guess at, so a spot is sometimes safe a week before it says so.</p>
+    <p class="sub" data-note="po-tiebreak" style="margin:10px 0 0">Level records are split on points for, and there is no knowing that in advance, so anyone who can match your record counts against you here. Two teams chasing you might also play each other, which this does not try to guess at, so a spot is sometimes safe a week before it says so.${odds?' The percentage is the playoff odds - the full table is on the Playoffs tab.':''}</p>
   </div>`;
 }
 function seasonStandings(){
@@ -15399,7 +15552,7 @@ function renderMyTeam(){
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
         <div class="row" style="gap:12px;align-items:center;min-width:0">${teamMarkHTML(t,72)}<div style="min-width:0"><div class="eyebrow">My Team</div><h2 style="margin:0">${esc(t.name)}</h2>
-        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px">${(brandingLocked()&&!isAdmin())?`<span title="${S.lockBranding?'The commissioner has locked team names and logos':'Names and logos are locked while the season runs'}" style="color:var(--chalk-dim)">Name &amp; logo locked 🔒</span>`:`<label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · <a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
+        <p class="sub" style="margin:2px 0 0">${t.manager?esc(t.manager)+' \u00B7 ':''}${st? `${st.w}-${st.l}-${st.t} \u00B7 ${st.pf.toFixed(1)} PF` : 'Season not started'}${(()=>{ try{ const o = st && statsLoaded ? playoffOddsFor(mi) : null; return o ? ` \u00B7 <span title="Simulated from here - the full table is on the Playoffs tab">${o.po>=10?Math.round(o.po):o.po.toFixed(1)}% playoffs \u00B7 ${o.title>=10?Math.round(o.title):o.title.toFixed(1)}% title</span>` : ''; }catch(e){ return ''; } })()}</p>${canEditTeam(mi)?`<div class="sub" style="margin-top:4px">${(brandingLocked()&&!isAdmin())?`<span title="${S.lockBranding?'The commissioner has locked team names and logos':'Names and logos are locked while the season runs'}" style="color:var(--chalk-dim)">Name &amp; logo locked 🔒</span>`:`<label style="color:var(--turf);cursor:pointer;font-weight:700">Change logo<input type="file" accept="image/*" onchange="setTeamLogo(${mi},event)" style="display:none"></label>${t.logo?` · <a href="#" onclick="clearTeamLogo(${mi});return false" style="color:var(--charge)">Remove</a>`:''} · <a href="#" onclick="renameTeam(${mi});return false" style="color:var(--turf);font-weight:700">Rename</a>`}</div>`:''}</div></div>
         ${sel}
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:14px">
@@ -16117,7 +16270,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · rivalries and head-to-head history';
+const BUILD_STAMP = '2026-09-07 · playoff odds';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
