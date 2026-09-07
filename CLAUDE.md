@@ -505,6 +505,13 @@ nodes because a parent `.write` rule cannot cascade over per-user votes.
 - A pending offer that shows no buttons explains why on the card (unclaimed team, someone
   else's trade, or a competing accepted deal). Keep that - a silently button-less card is
   indistinguishable from a broken app.
+- **Two traded-pick caps**, both in `S.draftCfg` and both enforced by `tradeCapBlocked` at send
+  and at commissioner execute: `maxPicks` (all traded picks a manager acquires in a year, 0 =
+  none) and the **early-round cap** `earlyPicks` through round `earlyRounds` (default 3 through
+  5: a team keeps its own five early picks and may trade for three more, eight at most in the
+  first five rounds; 0 = none). Counted from `S.pickTrades` by team name and year
+  (`earlyPicksAcquired`). The builder shows each side's standing under its picks
+  (`earlyCapNoteHTML`, red when the deal would break it). Settings > League.
 - **Trades never check `rosterLimit()`** and never call `keeperGuard` - a 3-for-1 lands a team
   at 19/17 with no drop forced, and keepers can be traded. The analyzer surfaces both; the
   mechanics are unchanged.
