@@ -310,6 +310,31 @@ nav.tabs button.locked:hover{opacity:.6}
    same string copies and posts to chat unchanged. Capped at 70ch on desktop for readability;
    phones get the full width and a slightly smaller face. */
 .recap-body{white-space:pre-wrap;line-height:1.6;max-width:70ch;font-size:15px}
+/* ---- draft grades ---- */
+.dg-rows{display:flex;flex-direction:column}
+.dg-row{display:grid;grid-template-columns:46px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.dg-row:last-child{border-bottom:none}
+.dg-grade{font-family:var(--f-display);font-size:26px;line-height:1;text-align:center;padding:7px 0 5px;border-radius:8px;background:var(--panel);border:1px solid var(--line)}
+.dg-grade.a,.dg-chip b.a{color:var(--turf)}.dg-grade.b,.dg-chip b.b{color:var(--gold)}.dg-grade.c,.dg-chip b.c{color:var(--chalk-dim)}.dg-grade.d,.dg-chip b.d{color:var(--charge)}
+.dg-team{display:flex;align-items:center;gap:8px;min-width:0}
+.dg-name{min-width:0}.dg-name b{display:block;line-height:1.2}.dg-name small{color:var(--chalk-dim)}
+.dg-notes{font-size:12px;color:var(--chalk);margin-top:3px;line-height:1.5}
+.dg-tag{font-family:var(--f-ui);font-weight:800;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:1px 5px;border-radius:4px;background:var(--turf-wash);color:var(--turf)}
+.dg-tag.reach{background:rgba(198,12,48,.12);color:var(--charge)}
+.dg-dim{color:var(--chalk-dim)}
+.dg-nums{display:flex;gap:14px;text-align:right}
+.dg-num b{display:block;font-family:var(--f-mono);font-size:15px;line-height:1.1}
+.dg-num small{font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
+.dg-strip{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.dg-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 7px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:var(--panel)}
+.dg-chip b{font-family:var(--f-display);font-size:15px;line-height:1}
+@media(max-width:560px){
+  .dg-row{grid-template-columns:40px minmax(0,1fr) auto;gap:8px}
+  .dg-grade{font-size:22px;padding:6px 0 4px}
+  .dg-nums{gap:10px}
+  .dg-num b{font-size:13px}
+  .dg-num small{font-size:9px;letter-spacing:.04em}
+}
 @media(max-width:640px){ .recap-body{max-width:none;font-size:14px;line-height:1.55} }
 nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
 nav.tabs button{
@@ -2706,6 +2731,8 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <div>
       <div class="roundnow" id="roundNow" aria-live="polite"></div>
       <div class="boardscroll"><div class="board" id="board"></div></div>
+      <!-- the grades, and the recap once the board is full: under the board, beside the pool -->
+      <div id="draftGrades" style="display:none"></div>
     </div>
     <div class="pool">
       <div class="poolhead">
@@ -5144,6 +5171,7 @@ function startLeagueSync(){
   window.FB.dbOn(recapsPath(), (m)=>{
     recapsMap = m||{};
     try{ renderHomeRecap(); }catch(e){}
+    try{ if(window.currentView==='draft' || window.currentView==='mock') renderDraftGrades(); }catch(e){}
     try{ if(window.currentView==='matchups') renderMatchups(); }catch(e){}
     try{ if(window.currentView==='recaps') renderRecaps(); }catch(e){}
     try{ maybeAnnounceRecap(); }catch(e){}
@@ -5359,6 +5387,7 @@ setInterval(()=>{
   maybeAutoScore();
   try{ checkScoreAlerts(); }catch(e){}      /* who on your team just scored */
   try{ maybeWriteRecap(); }catch(e){}       /* the week's write-up, once the games are over */
+  try{ maybeWriteDraftRecap(); }catch(e){}  /* and the draft's, for a device that was not in the room when it ended */
   /* the Sunday sweat keeps time with the clock: a minute is the beat, the fetches underneath
      have their own TTLs so this costs nothing between games */
   try{ if(window.currentView==='home') renderHomeSweat(); }catch(e){}
@@ -6362,7 +6391,7 @@ function tickLeadIn(){
 function startDraft(){
   if(!requireDraftControl()) return;
   if(D.finished){ toast("Draft is complete — reset to run it again."); return; }
-  D.started = true; D.paused = false;
+  D.started = true; D.paused = false; if(!D.startedAt) D.startedAt = Date.now();   /* the recap says how long it took */
   playSound('start');          /* the moment the whole year points at - say so out loud */
   stampDriver();               /* starting the draft takes the wheel */
   armClock();                  /* arm BEFORE saving so the shared record carries the deadline */
@@ -6955,7 +6984,7 @@ function positionCaps(){
 }
 function afterPick(){
   if(currentPickIndex() >= totalPicks()){
-    D.finished = true; clearInterval(timerId); timerId=null;
+    D.finished = true; D.finishedAt = Date.now(); clearInterval(timerId); timerId=null;
     stopSound('tick'); tickClipRunning=false;
     document.getElementById('clock').textContent = 'END';
     toast("That's a wrap — draft complete! 🏈");
@@ -9368,6 +9397,8 @@ function refreshDraftUI(){
     document.getElementById('onClockTeam').textContent = 'Ready when you are';
   }
   renderBoard(); renderPool(); renderRosterMini(); renderRoundNow();
+  try{ renderDraftGrades(); }catch(e){}
+  try{ if(D.finished) maybeWriteDraftRecap(); }catch(e){}   /* the draft recap, the moment the board fills */
 }
 /* big animated round number in the top middle of the board — re-pops when the round changes */
 function renderRoundNow(){
@@ -10258,7 +10289,7 @@ function h2hManagers(rec){
 /* the live season's weekly recaps, week by week, above the year-by-year archive */
 function liveRecapsHTML(){
   const liveYr = (S.season && S.season.year) || curDraftYear();
-  const list = Object.values(recapsMap||{}).filter(r=>r && r.text && +r.yr===+liveYr).sort((a,b)=>+b.wk-+a.wk);
+  const list = Object.values(recapsMap||{}).filter(r=>r && r.text && +r.yr===+liveYr && r.kind!=='draft').sort((a,b)=>+b.wk-+a.wk);
   if(!list.length){
     return S.season ? `<div class="card" style="max-width:860px;margin-bottom:18px"><div class="eyebrow">${esc(String(liveYr))} season</div>
       <p class="sub" style="margin:4px 0 0">The first weekly recap writes itself on the Tuesday after week 1. Until then, the Recap button on the Matchups board writes one up from any finished week.</p></div>` : '';
@@ -10283,7 +10314,8 @@ function liveRecapsHTML(){
 function renderRecaps(){
   const H = S.history;
   const years = Object.keys(H.recaps||{}).sort((a,b)=>b-a);
-  let liveHTML = ''; try{ liveHTML = liveRecapsHTML(); }catch(e){}
+  let liveHTML = ''; try{ liveHTML = draftRecapTabHTML(); }catch(e){}   /* the draft, above the weeks */
+  try{ liveHTML += liveRecapsHTML(); }catch(e){}
   if(!years.length){ document.getElementById('recapsView').innerHTML = liveHTML + '<p class="sub">No season recaps yet.</p>'; return; }
   if(!window.recapYear || !years.includes(String(window.recapYear))) window.recapYear = years[0];
   const yr = String(window.recapYear);
@@ -12950,7 +12982,7 @@ async function maybeAnnounceRecap(){
   const r = latestRecap(); if(!r || r.posted || !r.text || Date.now()-(+r.at||0) > 3*86400000) return;
   _rcAnnouncing = true;
   try{
-    const res = await window.FB.dbTxn(`${recapsPath()}/${recapKey(r.yr, r.wk)}`, cur => (cur && !cur.posted) ? { ...cur, posted:true, postedAt:Date.now() } : undefined);
+    const res = await window.FB.dbTxn(`${recapsPath()}/${recapKeyOf(r)}`, cur => (cur && !cur.posted) ? { ...cur, posted:true, postedAt:Date.now() } : undefined);
     if(res && res.committed===false) return;
     const k = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
     await window.FB.dbSet(chatPath()+'/'+k, { uid: window.fbUser.uid, n:'League Desk', m: r.text, t: Date.now() });
@@ -12963,6 +12995,14 @@ function renderHomeRecap(){
   const r = latestRecap();
   if(!r || !r.text){ el.style.display='none'; el.innerHTML=''; return; }
   const paras = String(r.text).split('\n\n'), opener = paras[1] || '';
+  if(r.kind==='draft'){   /* the draft recap holds the card until week 1's recap takes it over */
+    const F = (r.facts && r.facts.order) ? r.facts : null;
+    el.innerHTML = `<h2>${esc(String(r.yr))} Draft Recap${r.title?`<span class="sub" style="display:block;margin:2px 0 0;font-size:14px">${esc(r.title)}</span>`:''}</h2>
+      <p style="margin:8px 0 10px;max-width:70ch">${esc(opener)}</p>
+      ${draftGradeStripHTML(F)}
+      <div class="row" style="gap:8px"><button class="btn ghost" onclick="showView('recaps')">Grades and the whole thing →</button></div>`;
+    el.style.display='block'; return;
+  }
   el.innerHTML = `<h2>Week ${esc(String(r.wk))} Recap${r.title?`<span class="sub" style="display:block;margin:2px 0 0;font-size:14px">${esc(r.title)}</span>`:''}</h2>
     <p style="margin:8px 0 10px;max-width:70ch">${esc(opener)}</p>
     <div class="row" style="gap:8px"><button class="btn ghost" onclick="window.recapWeek=${+r.wk};showView('recaps')">Read the whole thing →</button></div>`;
@@ -13066,6 +13106,364 @@ function recapCardHTML(ctx, wk){
       ? `<p class="sub" data-note="recap-auto-card" style="margin:12px 0 0">Written by the app on the Tuesday after the week, from the final scores, the projections, the benches and the wire - the same words on every phone. Rewrite changes the wording, never the numbers.</p>`
       : `<p class="sub" data-note="recap-rewrite" style="margin:12px 0 0">Written from this week's final scores. Rewrite changes the wording, never the numbers.</p>`}
   </div>`;
+}
+/* ===================== DRAFT GRADES AND THE DRAFT RECAP =====================
+   The moment the board fills, every roster gets a grade and the app writes the draft up in
+   the same voice as the weekly recaps - the grades run live while the draft is on, as a
+   "so far" that moves with every pick.
+
+   THE NUMBER. A pick is scored on his season projection above the replacement line at his
+   position - the last starter in a league this size, drawn against the whole pool the way
+   poolValueMap draws it against the players still on the board (that line moves with the
+   draft; this one has to hold still once it is over). Below the line counts as zero: a
+   sixteenth-round kicker is not a crime, he is a body. Every slot then gets an expectation -
+   the j-th best value that was actually drafted is what the j-th overall pick should have
+   returned - and a pick is worth what it returned over that. Because the expectations come
+   off the board itself the grades are zero-sum: B is par, a chalk draft where everyone took
+   the value grades everyone a B, and a steal is a steal in THIS room. The letter is the
+   team's total over slot as a share of an average team's drafted value. Keepers are not
+   picks and stay out of the grading, but they count in Proj/wk - the best lineup the whole
+   roster projects to on an average week, which is what actually wins games.
+
+   THE FACTS TRAVEL, NOT THE PROJECTIONS. drFacts boils the board down to a small object (the
+   grade order, each team's steal and reach, the first kicker, the longest run) and both the
+   table and the text render from THAT. The stored copy carries the facts, so a Rewrite in
+   November is new words on the numbers as they stood on draft night, not a regrade on
+   whatever the projections say by then - "new words, same numbers", like the weekly one.
+
+   Shared like the weekly recap: league/main/recaps/{year}_draft, kind 'draft', wk 0, written
+   by the first signed-in device to see the real board finished (an atomic create), admins
+   overwrite on Rewrite. Surfaces: the Draft room (grades so far while it runs, the recap
+   underneath once it is done - a mock board grades too, and never stores), the Recaps tab,
+   and Home until week 1's recap takes the card over. */
+const DR_STEAL_PTS = 10;      /* season points over slot before a pick gets called a steal or a reach */
+const DR_KD_SCALE = 0.25;     /* kickers and defenses count at a quarter: their projections are noise, and nobody's draft was won by a defense */
+let _drLinesCache = { key:'', lines:null };
+function drSeason(id, pos){
+  if(!statsLoaded) return null;
+  const raw = (STAT_CACHE.proj||{})[id]; if(!raw) return null;
+  const v = scoreSeasonStats(raw, pos, projGames(raw));
+  return v==null ? null : v;
+}
+function drPerWeek(id, pos){
+  const raw = (STAT_CACHE.proj||{})[id]; if(!raw) return null;
+  const s = drSeason(id, pos); if(s==null) return null;
+  return s / projGames(raw);
+}
+/* the replacement line per position, over the whole pool */
+function drLines(){
+  const key = `${statsLoaded}|${POOL.length}|${(S.teams||[]).length}|${JSON.stringify(S.roster||{})}|${Object.keys(STAT_CACHE.proj||{}).length}|${JSON.stringify(S.scoring||{}).length}`;
+  if(_drLinesCache.key===key) return _drLinesCache.lines;
+  const lines = {};
+  if(statsLoaded){
+    const teams = Math.max(1,(S.teams||[]).length), R = S.roster||{};
+    const need = {QB:+R.QB||0, RB:+R.RB||0, WR:+R.WR||0, TE:+R.TE||0, K:+R.K||0, DEF:+R.DEF||0};
+    const flex = +R.FLEX||0, elig = ['RB','WR','TE'].filter(x=>need[x]>0), tot = elig.reduce((n,x)=>n+need[x],0);
+    if(flex>0 && tot>0){ const share = {}; elig.forEach(x=>{ share[x] = flex*need[x]/tot; }); elig.forEach(x=>{ need[x] += share[x]; }); }
+    const byPos = {};
+    POOL.forEach(pl=>{ const v = drSeason(pl.id, pl.pos); if(v==null) return; (byPos[pl.pos] = byPos[pl.pos]||[]).push(v); });
+    Object.keys(byPos).forEach(pos=>{
+      const arr = byPos[pos].sort((a,b)=>b-a);
+      const at = Math.min(arr.length-1, Math.max(0, Math.round(teams*(need[pos]||0))));
+      lines[pos] = arr[at];
+    });
+  }
+  _drLinesCache = { key, lines };
+  return lines;
+}
+/* the letter: total over slot as a share of an average team's drafted value. Zero-sum, so B is par. */
+function drLetter(pct){
+  if(pct>=20) return 'A+'; if(pct>=12) return 'A'; if(pct>=6) return 'A-';
+  if(pct>=2) return 'B+'; if(pct>-2) return 'B'; if(pct>-6) return 'B-';
+  if(pct>-12) return 'C+'; if(pct>-20) return 'C'; return 'D';
+}
+function drGradeClass(g){ const c = String(g||'')[0]; return c==='A' ? 'a' : c==='B' ? 'b' : c==='C' ? 'c' : 'd'; }
+function drDuration(d){
+  const a = +(d&&d.startedAt)||0, b = +(d&&d.finishedAt)||0;
+  if(!a || !b || b<=a) return '';
+  const m = Math.round((b-a)/60000); if(m < 1) return '';
+  if(m < 60) return `${m}m`;
+  if(m < 48*60) return `${Math.floor(m/60)}h ${m%60}m`;
+  return `${Math.round(m/60/24)} days`;
+}
+/* the board boiled down: everything the table and the words need, and nothing they don't */
+let _drFactsCache = { key:'', F:null };
+function drFacts(d){
+  d = d || D;
+  if(!statsLoaded || !poolReady) return null;
+  const n = N(), first = firstDraftIndex(), rounds = snakeRounds();
+  const picks = (d.picks||[]).filter(p=>+p.pickIndex>=first).sort((a,b)=>+a.pickIndex-+b.pickIndex);
+  if(!picks.length || !n) return null;
+  const key = `${hashStr(picks.map(p=>p.pickIndex+':'+p.playerId+':'+p.teamIndex+(p.auto?'a':'')).join('|'))}|${(d.picks||[]).length}|${Object.keys(STAT_CACHE.proj||{}).length}|${POOL.length}|${d.finished?1:0}|${+(d.finishedAt||0)}|${(S.teams||[]).map(t=>t.name+'/'+(t.manager||'')).join(',')}`;
+  if(_drFactsCache.key===key) return _drFactsCache.F;
+  const lines = drLines();
+  const rows = picks.map(p=>{
+    const s = drSeason(p.playerId, p.pos), line = lines[p.pos];
+    const known = s!=null && line!=null;
+    const j = +p.pickIndex - first + 1;                      /* overall pick, 1-based, keepers excluded */
+    const scale = (p.pos==='K' || p.pos==='DEF') ? DR_KD_SCALE : 1;
+    return { p, ti:+p.teamIndex, j, round: Math.floor((j-1)/n)+1, vorp: known ? Math.max(0, s-line)*scale : 0, known };
+  });
+  const sorted = rows.map(r=>r.vorp).sort((a,b)=>b-a);
+  rows.forEach(r=>{
+    r.expect = sorted[r.j-1] || 0;
+    r.over = r.vorp - r.expect;
+    /* the round his value would have gone in: the first slot whose expectation he meets */
+    let k = sorted.findIndex(v=>v<=r.vorp); if(k<0) k = sorted.length-1;
+    r.vr = Math.min(rounds, Math.floor(k/n)+1);
+  });
+  const T = (S.teams||[]).map((t,ti)=>({ ti, name: t.name||teamName(ti), mgr: liveMgrOf(ti)||'', picks:[], over:0, vorp:0, auto:0, noProj:0 }));
+  rows.forEach(r=>{ const t = T[r.ti]; if(!t) return; t.picks.push(r); t.over += r.over; t.vorp += r.vorp; if(r.p.auto) t.auto++; if(!r.known) t.noProj++; });
+  const avgVorp = T.reduce((s,t)=>s+t.vorp,0) / Math.max(1,T.length);
+  const brief = r => ({ name: String(r.p.name||''), pos: String(r.p.pos||''), round: r.round, vr: r.vr, over: Math.round(r.over), ti: r.ti });
+  const isSteal = r => r.known && r.over>=DR_STEAL_PTS && r.vr<r.round;
+  const isReach = r => r.known && r.over<=-DR_STEAL_PTS && r.vr>r.round;
+  T.forEach(t=>{
+    t.pct = avgVorp>0 ? t.over/avgVorp*100 : 0;
+    t.grade = drLetter(t.pct);
+    const st = t.picks.filter(isSteal).sort((a,b)=>b.over-a.over)[0];
+    const re = t.picks.filter(isReach).sort((a,b)=>a.over-b.over)[0];
+    t.steal = st ? brief(st) : null; t.reach = re ? brief(re) : null;
+    /* the lineup the whole roster projects to on an average week, keepers and all */
+    const roster = (d.picks||[]).filter(p=>+p.teamIndex===t.ti && +p.pickIndex>=0);
+    const lu = optimalLineupOf(roster, p=>drPerWeek(p.playerId, p.pos));
+    t.projWk = Math.round(lu.total*10)/10;
+  });
+  const order = T.slice().sort((a,b)=>(b.over-a.over) || (b.projWk-a.projWk) || (a.ti-b.ti));
+  order.forEach((t,i)=>{ t.rank = i+1; });
+  T.slice().sort((a,b)=>(b.projWk-a.projWk) || (a.ti-b.ti)).forEach((t,i)=>{ t.projRank = i+1; });
+  const steal = rows.filter(isSteal).sort((a,b)=>b.over-a.over)[0] || null;
+  const reach = rows.filter(isReach).sort((a,b)=>a.over-b.over)[0] || null;
+  const firstOf = pos => { const r = rows.find(x=>x.p.pos===pos); return r ? brief(r) : null; };
+  /* the longest run on one position - five straight running backs from pick 13, that kind of thing */
+  let run = null, cur = null;
+  rows.forEach(r=>{
+    if(cur && cur.pos===r.p.pos && r.j===cur.to+1){ cur.to = r.j; cur.len++; }
+    else cur = { pos: String(r.p.pos||''), from: r.j, to: r.j, len: 1 };
+    if(!run || cur.len > run.len) run = { ...cur };
+  });
+  if(run && run.len < 4) run = null;
+  const autoTop = T.filter(t=>t.auto>=3).sort((a,b)=>b.auto-a.auto)[0] || null;
+  const F = {
+    yr: curDraftYear(), picks: rows.length, total: rounds*n, rounds, teams: T.length, n,
+    throughRound: rows[rows.length-1].round, done: !!d.finished, duration: drDuration(d),
+    noProj: rows.filter(r=>!r.known).length, avgVorp: Math.round(avgVorp),
+    order: order.map(t=>({ ti:t.ti, name:t.name, mgr:t.mgr, grade:t.grade, over:Math.round(t.over*10)/10, pct:Math.round(t.pct*10)/10,
+                           projWk:t.projWk, projRank:t.projRank, rank:t.rank, auto:t.auto, noProj:t.noProj, steal:t.steal, reach:t.reach })),
+    steal: steal ? brief(steal) : null, reach: reach ? brief(reach) : null,
+    firstK: firstOf('K'), firstDef: firstOf('DEF'), run,
+    autoTop: autoTop ? { ti: autoTop.ti, count: autoTop.auto } : null
+  };
+  _drFactsCache = { key, F };
+  return F;
+}
+/* ---- the words ---- */
+function drWho(t){ return t.mgr ? `${t.name} (${t.mgr})` : t.name; }
+function drTeamOf(F, ti){ return (F.order||[]).find(t=>+t.ti===+ti) || { name: teamName(ti), mgr: liveMgrOf(ti)||'' }; }
+function drTitle(F){
+  const O = F.order, best = O[0], worst = O[O.length-1], st = F.steal;
+  if(st && st.round - st.vr >= 5) return rcPick([
+    `${st.name} in round ${st.round}. Somebody check ${drTeamOf(F, st.ti).name} for a crystal ball.`,
+    `Steal of the draft: ${st.name}, round ${st.round}`,
+    `${drTeamOf(F, st.ti).name} robbed the room for ${st.name}`]);
+  if(worst.pct <= -15) return rcPick([
+    `${worst.name} drafted like it was a dare`, `A ${worst.grade} for ${worst.name}. It was earned.`, `${worst.name} would like a redraft`]);
+  if(best.pct >= 15) return rcPick([`${best.name} wins the draft`, `${best.name} had the answer key`, `The draft belongs to ${best.name}`]);
+  return rcPick([`${F.picks} picks, ${F.teams} teams, one board`, `The board is full`, `Grades are in`]);
+}
+/* plain text, like rcBuild: the card, the clipboard and the chat all get the same words.
+   Seeded on (year, 'draft', seed) so every device writes the same recap. */
+function drBuild(yr, seed, F){
+  if(!F || !F.order || !F.order.length) return null;
+  _rcKey = `${yr}|draft|${seed||0}`; _rcN = 0;
+  const n1 = n => (+n||0).toFixed(1), n0 = n => (n>0?'+':'')+Math.round(n);
+  const O = F.order, best = O[0], worst = O[O.length-1];
+  const title = drTitle(F); _rcTitle = title;
+  const L = [`${yr} DRAFT RECAP`]; if(title) L.push(title); L.push('');
+  const dur = F.duration ? ` in ${F.duration}` : '';
+  const scope = `${F.picks} picks, ${F.rounds} rounds${dur}`;
+  L.push(rcPick([
+    `The board is full: ${scope}. ${drWho(best)} came out of it with the best value in the room, ${n0(best.over)} projected points over slot. ${drWho(worst)} came out of it with a ${worst.grade}.`,
+    `${scope}, and a board nobody can take back. Best draft: ${drWho(best)}, ${n0(best.over)} over slot. Worst: ${drWho(worst)}, ${n0(worst.over)}.`,
+    `${scope}. ${drWho(best)} drafted like they had the answer key. ${drWho(worst)} drafted like they had somebody else's.`]));
+  L.push('');
+  O.forEach(t=>{
+    let line = `${t.grade} - ${drWho(t)}: ${n0(t.over)} over slot, ${ordinal(t.projRank)}-best projected lineup at ${n1(t.projWk)} a week.`;
+    if(t.steal) line += ' ' + rcPick([
+      `Steal: ${t.steal.name} in round ${t.steal.round}, ranked like a round-${t.steal.vr} pick.`,
+      `${t.steal.name} in round ${t.steal.round} was robbery - that is a round-${t.steal.vr} player.`,
+      `Best pick: ${t.steal.name}, round ${t.steal.round}, who projects like a round-${t.steal.vr} pick.`]);
+    if(t.reach) line += ' ' + rcPick([
+      `Reach: ${t.reach.name} in round ${t.reach.round}, who projects like a round-${t.reach.vr} pick.`,
+      `${t.reach.name} in round ${t.reach.round} was a round-${t.reach.vr} player at a round-${t.reach.round} price.`,
+      `Worst pick: ${t.reach.name}, round ${t.reach.round}. The projections call that a round-${t.reach.vr} pick.`]);
+    if(t.auto>=3) line += ` The computer made ${t.auto} of those picks.`;
+    L.push(line);
+  });
+  L.push('');
+  if(F.steal) L.push(`- Steal of the draft: ${F.steal.name} to ${drWho(drTeamOf(F, F.steal.ti))} in round ${F.steal.round}, ranked like a round-${F.steal.vr} pick.`);
+  if(F.reach) L.push(`- Reach of the draft: ${F.reach.name} to ${drWho(drTeamOf(F, F.reach.ti))} in round ${F.reach.round}. A round-${F.reach.vr} player.`);
+  const byLu = O.slice().sort((a,b)=>a.projRank-b.projRank);
+  if(byLu.length>1) L.push(`- Best projected lineup: ${drWho(byLu[0])}, ${n1(byLu[0].projWk)} a week. Worst: ${drWho(byLu[byLu.length-1])}, ${n1(byLu[byLu.length-1].projWk)}.`);
+  if(F.firstK) L.push(`- First kicker off the board: ${drWho(drTeamOf(F, F.firstK.ti))} took ${F.firstK.name} in round ${F.firstK.round}.`
+    + (F.firstK.round <= 9 ? ' ' + rcPick(['Somebody stop them.', 'A kicker. On purpose.', 'Bold.', 'The leg whisperer.']) : ''));
+  if(F.firstDef) L.push(`- First defense: ${drWho(drTeamOf(F, F.firstDef.ti))}, ${F.firstDef.name}, round ${F.firstDef.round}.`);
+  if(F.run) L.push(`- Longest run: ${F.run.len} straight ${F.run.pos==='DEF' ? 'defenses' : F.run.pos+'s'}, picks ${F.run.from} to ${F.run.to}.`);
+  if(F.autoTop) L.push(`- Auto-pilot: ${drWho(drTeamOf(F, F.autoTop.ti))} let the computer make ${F.autoTop.count} picks.`);
+  if(F.noProj) L.push(`- ${F.noProj} pick${F.noProj===1?' has':'s have'} no projection yet and graded as replacement level.`);
+  L.push('');
+  L.push(rcPick([
+    `Grades are projections, and projections are lies. See you in week 1.`,
+    `Every draft is an A in September. Check back in November.`,
+    `The draft is over. The excuses start now.`,
+    `Screenshot this. Somebody is going to want it in December.`,
+    `Set your lineups. The board is closed and so is the debate.`]));
+  return L.join('\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+/* ---- the shared copy ---- */
+const draftRecapKey = yr => `${yr}_draft`;
+function draftRecapFor(yr){ yr = yr || curDraftYear(); return recapsMap[draftRecapKey(yr)] || null; }
+function recapKeyOf(r){ return (r && r.kind==='draft') ? draftRecapKey(r.yr) : recapKey(r.yr, r.wk); }
+let _drWriting = false, _drTried = 0;
+async function maybeWriteDraftRecap(){
+  if(_drWriting || !fbOk() || !window.fbUser) return;
+  const d = realDraft(); if(!d || !d.finished) return;
+  const yr = curDraftYear(), key = draftRecapKey(yr);
+  if(recapsMap[key]) return;
+  if(_drTried && Date.now()-_drTried < 10*60*1000) return;      /* a failed write retries in ten minutes */
+  if(!statsLoaded || !poolReady){ if(!statsLoaded && !statsLoading) loadCareerStats().catch(()=>{}); return; }
+  const F = drFacts(d); if(!F || !F.order.length) return;
+  const text = drBuild(yr, 0, F); if(!text) return;
+  _drTried = Date.now(); _drWriting = true;
+  try{
+    await window.FB.dbTxn(`${recapsPath()}/${key}`, cur => cur===null
+      ? { kind:'draft', yr:+yr, wk:0, seed:0, title:_rcTitle, text, at:Date.now(), by:window.fbUser.uid, v:1, facts:F } : undefined);
+  }catch(e){ /* no rule for the node yet, or offline: the local words still draw */ }
+  finally{ _drWriting = false; }
+}
+function drRedraw(){
+  const v = window.currentView;
+  try{ if(v==='draft' || v==='mock') renderDraftGrades(); }catch(e){}
+  try{ if(v==='recaps') renderRecaps(); }catch(e){}
+  try{ if(v==='home') renderHomeRecap(); }catch(e){}
+}
+function drToggle(){ window.drOpen = !window.drOpen; drRedraw(); }
+/* Rewrite: new words on the stored facts. Admin-only and for everyone once it is stored;
+   a mock board or an unstored one just reshuffles on this device. */
+async function drRewrite(mock){
+  const yr = curDraftYear();
+  const stored = mock ? null : draftRecapFor(yr);
+  if(stored){
+    if(!requireAdmin()) return;
+    if(!fbOk() || !window.fbUser){ toast('Sign in to rewrite it for everyone.'); return; }
+    const F = stored.facts; if(!F || !F.order){ toast('This one has no numbers stored to rewrite from.'); return; }
+    const seed = (+stored.seed||0) + 1;
+    const text = drBuild(yr, seed, F); if(!text) return;
+    try{
+      await window.FB.dbSet(`${recapsPath()}/${draftRecapKey(yr)}`, { ...stored, seed, title:_rcTitle, text, at:Date.now(), by:window.fbUser.uid, rewritten:true });
+      toast('Rewritten for everyone.');
+    }catch(e){ toast("Couldn't save the rewrite — try again."); }
+    return;
+  }
+  window._drLocalSeed = (window._drLocalSeed||0) + 1;
+  drRedraw();
+}
+/* ---- the table ---- */
+function draftGradesHTML(F, opts){
+  opts = opts || {};
+  const rows = (F.order||[]).map(t=>{
+    const notes = [];
+    if(t.steal) notes.push(`<span class="dg-tag steal">Steal</span> ${esc(t.steal.name)} <span class="dg-dim">R${+t.steal.round}, ranked R${+t.steal.vr}</span>`);
+    if(t.reach) notes.push(`<span class="dg-tag reach">Reach</span> ${esc(t.reach.name)} <span class="dg-dim">R${+t.reach.round}, ranked R${+t.reach.vr}</span>`);
+    const team = (S.teams||[])[t.ti];
+    return `<div class="dg-row">
+      <span class="dg-grade ${drGradeClass(t.grade)}">${esc(t.grade)}</span>
+      <span class="dg-team">${team ? teamMarkHTML(team, 30) : ''}<span class="dg-name"><b>${esc(t.name)}</b>${t.mgr?`<small>${esc(t.mgr)}</small>`:''}${notes.length?`<div class="dg-notes">${notes.join('<br>')}</div>`:''}</span></span>
+      <span class="dg-nums"><span class="dg-num"><b>${t.over>0?'+':''}${Math.round(t.over)}</b><small>over slot</small></span><span class="dg-num"><b>${(+t.projWk||0).toFixed(1)}</b><small>proj/wk</small></span></span>
+    </div>`;
+  }).join('');
+  const head = F.done ? `Draft grades${opts.mock?' · mock':''} · final` : `Draft grades · so far, through round ${F.throughRound}`;
+  return `<div class="card dg-card" id="draftGradesCard"${opts.style?` style="${opts.style}"`:''}>
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <span class="eyebrow" style="margin:0">${head}</span>
+      <span class="sub" style="font-size:12px">${F.picks} of ${F.total} picks · B is par</span>
+    </div>
+    <div class="dg-rows">${rows}</div>
+    <p class="sub" data-note="draft-grades" style="margin:10px 0 0;font-size:12px">Each pick is scored on his season projection above the last starter at his position in a league this size, then measured against what that pick slot should have returned - the same value order the player list ranks on. The grades sum to zero, so B is par. Proj/wk is the best lineup the whole roster projects to on an average week, keepers included.</p>
+  </div>`;
+}
+/* ---- the recap card ---- */
+function draftRecapCardHTML(o){
+  window._rcShown[o.key] = o.text;
+  const open = !!window.drOpen, st = o.stored;
+  const paras = String(o.text).split('\n\n');
+  const shown = open ? o.text : [paras[0], paras[1]||''].filter(Boolean).join('\n\n') + (paras.length>2 ? '\n\n…' : '');
+  return `<div class="card" id="draftRecapCard" style="${o.style||'margin-top:12px'}">
+    <div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <span class="eyebrow" style="margin:0">${esc(String(o.yr))} draft recap${o.mock?' · mock':''}${st?` · written ${esc(timeAgo(+st.at||0))}${st.rewritten?', rewritten by the commissioner':''}`:''}</span>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn ${st?'admin-only':'ghost'}" onclick="drRewrite(${o.mock?'true':'false'})" title="New words, same numbers">Rewrite</button>
+        <button class="btn ghost" onclick='rcCopyText(${JSON.stringify(o.key)})'>Copy</button>
+        ${o.mock ? '' : `<button class="btn admin-only" onclick='rcPostKey(${JSON.stringify(o.key)})'>Post to chat</button>`}
+        <button class="btn ghost" onclick="drToggle()">${open?'Less':'Read it all'}</button>
+      </div>
+    </div>
+    <div class="recap-body">${esc(shown)}</div>
+    ${st
+      ? `<p class="sub" data-note="draft-recap-stored" style="margin:12px 0 0;font-size:12px">Written by the app the moment the board filled, from the season projections as they stood that night - the same words on every phone. Rewrite changes the wording, never the grades.</p>`
+      : `<p class="sub" data-note="draft-recap-local" style="margin:12px 0 0;font-size:12px">Written from the board and the season projections. Rewrite changes the wording, never the grades.</p>`}
+  </div>`;
+}
+/* the Draft room: under the board, beside the pool. Redrawn on every refreshDraftUI, so the
+   facts are cached on the board and the DOM is only touched when the HTML actually changed -
+   a redraw a second would otherwise eat a text selection or a button press mid-tap. */
+function renderDraftGrades(){
+  const el = document.getElementById('draftGrades'); if(!el) return;
+  const d = D, mock = draftMode!=='real', first = firstDraftIndex();
+  const paint = html => { if(el._dgHtml === html) return; el._dgHtml = html; el.innerHTML = html; el.style.display = html ? 'block' : 'none'; };
+  if(!d.started || !(d.picks||[]).some(p=>+p.pickIndex>=first)) return paint('');
+  const yr = curDraftYear();
+  const stored = (!mock && d.finished) ? draftRecapFor(yr) : null;
+  let F = (stored && stored.facts && stored.facts.order) ? stored.facts : null;
+  if(!F){
+    if(!statsLoaded || !poolReady){
+      paint(`<div class="card dg-card" style="margin-top:12px"><div class="eyebrow">Draft grades</div><p class="sub" style="margin:0">Grading the board once the projections load…</p></div>`);
+      waitForProj('dg', ()=>{ if(window.currentView==='draft' || window.currentView==='mock') renderDraftGrades(); });
+      return;
+    }
+    F = drFacts(d);
+    if(!F) return paint('');
+  }
+  let html = draftGradesHTML(F, { mock, style:'margin-top:12px' });
+  if(d.finished){
+    const key = mock ? 'mock_draft' : draftRecapKey(yr);
+    const text = stored ? stored.text : drBuild(yr, window._drLocalSeed||0, F);
+    if(text) html += draftRecapCardHTML({ key, text, stored, yr, mock });
+  }
+  paint(html);
+}
+/* the Recaps tab: the real board only, above the week-by-week card */
+function draftRecapTabHTML(){
+  const yr = curDraftYear();
+  const stored = draftRecapFor(yr), d = realDraft();
+  let F = (stored && stored.facts && stored.facts.order) ? stored.facts : null, text = stored ? stored.text : null;
+  if(!stored){
+    if(!(d && d.finished)) return '';
+    if(!statsLoaded || !poolReady){
+      waitForProj('dgTab', ()=>{ if(window.currentView==='recaps') renderRecaps(); });
+      return `<div class="card" style="max-width:860px;margin-bottom:18px"><div class="eyebrow">${esc(String(yr))} draft</div><p class="sub" style="margin:4px 0 0">Grading the board once the projections load…</p></div>`;
+    }
+    F = drFacts(d); if(!F) return '';
+    text = drBuild(yr, window._drLocalSeed||0, F);
+  }
+  if(!F || !text) return '';
+  return `<div style="max-width:860px;margin-bottom:18px">${draftGradesHTML(F, { style:'margin-bottom:12px' })}${draftRecapCardHTML({ key: draftRecapKey(yr), text, stored, yr, mock:false, style:'' })}</div>`;
+}
+/* the Home card's grade strip: every team's letter in grade order, so the card says who won
+   the draft without a click */
+function draftGradeStripHTML(F){
+  if(!F || !F.order) return '';
+  return `<div class="dg-strip">${F.order.map(t=>`<span class="dg-chip"><b class="${drGradeClass(t.grade)}">${esc(t.grade)}</b>${esc(t.name)}</span>`).join('')}</div>`;
 }
 /* ===================== THE SEASON SCHEDULE =====================
    The board only ever showed one week at a time, so "who do I play in week 9" was a question
@@ -16771,7 +17169,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · early-round pick cap';
+const BUILD_STAMP = '2026-09-07 · draft grades and recap';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

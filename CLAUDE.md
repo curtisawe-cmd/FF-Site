@@ -458,6 +458,47 @@ admin device when a recap arrives, claims `posted` atomically, posts as `League 
 only for a recap under three days old. Posting to chat buzzes everyone through the existing
 chat push, which is why it is off by default (CLAUDE.md push rule).
 
+## Draft grades and the draft recap
+
+`drFacts(d)` grades a board. Each real pick (keepers excluded: `pickIndex >= firstDraftIndex()`)
+gets a value = season projection (`STAT_CACHE.proj` scored with `scoreSeasonStats`) above the
+**replacement line** at his position - the last starter in a league this size, drawn against the
+whole `POOL` (`drLines`, same formula as `poolValueMap`, which draws it against the players
+still on the board; this one must hold still after the draft). Below the line counts as zero.
+The **slot expectation** for overall pick j is the j-th best value actually drafted, so a pick's
+`over` is value minus expectation and the grades are zero-sum: B is par. The letter is the team's
+total `over` as a share of an average team's drafted value (`drLetter`: A+ >= +20 %, A +12, A- +6,
+B+ +2, B, B- -6, C+ -12, C -20, D). A pick's "ranked like a round-N pick" is the round of the first
+slot whose expectation his value meets (`vr`). Steal / reach per team and league-wide need
+`|over| >= DR_STEAL_PTS` (10 season points) *and* a round gap. `projWk` is `optimalLineupOf` over
+the whole roster (keepers included) on per-game projections. A pick with no projection counts as
+replacement level and is called out in the footnote.
+
+**The facts travel, not the projections.** `drFacts` returns a small object (`order`, per-team
+steal/reach, `steal`, `reach`, `firstK`, `firstDef`, `run`, `autoTop`, `duration`, `noProj`) and
+both the table (`draftGradesHTML`) and the words (`drBuild(yr, seed, F)`, seeded like `rcBuild`
+on `year|draft|seed`) render from it. The stored copy carries `facts`, so Rewrite is new words on
+draft-night numbers, never a regrade. `D.startedAt` / `D.finishedAt` (set in `startDraft` and
+`afterPick`) give the duration line.
+
+**Shared copy** at `league/main/recaps/{year}_draft` (`draftRecapKey`, `draftRecapFor`,
+`recapKeyOf(r)` picks the right key for either kind) - `{kind:'draft', yr, wk:0, seed, title,
+text, at, by, v, facts}`, same rule as the weekly recaps (create-once by `by`, admins overwrite).
+`maybeWriteDraftRecap` runs from `refreshDraftUI` when `D.finished` (instant on the device that
+made the last pick) and from the one-minute pulse (a device that was not in the room), only for
+the real board (`realDraft()`), loading projections first if it has to; a failed write retries in
+ten minutes. `latestRecap()` sorts by year then week, so the draft recap (week 0) holds Home only
+until week 1's recap exists.
+
+Surfaces: the Draft room `#draftGrades` under the board (`renderDraftGrades` on every
+`refreshDraftUI`, DOM touched only when the HTML changed; "so far, through round N" while the
+draft runs, the recap card once it is done; a **mock board grades too and never stores**, key
+`mock_draft`), the Recaps tab (`draftRecapTabHTML` above the week-by-week card; the weekly list
+filters `kind!=='draft'`), and Home (`renderHomeRecap` branch with the grade strip
+`draftGradeStripHTML`). Copy / Post to chat reuse `rcCopyText` / `rcPostKey`; `drRewrite`,
+`drToggle` (`window.drOpen`), `drRedraw`. Chat posting follows the weekly opt-in
+(`maybeAnnounceRecap` posts whichever recap is latest, draft included).
+
 ## Pickups (waiver and streaming suggestions)
 
 Players > **Pickups** (`renderPickups`, panel `#pickView`, sub-tab key `pl-pick`, ghost word
