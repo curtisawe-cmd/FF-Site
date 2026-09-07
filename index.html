@@ -3183,12 +3183,14 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
       <div class="setrow"><label title="Let the relay do the watching on a schedule, so alerts arrive with every app in the league shut. Needs push/score-watch.js deployed to the worker with a KV binding named BBL and a cron trigger. With this off, alerts only go out while a commissioner has the app open.">Send from the relay</label><label class="cswitch"><input type="checkbox" id="setScoreRelay" onchange="setScoreRelay(this.checked)"><span class="track"></span><span class="lbl" id="scoreRelayLbl">Off</span></label></div>
       <div class="setrow"><label title="Before kickoff, buzz a manager whose lineup has a starter who is out, on IR, suspended, on bye, or not projected to play - or an empty slot. Each manager hears only about their own team, once per problem per week. Sent from the relay, so it needs 'Send from the relay' on.">Lineup alerts</label><label class="cswitch"><input type="checkbox" id="setLineupAlerts" onchange="setLineupAlerts(this.checked)"><span class="track"></span><span class="lbl" id="lineupAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="How long before a player's kickoff the warning goes out. A bye or an empty slot is warned about before the next game of the week.">Warn (hours before kickoff)</label><input type="number" step="1" min="1" max="48" id="setLineupLead" style="max-width:110px" onchange="setLineupLead(this.value)"></div>
+      <div class="setrow"><label title="While games are on, buzz both managers in a matchup when its live win probability moves 25 points in 20 minutes - one losing it, one taking it. Once per matchup per half hour at most, never before kickoff or after the last whistle. Sent from the relay, so it needs 'Send from the relay' on.">Swing alerts</label><label class="cswitch"><input type="checkbox" id="setSwingAlerts" onchange="setSwingAlerts(this.checked)"><span class="track"></span><span class="lbl" id="swingAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="The app writes up every week on the Tuesday after it. With this on, a commissioner device also drops it into the league chat as League Desk - which buzzes everyone the way any chat message does. Off, it only shows on the Matchups board, the Recaps tab and Home.">Post weekly recaps to chat</label><label class="cswitch"><input type="checkbox" id="setRecapChat" onchange="setRecapToChat(this.checked)"><span class="track"></span><span class="lbl" id="recapChatLbl">Off</span></label></div>
     </div>
     <div class="row admin-only" style="gap:8px;margin-top:8px;flex-wrap:wrap">
       <button class="btn ghost" onclick="testScoreSnapshot()">Send the relay a snapshot</button>
       <button class="btn ghost" onclick="testRelayWatch()">Run the watcher now</button>
       <button class="btn ghost" onclick="testLineupWatch()" title="Run the lineup check on the relay right now and say who it would tell">Check lineups now</button>
+      <button class="btn ghost" onclick="testSwingWatch()" title="Run the swing watch on the relay right now and show the odds it sees">Check swings now</button>
     </div>
     <p class="sub" id="scoreAlertNote" style="margin:8px 0 0;font-size:12px;opacity:.75"></p>
     <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
@@ -3385,6 +3387,7 @@ const DEFAULTS = {
   lineupAlerts: true,    /* push a manager before kickoff when a starter is out, on bye, or a slot is empty */
   lineupLead: 2,         /* hours before kickoff to say so */
   recapToChat: false,    /* drop the week's auto-written recap into chat from a commissioner device */
+  swingAlerts: true,     /* buzz both managers when a matchup's live odds swing 25 points in 20 minutes */
   scoreRelay: false,     /* let the relay watch on a schedule, so alerts land with every app shut */
   snapshotExtras: [],    /* up to 3 commissioner-defined {label,value} rows on the home snapshot */
   alarmInsults: [],      /* user-supplied illegal-pick alarm lines; empty = built-in defaults */
@@ -7585,7 +7588,7 @@ const SETTING_LABELS={
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
   scoreAlerts:'score alerts', scoreAlertMin:'score alerts', scoreRelay:'score alerts',
-  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps',
+  lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps', swingAlerts:'swing alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
   snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
@@ -11547,14 +11550,20 @@ function buildScoreSnapshot(){
     let open = 0; try{ open = lineupIssues(ti).empty.length; }catch(e){}
     return { ti, name: t.name||('Team '+(ti+1)), uid: uidForTeam(ti) || '', open,
              players: picks.map(pl=>{ const id=String(pl.playerId); const meta=findPlayerMeta(id)||{};
+               /* proj: this week's line, for the swing watch's live odds - null when the file
+                  is not in yet, and the watch treats that as nothing still to come */
+               const pr = (wk && PROJ_WEEKS[wk] && PROJ_WEEKS[wk].data) ? projWeekPoints(id, pl.pos, wk) : null;
                return { id, pos:pl.pos||'', name:pl.name||'', nfl:String(pl.nfl||meta.team||'').toUpperCase(),
-                        inj: meta.inj||'', bye: byeWeekOfTeam(pl.nfl||meta.team)||0 }; }) };
+                        inj: meta.inj||'', bye: byeWeekOfTeam(pl.nfl||meta.team)||0, proj: pr==null ? 0 : pr }; }) };
   });
+  /* this week's matchups by team index, so the swing watch knows who faces whom */
+  const games = wk ? ((S.season && S.season.schedule && (S.season.schedule[String(wk)] || S.season.schedule[wk])) || []).map(g=>[g[0], g[1]]) : [];
   return { on: scoreAlertsOn() && scoreRelayOn(), season: yr, week: wk || 0,
            min: scoreAlertMin(), scoring: S.scoring || {},
            /* the lineup half: the week a lineup is being set for (week 1 all preseason, so the
               Thursday-night opener gets its warning), and how far ahead to give it */
            lineup: lineupAlertsOn() && scoreRelayOn(), lineupWeek: projWeekNow() || 0, lead: lineupLeadHours(),
+           swing: swingAlertsOn() && scoreRelayOn(), games,
            url: location.origin + location.pathname,
            teams: teams.filter(t=>t.uid && (t.players.length || t.open)) };
 }
@@ -11596,7 +11605,15 @@ async function checkScoreAlerts(){
      already mirrors, no key rides with it, and the lineup check is only as good as the latest
      lineups it was handed: a manager fixing his lineup at noon on his own phone is exactly the
      device that should tell the relay about it. */
-  if(scoreRelayOn()){ if(scoreAlertsOn() || lineupAlertsOn()){ try{ await pushScoreSnapshot(); }catch(e){} } return; }
+  if(scoreRelayOn()){
+    if(scoreAlertsOn() || lineupAlertsOn() || swingAlertsOn()){
+      /* the snapshot carries this week's projections for the swing watch; make sure the file
+         is on its way so the next post has them (never waits on it) */
+      try{ const pw = projWeekNow(); if(pw && !PROJ_WEEKS[pw]) loadWeekProj(pw); }catch(e){}
+      try{ await pushScoreSnapshot(); }catch(e){}
+    }
+    return;
+  }
   if(!scoreAlertsOn() || !isAdmin()) return;
   const wk = currentNflWeek(); if(!wk) return;
   if(Date.now() - _scoreAlertAt < SCORE_ALERT_EVERY_MS) return;
@@ -16344,6 +16361,25 @@ function setLineupLead(v){
   S.lineupLead = n; saveState(); renderScoreAlertSetting();
   toast('Warning '+n+' hour'+(n>1?'s':'')+' before kickoff');
 }
+function swingAlertsOn(){ return S.swingAlerts !== false; }
+function setSwingAlerts(on){
+  S.swingAlerts = !!on; saveState(); renderScoreAlertSetting();
+  toast(on ? 'Swing alerts on' : 'Swing alerts off');
+}
+async function testSwingWatch(){
+  if(!pushRelay()){ toast('Set the relay URL first.'); return; }
+  toast('Asking the relay to check the odds…');
+  try{
+    const r = await fetch(pushRelay(), { method:'POST', headers:{'Content-Type':'application/json'},
+                                         body: JSON.stringify({ swingNow:true }) });
+    const txt = await r.text();
+    let j={}; try{ j=JSON.parse(txt); }catch(e){}
+    if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
+    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped); return; }
+    const odds = (j.matchups||[]).map(m=>`${m.a} ${m.pA}% v ${m.b}`).join(' · ');
+    toast(`Relay sent ${j.sent||0} swing alert${j.sent===1?'':'s'}${odds?' — '+odds.slice(0,150):''}`);
+  }catch(e){ toast('Could not reach the relay.'); }
+}
 function recapToChatOn(){ return S.recapToChat === true; }
 function setRecapToChat(on){
   S.recapToChat = !!on; saveState(); renderScoreAlertSetting();
@@ -16382,6 +16418,8 @@ function renderScoreAlertSetting(){
   const la=document.getElementById('setLineupAlerts'); if(la) la.checked=lineupAlertsOn();
   const ll=document.getElementById('lineupAlertsLbl'); if(ll) ll.textContent=lineupAlertsOn()?'On':'Off';
   const ld=document.getElementById('setLineupLead'); if(ld) ld.value=String(lineupLeadHours());
+  const sw=document.getElementById('setSwingAlerts'); if(sw) sw.checked=swingAlertsOn();
+  const swl=document.getElementById('swingAlertsLbl'); if(swl) swl.textContent=swingAlertsOn()?'On':'Off';
   const rcc=document.getElementById('setRecapChat'); if(rcc) rcc.checked=recapToChatOn();
   const rcl=document.getElementById('recapChatLbl'); if(rcl) rcl.textContent=recapToChatOn()?'On':'Off';
   const note=document.getElementById('scoreAlertNote'); if(!note) return;
@@ -16422,7 +16460,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · the Sunday sweat card';
+const BUILD_STAMP = '2026-09-07 · swing alerts';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

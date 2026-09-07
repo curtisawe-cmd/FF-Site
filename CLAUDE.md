@@ -111,11 +111,13 @@ gated on team identity must re-render when the claim arrives.
 
 ## Push notifications
 
-Five triggers only, and nothing else should be added without asking: **new chat message**
+Six triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
 accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
-watcher) and **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
-slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below).
+watcher), **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
+slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below)
+and **swing alerts** (a matchup's live odds move 25 points in 20 minutes while a game is on,
+both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts below).
 
 The chain has five links and every one of them broke at least once on 2026-08-01. In order:
 
@@ -179,6 +181,21 @@ still 0 until kickoff.
 - The in-app twin is `lineupIssues(ti)` / `lineupWarningHTML(ti)` on the team page, which
   gained the same `out` category (injury tag or no weekly line) beside empty and bye.
 - The Cloudflare copy in `push/score-watch.js` does **not** have this; only the Netlify one.
+
+### Swing alerts
+
+`runSwingWatch` in `netlify/functions/lib/score.mjs`, on the same two-minute cron and on demand
+with `POST {swingNow:true}` (Settings > "Check swings now"). It returns before fetching Sleeper
+unless ESPN's scoreboard (`weekBoard`, live, never cached) shows a game in progress. The
+snapshot now carries `games` (this week's matchups by team index), `swing` (the setting) and
+each starter's `proj` (this week's line; 0 when the posting device had no file, and
+`checkScoreAlerts` kicks `loadWeekProj` so the next post has it). `liveOddsFor(snapshot,
+stats, games)` is a port of the app's `liveWinModel` - keep the two in step. `swingPass` keeps
+an hour of readings per matchup in `sw_{season}_{week}` and fires when the reading nearest
+20 minutes ago differs by 25+ points: "You're losing this now" to the side losing it, "You're
+winning this now" to the other, at most once per matchup per 30 minutes, never before kickoff
+(`pre`) or after the last whistle (`over`). Setting `S.swingAlerts` (default on); the
+Cloudflare copy does not have it.
 
 ## PWA and mobile
 

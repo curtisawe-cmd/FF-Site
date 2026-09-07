@@ -251,6 +251,149 @@ export function lineupText(issues, msUntil) {
   return { title, body: `${list}. Kickoff in ${when} — fix it or eat the zero.` };
 }
 
+/* ============================================================
+   SWING ALERTS - "you're losing this now."
+
+   The same live odds the app draws, worked out here from the snapshot: every starter is what
+   he has scored (Sleeper's stat line through the league's rules) plus what his projection says
+   is still to come, in proportion to how much of his game is left (ESPN's period and clock);
+   the two expected finals go through the pre-game logistic with the spread shrinking as the
+   points still in play run out. A short history per matchup is kept in the blob store, and when
+   a matchup's odds move SWING_PTS in SWING_WINDOW_MS while a game is on, both managers hear -
+   the one losing it and the one taking it - at most once every SWING_COOLDOWN_MS per matchup.
+   Nothing fires before kickoff or after the last whistle: the score alerts own the ending.
+   ============================================================ */
+const SWING_PTS = 25, SWING_WINDOW_MS = 20 * 60000, SWING_COOLDOWN_MS = 30 * 60000;
+
+export function gameRemain(period, clock) {
+  const p = +period || 0;
+  if (p <= 0) return 1;
+  if (p > 4) return 0.05;
+  const m = /^(\d+):(\d\d)/.exec(String(clock || '')); const secs = m ? (+m[1]) * 60 + (+m[2]) : 0;
+  return Math.max(0, Math.min(1, ((4 - p) * 900 + secs) / 3600));
+}
+
+/* the week's games with their state: {TEAM: {kick, state:'pre'|'in'|'post', remain}} - live, never cached */
+async function weekBoard(season, week) {
+  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}&dates=${season}`);
+  if (!r.ok) throw new Error('espn ' + r.status);
+  const j = await r.json();
+  const games = {};
+  (j.events || []).forEach(ev => {
+    const t = Date.parse(ev.date); if (!Number.isFinite(t)) return;
+    const comp = (ev.competitions || [])[0] || {};
+    const st = ev.status || comp.status || {};
+    let state = String(((st.type || {}).state) || '').toLowerCase();
+    if (state !== 'pre' && state !== 'in' && state !== 'post') state = Date.now() < t ? 'pre' : 'in';
+    const remain = state === 'post' ? 0 : state === 'pre' ? 1 : gameRemain(+st.period || 0, String(st.displayClock || ''));
+    (comp.competitors || []).forEach(c => {
+      const ab = String((c.team || {}).abbreviation || '').toUpperCase();
+      if (ab) games[ESPN_TEAM_FIX[ab] || ab] = { kick: t, state, remain };
+    });
+  });
+  return games;
+}
+
+/* Pure. The live odds for every matchup in the snapshot, from a side's starters. */
+export function liveOddsFor(snapshot, stats, games) {
+  const byTi = {};
+  (snapshot.teams || []).forEach(t => { byTi[t.ti] = t; });
+  const side = t => {
+    let scored = 0, exp = 0, rem = 0, proj = 0, left = 0, playing = 0;
+    (t.players || []).forEach(pl => {
+      const st = stats[pl.id];
+      const pts = Math.round((+scoreWeek(st, pl.pos, snapshot.scoring) || 0) * 10) / 10;
+      const pr = +pl.proj || 0;
+      const g = games[String(pl.nfl || '').toUpperCase()];
+      const state = g ? g.state : (st ? 'post' : 'none');
+      const remain = state === 'pre' ? 1 : state === 'in' ? g.remain : 0;
+      scored += pts; proj += pr; exp += pts + pr * remain; rem += pr * remain;
+      if (state === 'pre') left++; else if (state === 'in') playing++;
+    });
+    const r1 = n => Math.round(n * 10) / 10;
+    return { scored: r1(scored), exp: r1(exp), rem: r1(rem), proj: r1(proj), left, playing };
+  };
+  return (snapshot.games || []).map((g, m) => {
+    const A = byTi[g[0]], B = byTi[g[1]];
+    if (!A || !B) return null;
+    const a = side(A), b = side(B);
+    const over = (a.left + a.playing + b.left + b.playing) === 0;
+    const pre = (a.playing === 0 && b.playing === 0 && a.scored === 0 && b.scored === 0);
+    let pA;
+    if (over) pA = a.scored > b.scored ? 100 : b.scored > a.scored ? 0 : 50;
+    else {
+      const scale = Math.max(4, 24 * Math.sqrt((a.rem + b.rem) / Math.max(1, a.proj + b.proj)));
+      pA = Math.max(1, Math.min(99, Math.round(100 / (1 + Math.exp(-(a.exp - b.exp) / scale)))));
+    }
+    return { m, A, B, a, b, pA, over, pre };
+  }).filter(Boolean);
+}
+
+/* Pure. Hands back what to send and the new marks. A matchup's history is the last hour of
+   readings; the comparison is against the reading nearest to SWING_WINDOW_MS ago, so a slow
+   drift never fires and a sudden one does. */
+export function swingPass(odds, marks, now) {
+  const next = {};
+  const sends = [];
+  odds.forEach(o => {
+    const prev = (marks && marks[o.m]) || { hist: [], lastAt: 0 };
+    const hist = (prev.hist || []).filter(h => now - h.t <= 60 * 60000);
+    hist.push({ t: now, p: o.pA });
+    const entry = { hist: hist.slice(-40), lastAt: +prev.lastAt || 0 };
+    next[o.m] = entry;
+    if (o.over || o.pre) return;
+    const then = hist.filter(h => now - h.t >= SWING_WINDOW_MS).slice(-1)[0];
+    if (!then) return;
+    const swing = o.pA - then.p;
+    if (Math.abs(swing) < SWING_PTS) return;
+    if (now - entry.lastAt < SWING_COOLDOWN_MS) return;
+    entry.lastAt = now;
+    /* each message reads from its own side: my score first, my odds, my pace */
+    const mins = Math.round(SWING_WINDOW_MS / 60000);
+    const up = swing > 0 ? o.A : o.B, down = swing > 0 ? o.B : o.A;
+    const upS = swing > 0 ? o.a : o.b, downS = swing > 0 ? o.b : o.a;
+    const pUpNow = swing > 0 ? o.pA : 100 - o.pA, pUpThen = swing > 0 ? then.p : 100 - then.p;
+    const tally = (me, them) => `${me.scored.toFixed(1)}-${them.scored.toFixed(1)} now, on pace ${me.exp.toFixed(1)}-${them.exp.toFixed(1)}`;
+    if (down.uid) sends.push({ uid: down.uid, title: "You're losing this now",
+      body: `${up.name} just took it from you: your odds went ${100 - pUpThen}% to ${100 - pUpNow}% in the last ${mins} minutes. ${tally(downS, upS)}.` });
+    if (up.uid) sends.push({ uid: up.uid, title: "You're winning this now",
+      body: `Flipped it on ${down.name}: ${pUpThen}% to ${pUpNow}% in the last ${mins} minutes. ${tally(upS, downS)}. Don't relax.` });
+  });
+  return { next, sends };
+}
+
+export async function runSwingWatch(store) {
+  if (!store) return { skipped: 'no blob store' };
+  let snap;
+  try { snap = await store.get('snapshot', { type: 'json' }); } catch { return { skipped: 'store read failed' }; }
+  if (!snap) return { skipped: 'no snapshot yet - open the league app once' };
+  if (!snap.swing) return { skipped: 'swing alerts are switched off in the league settings' };
+  if (!snap.week || !snap.season) return { skipped: 'no live week' };
+  if (!(snap.games || []).length) return { skipped: 'no matchups in the snapshot' };
+  if (snap.at && Date.now() - snap.at > 14 * 864e5) return { skipped: 'snapshot too old' };
+  let games;
+  try { games = await weekBoard(snap.season, snap.week); } catch (e) { return { skipped: String(e.message || e) }; }
+  if (!Object.values(games).some(g => g.state === 'in')) return { skipped: 'no game in progress', week: snap.week };
+  let stats;
+  try {
+    const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${snap.season}/${snap.week}`);
+    if (!r.ok) return { skipped: 'sleeper ' + r.status };
+    stats = await r.json();
+  } catch { return { skipped: 'sleeper unreachable' }; }
+  if (!stats || !Object.keys(stats).length) return { skipped: 'no stats yet' };
+  const odds = liveOddsFor(snap, stats, games);
+  const key = `sw_${snap.season}_${snap.week}`;
+  let marks = {};
+  try { marks = (await store.get(key, { type: 'json' })) || {}; } catch {}
+  const pass = swingPass(odds, marks, Date.now());
+  try { await store.setJSON(key, pass.next); } catch {}
+  let sent = 0;
+  for (const s of pass.sends) {
+    try { if (await pushOne(s.uid, s.title, s.body, snap.url)) sent++; } catch {}
+  }
+  return { sent, week: snap.week, matchups: odds.map(o => ({ a: o.A.name, b: o.B.name, pA: o.pA, over: o.over })) };
+}
+
 /* ESPN's scoreboard for the week: {TEAM: kickoffMs}. Cached six hours - the fixture list is
    a fact about the week, and a game moving is a rare enough thing to wait six hours for. */
 async function weekKickoffs(store, season, week) {
