@@ -24,6 +24,11 @@ making this repo authoritative. See `README.txt` in that folder.
 
 ## Layout
 
+**Main tabs**: Home, Draft Room, Matchups, Teams, Players, Chat, Stats, Settings - the same list in the
+top bar (`nav.tabs`) and the phone drawer (`.drawer-tabs`). Teams hosts My Team, All Teams, Trades and
+Transactions as sub-tabs; Players hosts the player list, Waivers, Pickups, Injuries and News. The
+`trades` view highlights the Teams tab (`showView` navV); `goSub(k)` routes every sub-tab.
+
 | Path | Tracked | What it is |
 | --- | --- | --- |
 | `index.html` | yes | The entire app. Markup, CSS, and JS all inline. |

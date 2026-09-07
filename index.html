@@ -2598,6 +2598,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button data-view="draft">Draft Room</button>
     <button data-view="matchups">Matchups</button>
     <button data-view="teams">Teams</button>
+    <button data-view="players">Players</button>
     <button data-view="chat">Chat</button>
     <button data-view="stats">Stats</button>
     <button data-view="settings">Settings</button>
@@ -2630,6 +2631,7 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     <button data-view="draft">Draft Room</button>
     <button data-view="matchups">Matchups</button>
     <button data-view="teams">Teams</button>
+    <button data-view="players">Players</button>
     <button data-view="chat">Chat</button>
     <button data-view="stats">Stats</button>
     <button data-view="settings">Settings</button>
@@ -2758,15 +2760,11 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
 <div class="viewhead">
   <h1>Players</h1>
   <div class="row subnav">
-    <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
-    <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
-    <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
+    <button class="btn" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
     <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
     <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
     <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
-    <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
-    <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
   </div><!--/viewhead-->
   <div id="injView" style="display:none"></div>
@@ -2822,11 +2820,6 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
   <div class="row subnav">
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
-    <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
-    <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
-    <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
-    <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
-    <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
@@ -2843,11 +2836,6 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
   <div class="row subnav">
     <button class="btn" data-k="my" onclick="goSub('my')">My Team</button>
     <button class="btn ghost" data-k="all" onclick="goSub('all')">All Teams</button>
-    <button class="btn ghost" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
-    <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
-    <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
-    <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
-    <button class="btn ghost" data-k="pl-news" onclick="goSub('pl-news')">News</button>
     <button class="btn ghost" data-k="tr" onclick="goSub('tr')">Trades</button>
     <button class="btn ghost" data-k="tx" onclick="goSub('tx')">Transactions</button>
   </div>
@@ -8299,11 +8287,12 @@ function showView(v){
   stageViewBlocks(v);                                    /* set stagger order before the entrance plays */
   document.getElementById('view-'+domView).classList.add('active');
   try{ queueViewheadTop(); }catch(e){}     /* another view, possibly another title bar height */
-  /* Players and Trades live under the Teams tab now, the same way Recaps/History sit under
+  /* Trades lives under the Teams tab and Players has a tab of its own (the list, waivers, pickups,
+     injuries and news), the same way Recaps/History sit under
      Stats — separate sections sharing one nav tab and a sub-tab bar. */
   const navV = (v==='recaps'||v==='history') ? 'stats'
              : (v==='polls' ? 'chat'
-             : ((v==='players'||v==='trades') ? 'teams' : v));
+             : (v==='trades' ? 'teams' : v));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===navV));
   if(v==='stats'||v==='recaps'||v==='history') document.querySelectorAll('.statssub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
   if(v==='chat'||v==='polls') document.querySelectorAll('.chatsub button').forEach(b=>b.className='btn'+(b.dataset.sub===v?'':' ghost'));
