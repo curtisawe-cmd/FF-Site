@@ -1097,6 +1097,27 @@ nav.tabs button{position:relative}
   border-top:1px solid var(--line);color:var(--chalk-dim)}
 .gc-rival.owns{color:var(--charge);border-left:3px solid var(--charge)}
 .gc-rival.even{color:var(--gold);border-left:3px solid var(--gold)}
+.gc-rival.grudge{color:var(--chalk);border-left:3px solid var(--turf)}
+.gc-rival-facts{color:var(--chalk-dim);font-weight:400}
+/* the all-time line under each matchup on the board, and the tag it earns */
+.mu-h2h{flex:0 0 100%;width:100%;order:11;text-align:center;margin:2px 0 0;font-family:var(--f-ui);font-size:11.5px;color:var(--chalk-dim);line-height:1.35}
+.mu-tag{display:inline-block;font-family:var(--f-ui);font-weight:800;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border-radius:4px;padding:1px 6px;vertical-align:middle;margin-right:2px}
+.mu-tag.even{color:var(--gold);border:1px solid var(--gold)}
+.mu-tag.owns{color:var(--charge);border:1px solid var(--charge)}
+.mu-tag.grudge{color:var(--turf);border:1px solid var(--turf)}
+@media(max-width:640px){ .mu-h2h{grid-column:1/-1;font-size:11px} }
+/* the Head to head card: rivalry chips, the fiercest list, and the run column */
+.rv-chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.rv-chip{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);min-width:0}
+.rv-chip b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rv-lbl{font-family:var(--f-ui);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--chalk-dim)}
+.rv-rec{font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim)}
+.rv-chip.bad .rv-rec{color:var(--charge)} .rv-chip.good .rv-rec{color:var(--turf-bright)} .rv-chip.even .rv-rec{color:var(--gold)}
+.rv-pair{display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.rv-pair:last-child{border-bottom:none}
+.rv-po{font-family:var(--f-mono);font-size:10px;color:var(--gold);margin-left:4px;white-space:nowrap}
+.rv-w{color:var(--turf-bright);font-weight:700} .rv-l{color:var(--charge);font-weight:700}
+@media(max-width:560px){ .rv-chips{grid-template-columns:1fr 1fr;gap:6px} .rv-chip{padding:6px 8px} }
 /* the record book: On This Week rows, and the title pennants on a team card */
 .otd-row{padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--chalk-dim)}
 .otd-row:last-child{border-bottom:none}
@@ -8294,19 +8315,29 @@ function rivalryBannerHTML(ai, bi){
   const mA = liveMgrOf(ai);
   const mB = liveMgrOf(bi);
   if(!mA || !mB || mA===mB) return '';
-  const rec = (h2hAll()[mA]||{})[mB];
-  if(!rec || !rec.games) return `<div class="gc-rival">First meeting ever. No excuses yet.</div>`;
+  const rec = h2hPair(mA, mB);
+  if(!rec) return `<div class="gc-rival">First meeting ever. No excuses yet.</div>`;
   const g = rec.games, pct = (rec.w + rec.t/2)/g;
   const line = r => r.w+'-'+r.l+(r.t?'-'+r.t:'');
+  /* the series facts every banner carries: the streak, the last meeting, the playoff record
+     and the biggest beating either way */
+  const bits = [];
+  if(rec.run && rec.run.n>=2 && rec.run.kind!=='T') bits.push(`${rec.run.kind==='W'?mA:mB} has won the last ${rec.run.n}`);
+  bits.push(`last ${h2hLastTxt(rec, mA, mB)}`);
+  if(rec.poW+rec.poL+rec.poT) bits.push(`playoffs ${mA} ${rec.poW}-${rec.poL}${rec.poT?'-'+rec.poT:''}`);
+  const beat = [rec.big && {who:mA, ...rec.big}, rec.worst && {who:mB, ...rec.worst}].filter(Boolean).sort((a,b)=>b.margin-a.margin)[0];
+  if(beat && beat.margin>=20) bits.push(`biggest: ${beat.who} by ${beat.margin.toFixed(1)} in ${beat.year}`);
+  const facts = ` <span class="gc-rival-facts">· ${esc(bits.join(' · '))}</span>`;
   if(g>=3 && pct>=0.7)
-    return `<div class="gc-rival owns">${esc(mA)} owns ${esc(mB)} ${line(rec)} lifetime. Do something about it, ${esc(mB)}.</div>`;
+    return `<div class="gc-rival owns">${esc(mA)} owns ${esc(mB)} ${line(rec)} lifetime. Do something about it, ${esc(mB)}.${facts}</div>`;
   if(g>=3 && pct<=0.3){
-    const m = (h2hAll()[mB]||{})[mA] || {w:rec.l,l:rec.w,t:rec.t};
-    return `<div class="gc-rival owns">${esc(mB)} owns ${esc(mA)} ${line(m)} lifetime. Do something about it, ${esc(mA)}.</div>`;
+    const m = h2hPair(mB, mA) || {w:rec.l,l:rec.w,t:rec.t};
+    return `<div class="gc-rival owns">${esc(mB)} owns ${esc(mA)} ${line(m)} lifetime. Do something about it, ${esc(mA)}.${facts}</div>`;
   }
   if(g>=4 && Math.abs(pct-0.5)<=0.125)
-    return `<div class="gc-rival even">Dead even rivalry: ${line(rec)} all time. Somebody flinch.</div>`;
-  return '';
+    return `<div class="gc-rival even"><b>Rivalry week.</b> Dead even: ${line(rec)} all time. Somebody flinch.${facts}</div>`;
+  const tag = h2hTag(rec, mA, mB);
+  return `<div class="gc-rival${tag?' grudge':''}">${tag?`<b>${esc(tag.text)}.</b> `:''}${esc(h2hLead(rec, mA, mB))} all time.${facts}</div>`;
 }
 
 /* ===================== THE RECORD BOOK =====================
@@ -9864,40 +9895,112 @@ function h2hAll(from, to){
      into a real, countable 0 - recording a game nobody played as a blowout. A genuine 0.0 still
      passes, because only null/undefined/blank are rejected. */
   const num = v => (v===null || v===undefined || v==='') ? null : (Number.isFinite(+v) ? +v : null);
-  const pair = (mA, mB, sA, sB, year) => {
+  /* Games arrive in order - archive years ascending, weeks ascending, then the live season -
+     so the running streak and "last meeting" fall out of the walk. Each direction of a pair
+     keeps its own view: run (W3 / L2 from x's side), the biggest win each way, the playoff
+     record, and the last meeting with its week and label. */
+  const pair = (mA, mB, sA, sB, year, wk, po) => {
     if(!mA || !mB || mA===mB) return;
     if(sA===null || sB===null) return;
     [[mA,mB,sA,sB],[mB,mA,sB,sA]].forEach(([x,y,px,py])=>{
       const r = (rec[x] = rec[x] || {});
-      const v = (r[y] = r[y] || { w:0, l:0, t:0, pf:0, pa:0, games:0, last:null });
+      const v = (r[y] = r[y] || { w:0, l:0, t:0, pf:0, pa:0, games:0, last:null, run:{kind:'',n:0}, big:null, worst:null, poW:0, poL:0, poT:0 });
       v.games++; v.pf += px; v.pa += py;
-      if(px>py) v.w++; else if(py>px) v.l++; else v.t++;
-      if(!v.last || year >= v.last.year) v.last = { year, pf:px, pa:py };
+      const kind = px>py ? 'W' : py>px ? 'L' : 'T';
+      if(kind==='W') v.w++; else if(kind==='L') v.l++; else v.t++;
+      if(po){ if(kind==='W') v.poW++; else if(kind==='L') v.poL++; else v.poT++; }
+      v.run = (v.run.kind===kind) ? { kind, n: v.run.n+1 } : { kind, n:1 };
+      const margin = Math.round(Math.abs(px-py)*10)/10;
+      if(kind==='W' && (!v.big || margin > v.big.margin)) v.big = { margin, year, wk, pf:px, pa:py };
+      if(kind==='L' && (!v.worst || margin > v.worst.margin)) v.worst = { margin, year, wk, pf:px, pa:py };
+      v.last = { year, wk, pf:px, pa:py, po: !!po, label: (po && po.label) || '' };
     });
   };
-  /* the archive */
+  /* the archive - weeks past the regular season are the bracket; the playoffs table names them */
   Object.entries(H.resultsByWeek || {}).forEach(([yr, byWk])=>{
     if(+yr<lo || +yr>hi) return;
     const m = MGR[String(yr)] || {};
-    Object.values(byWk||{}).forEach(games=>{
-      (games||[]).forEach(g=>{
+    const PO = (H.playoffs && H.playoffs[String(yr)]) || [];
+    Object.keys(byWk||{}).map(Number).filter(Number.isFinite).sort((a,b)=>a-b).forEach(wk=>{
+      (byWk[wk]||[]).forEach(g=>{
         if(!g) return;
-        pair(m[g.ta], m[g.tb], num(g.pa), num(g.pb), +yr);
+        const p = PO.find(x=>+x.week===wk && ((x.ta===g.ta && x.tb===g.tb) || (x.ta===g.tb && x.tb===g.ta))) || (wk > REG_WEEKS ? { label:'Playoffs' } : null);
+        pair(m[g.ta], m[g.tb], num(g.pa), num(g.pb), +yr, wk, p);
       });
+    });
+  });
+  /* the bracket archive reaches back further than the week-by-week results do (2019 against
+     2024), so playoff games from years the results table does not cover count too - once,
+     never on top of a week the results already hold */
+  Object.entries(H.playoffs || {}).sort((a,b)=>+a[0]-+b[0]).forEach(([yr, games])=>{
+    if(+yr<lo || +yr>hi) return;
+    const m = MGR[String(yr)] || {}, byWk = (H.resultsByWeek||{})[String(yr)] || {};
+    (games||[]).slice().sort((a,b)=>(+a.week||0)-(+b.week||0)).forEach(p=>{
+      if(!p || !p.ta || !p.tb) return;
+      const wkGames = byWk[String(p.week)] || byWk[+p.week] || [];
+      const already = wkGames.some(g=>g && ((g.ta===p.ta && g.tb===p.tb) || (g.ta===p.tb && g.tb===p.ta)));
+      if(already) return;
+      pair(m[p.ta], m[p.tb], num(p.pa), num(p.pb), +yr, +p.week||0, p);
     });
   });
   /* the season being played, which is not in the archive until it is over */
   const liveYear = (typeof curDraftYear==='function') ? curDraftYear() : null;
   if(liveYear!=null && liveYear>=lo && liveYear<=hi && S.season && S.season.schedule){
     const mgrOfIdx = i => String(((S.teams||[])[i]||{}).manager || '').trim() || null;
-    Object.entries(S.season.schedule).forEach(([wk, games])=>{
-      (games||[]).forEach((g,m)=>{
-        const [pa,pb] = mScore(wk,m);
-        pair(mgrOfIdx(g[0]), mgrOfIdx(g[1]), num(pa), num(pb), liveYear);
+    Object.keys(S.season.schedule).map(Number).filter(Number.isFinite).sort((a,b)=>a-b).forEach(wk=>{
+      (S.season.schedule[wk]||[]).forEach((g,m)=>{
+        const [pa,pb] = mScore(String(wk),m);
+        pair(mgrOfIdx(g[0]), mgrOfIdx(g[1]), num(pa), num(pb), liveYear, wk, null);
       });
     });
   }
   return rec;
+}
+/* ===================== RIVALRIES =====================
+   The all-time record is the one number a fourteen-year league actually argues about, so it
+   goes where the argument happens: on every matchup row, in the Game Center header, and on
+   the Head to head card. All of it reads h2hAll, cached until a score or a manager changes. */
+let _h2hCache = { key:'', rec:null };
+function h2hLifetime(){
+  const key = JSON.stringify([S.season && S.season.scores, liveScoresMap && Object.keys(liveScoresMap), (S.teams||[]).map(t=>t.manager), (S.history||{}).v]);
+  if(_h2hCache.key !== key) _h2hCache = { key, rec: h2hAll() };
+  return _h2hCache.rec || {};
+}
+function h2hPair(mA, mB){ const r = (h2hLifetime()[mA]||{})[mB]; return (r && r.games) ? r : null; }
+const h2hRec = r => `${r.w}-${r.l}${r.t?'-'+r.t:''}`;
+/* the one tag a matchup earns, by priority: a genuine rivalry, a grudge, or a beating */
+function h2hTag(r, mA, mB){
+  if(!r || !r.games) return null;
+  const pct = (r.w + r.t/2)/r.games;
+  if(r.games>=4 && Math.abs(pct-0.5)<=0.125) return { kind:'even', text:'Rivalry week' };
+  if(r.games>=3 && pct>=0.7) return { kind:'owns', text:`${mA} owns this` };
+  if(r.games>=3 && pct<=0.3) return { kind:'owns', text:`${mB} owns this` };
+  if(r.last && r.last.kind!=='T'){
+    const lastMargin = Math.abs(r.last.pf - r.last.pa);
+    if(r.run.kind==='L' && r.run.n>=2) return { kind:'grudge', text:`Revenge game for ${mA}` };
+    if(r.run.kind==='W' && r.run.n>=2) return { kind:'grudge', text:`Revenge game for ${mB}` };
+    if(lastMargin < 3) return { kind:'grudge', text:`Last one was decided by ${lastMargin.toFixed(1)}` };
+  }
+  return null;
+}
+/* "Curtis leads 7-5" / "Tied 5-5", from mA's side of the record */
+function h2hLead(r, mA, mB){
+  return r.w>r.l ? `${mA} leads ${r.w}-${r.l}${r.t?'-'+r.t:''}` : r.l>r.w ? `${mB} leads ${r.l}-${r.w}${r.t?'-'+r.t:''}` : `Tied ${r.w}-${r.l}${r.t?'-'+r.t:''}`;
+}
+function h2hLastTxt(r, mA, mB){
+  if(!r.last) return '';
+  const L = r.last, w = L.pf>L.pa ? mA : L.pf<L.pa ? mB : null, hi = Math.max(L.pf,L.pa), lo = Math.min(L.pf,L.pa);
+  return `${L.year}${L.wk?' wk '+L.wk:''}${L.label?' '+L.label:''}: ${w ? `${w} ${hi.toFixed(1)}-${lo.toFixed(1)}` : `tied ${hi.toFixed(1)}`}`;
+}
+/* the matchups board line: tag, series, last meeting. First meetings say so. */
+function h2hRowHTML(ai, bi){
+  const mA = liveMgrOf(ai), mB = liveMgrOf(bi);
+  if(!mA || !mB || mA===mB) return '';
+  const r = h2hPair(mA, mB);
+  if(!r) return `<div class="mu-h2h">First meeting ever.</div>`;
+  const tag = h2hTag(r, mA, mB);
+  const run = r.run && r.run.n>=2 && r.run.kind!=='T' ? ` · ${r.run.kind==='W'?mA:mB} has won ${r.run.n} straight` : '';
+  return `<div class="mu-h2h">${tag?`<span class="mu-tag ${tag.kind}">${esc(tag.text)}</span> `:''}All-time ${esc(h2hLead(r, mA, mB))}${esc(run)} · last ${esc(h2hLastTxt(r, mA, mB))}</div>`;
 }
 /* Every manager who has ever played, for the picker */
 function h2hManagers(rec){
@@ -10066,6 +10169,26 @@ function h2hCardHTML(from, to, isAll){
   });
   const tot = rows.reduce((t,[,v])=>({w:t.w+v.w, l:t.l+v.l, t:t.t+v.t, g:t.g+v.games}), {w:0,l:0,t:0,g:0});
   const fmt1 = n => n.toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
+  const pctOf = v => v.games ? (v.w + v.t/2)/v.games : 0;
+  /* this manager's rivalries: the nemesis, the punching bag, the one played most, the closest series */
+  const enough = rows.filter(([,v])=>v.games>=3);
+  const nemesis = enough.slice().sort((a,b)=>pctOf(a[1])-pctOf(b[1]) || b[1].games-a[1].games)[0];
+  const bag = enough.slice().sort((a,b)=>pctOf(b[1])-pctOf(a[1]) || b[1].games-a[1].games)[0];
+  const most = rows.slice().sort((a,b)=>b[1].games-a[1].games)[0];
+  const closest = rows.filter(([,v])=>v.games>=4).sort((a,b)=>Math.abs(pctOf(a[1])-0.5)-Math.abs(pctOf(b[1])-0.5) || b[1].games-a[1].games)[0];
+  const chip = (label, e, cls) => e ? `<div class="rv-chip ${cls||''}"><span class="rv-lbl">${label}</span><b>${esc(e[0])}</b><span class="rv-rec">${h2hRec(e[1])}</span></div>` : '';
+  const rivals = [
+    nemesis && pctOf(nemesis[1])<0.5 ? chip('Nemesis', nemesis, 'bad') : '',
+    bag && pctOf(bag[1])>0.5 ? chip('Punching bag', bag, 'good') : '',
+    closest ? chip('Closest series', closest, 'even') : '',
+    most ? chip('Most played', most, '') : ''
+  ].filter(Boolean).join('');
+  /* the league's fiercest: most games between two managers who keep splitting them */
+  const seen = new Set(), pairs = [];
+  names.forEach(a=>Object.entries(rec[a]||{}).forEach(([b,v])=>{ const k=[a,b].sort().join('|'); if(seen.has(k)) return; seen.add(k);
+    const p = pctOf(v); if(v.games>=4 && Math.abs(p-0.5)<=0.2) pairs.push({a,b,v,score: v.games*(1-Math.abs(p-0.5)*2)}); }));
+  pairs.sort((x,y)=>y.score-x.score);
+  const fiercest = pairs.slice(0,5).map(x=>`<div class="rv-pair"><b>${esc(x.a)}</b> vs <b>${esc(x.b)}</b><span class="rv-rec">${h2hRec(x.v)} · ${x.v.games} games${x.v.run&&x.v.run.n>=2&&x.v.run.kind!=='T'?` · ${x.v.run.kind==='W'?esc(x.a):esc(x.b)} has the last ${x.v.run.n}`:''}</span></div>`).join('');
   return `<div class="card">
     <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
       <h2 style="margin:0">Head to head</h2>
@@ -10074,23 +10197,29 @@ function h2hCardHTML(from, to, isAll){
     </div>
     <p class="sub" data-note="h2h-intro" style="margin:0 0 10px">Every meeting between these two managers, whatever either team was called at the time. ${
       isAll ? 'All time.' : `${from}–${to} only.`} <b>${esc(who)}</b> is <b>${tot.w}-${tot.l}${tot.t?'-'+tot.t:''}</b> across ${tot.g} game${tot.g===1?'':'s'}.</p>
-    <div style="overflow-x:auto"><table class="plain" style="min-width:520px">
-      <tr><th>Opponent</th><th style="text-align:right">W-L-T</th><th style="text-align:right">Pct</th>
+    ${rivals?`<div class="rv-chips">${rivals}</div>`:''}
+    <div style="overflow-x:auto"><table class="plain" style="min-width:560px">
+      <tr><th>Opponent</th><th style="text-align:right">W-L-T</th><th style="text-align:right">Pct</th><th style="text-align:right" title="The current run in this series">Run</th>
           <th style="text-align:right">PF</th><th style="text-align:right">PA</th><th style="text-align:right">Last</th></tr>
       ${rows.map(([opp,v])=>{
-        const pct = v.games ? (v.w + v.t/2)/v.games : 0;
+        const pct = pctOf(v);
         const owns = v.games>=3 && pct>=0.75, owned = v.games>=3 && pct<=0.25;
+        const run = v.run && v.run.n ? `<span class="${v.run.kind==='W'?'rv-w':v.run.kind==='L'?'rv-l':''}">${v.run.kind}${v.run.n}</span>` : '—';
         return `<tr${owns?' class="top"':''}>
-          <td>${esc(opp)}${owns?' <span class="h2h-tag good">owns</span>':''}${owned?' <span class="h2h-tag bad">owned</span>':''}</td>
+          <td>${esc(opp)}${owns?' <span class="h2h-tag good">owns</span>':''}${owned?' <span class="h2h-tag bad">owned</span>':''}${v.poW+v.poL+v.poT?` <span class="rv-po" title="Playoff meetings">PO ${v.poW}-${v.poL}${v.poT?'-'+v.poT:''}</span>`:''}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${v.w}-${v.l}${v.t?'-'+v.t:''}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${v.games?(pct>=1?'1.000':pct.toFixed(3).slice(1)):'—'}</td>
+          <td style="text-align:right;font-family:var(--f-mono)">${run}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pf)}</td>
           <td style="text-align:right;font-family:var(--f-mono)">${fmt1(v.pa)}</td>
           <td style="text-align:right;font-family:var(--f-mono);color:var(--chalk-dim);font-size:12px">${
-            v.last?`${v.last.year} ${v.last.pf>v.last.pa?'W':(v.last.pf<v.last.pa?'L':'T')} ${fmt1(v.last.pf)}-${fmt1(v.last.pa)}`:'—'}</td>
+            v.last?`${v.last.year}${v.last.wk?' wk'+v.last.wk:''} ${v.last.pf>v.last.pa?'W':(v.last.pf<v.last.pa?'L':'T')} ${fmt1(v.last.pf)}-${fmt1(v.last.pa)}${v.last.po?' <span class="rv-po">PO</span>':''}`:'—'}</td>
         </tr>`;
       }).join('')}
     </table></div>
+    ${fiercest?`<div class="eyebrow" style="margin:16px 0 6px">Fiercest rivalries in the league</div>
+    <p class="sub" data-note="h2h-fiercest" style="margin:0 0 6px;font-size:12px">The pairs who have played the most and settled the least - four games or more, split down the middle.</p>
+    ${fiercest}`:''}
   </div>`;
 }
 /* ===================== SETTINGS PAGES =====================
@@ -12733,6 +12862,7 @@ function renderMatchups(){
           ${pj(prB,'b')}
           ${side(g[1],bWin,1,true)}
           ${projTag}
+          ${edit ? '' : (()=>{ try{ return h2hRowHTML(g[0], g[1]); }catch(e){ return ''; } })()}
           ${edit ? '' : (()=>{
             /* Always shown, with the label naming what it is based on. Skipping the bar when
                there is nothing to go on just makes the feature look missing - an even bar that
@@ -15987,7 +16117,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-06 · live win probability';
+const BUILD_STAMP = '2026-09-07 · rivalries and head-to-head history';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

@@ -292,6 +292,28 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## Rivalries and head-to-head history
+
+`h2hAll(from, to)` is the record between every pair of **managers** (team names are mapped
+through `S.history.managers` per year, so renames never launder history), from the archive's
+`resultsByWeek` plus the live season. Each direction of a pair now also carries `run`
+(`{kind:'W'|'L'|'T', n}`, the current streak from that side), `big` / `worst` (biggest win and
+loss with year and week), `poW/poL/poT` (bracket games, matched to `S.history.playoffs` by
+week and team names, or any week past `REG_WEEKS`), and `last` with `wk`, `po` and the
+bracket `label`. Games are walked in order (years, then weeks) so the streak is right.
+`h2hLifetime()` caches the all-time table on scores + managers; `h2hPair(mA, mB)` reads it.
+
+`h2hTag(r, mA, mB)` awards one tag by priority: **Rivalry week** (4+ games, within an eighth
+of .500), **owns** (3+ games at .700 or better either way), or a grudge (a two-game run, or a
+last meeting decided by under 3). Shown as `.mu-tag` on the `.mu-h2h` line under every
+matchup row (`h2hRowHTML`: tag, "X leads 7-5", the streak, the last meeting), in the Game
+Center banner (`rivalryBannerHTML`, now always drawn once a series exists, with the streak,
+last meeting, playoff record and biggest beating as `.gc-rival-facts`), and on the Stats tab's
+Head to head card (`h2hCardHTML`: nemesis / punching bag / closest series / most played chips,
+a Run column, PO badges, and the league's fiercest rivalries - most games among pairs split
+within .300-.700). The archive holds per-game results for 2024 wk 1 and all of 2025 only;
+earlier years are season totals, so lifetime series start there.
+
 ## Live win probability
 
 `loadKickoffs` now keeps `NFL_KICKS.games[TEAM] = {kick, state:'pre'|'in'|'post', remain, label}`
