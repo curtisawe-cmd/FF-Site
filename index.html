@@ -12380,11 +12380,14 @@ function poPictureHTML(){
     <p class="sub" data-note="po-picture" style="margin:0 0 10px">Top ${SPOTS} make the bracket. The other ${pic.length-SPOTS} go to the consolation, which is not nothing here: winning it is the first pick in the draft. <b>In</b> and <b>Consolation</b> are settled, they cannot come undone. <b>Magic</b> is how many more of your wins, or losses by the best team still outside, it takes to be settled, and either one counts.</p>
     ${rows}
     ${anyLeft?'':'<p class="sub" style="margin:10px 0 0">Regular season complete.</p>'}
-    <p class="sub" data-note="po-tiebreak" style="margin:10px 0 0">Level records are split on points for, and there is no knowing that in advance, so anyone who can match your record counts against you here. Two teams chasing you might also play each other, which this does not try to guess at, so a spot is sometimes safe a week before it says so.${odds?' The percentage is the playoff odds - the full table is on the Playoffs tab.':''}</p>
+    <p class="sub" data-note="po-tiebreak" style="margin:10px 0 0">Level records are split on the league tiebreak - head-to-head, then points for - and there is no knowing that in advance, so anyone who can match your record counts against you here. Two teams chasing you might also play each other, which this does not try to guess at, so a spot is sometimes safe a week before it says so.${odds?' The percentage is the playoff odds - the full table is on the Playoffs tab.':''}</p>
   </div>`;
 }
 function seasonStandings(){
   const rows = S.teams.map((t,i)=>({i, name:t.name, manager:t.manager, w:0,l:0,t:0, pf:0, pa:0}));
+  /* head-to-head, kept per pair as the games are tallied, so the tiebreak below costs nothing extra */
+  const h2h = {};
+  const mark = (a, b, k) => { (h2h[a] = h2h[a] || {}); (h2h[a][b] = h2h[a][b] || {w:0,l:0}); h2h[a][b][k]++; };
   Object.entries(S.season.schedule).forEach(([wk,games])=>{
     games.forEach((g,m)=>{
       const [pa,pb] = mScore(wk,m);
@@ -12392,10 +12395,34 @@ function seasonStandings(){
       const A=rows[g[0]], B=rows[g[1]];
       if(!A||!B) return;
       A.pf+=pa; A.pa+=pb; B.pf+=pb; B.pa+=pa;
-      if(pa>pb){A.w++;B.l++;} else if(pb>pa){B.w++;A.l++;} else {A.t++;B.t++;}
+      if(pa>pb){A.w++;B.l++; mark(g[0],g[1],'w'); mark(g[1],g[0],'l');}
+      else if(pb>pa){B.w++;A.l++; mark(g[1],g[0],'w'); mark(g[0],g[1],'l');}
+      else {A.t++;B.t++;}
     });
   });
-  return rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
+  rows.sort((a,b)=> b.w-a.w || b.pf-a.pf);
+  /* The league's tiebreak (Settings > League rules) is head-to-head record, and the table used
+     to skip straight to points-for. Teams level on wins are now ordered by their record against
+     each other first - the record among the whole tied group, the way NFL.com breaks it - and
+     points-for only settles what that leaves, which is also the only order the bracket seeder
+     and the playoff picture see. Any other setting keeps the plain points-for order. */
+  if(/head-to-head/i.test(String((S.rules||{})['Standings tiebreaker']||''))){
+    for(let s=0; s<rows.length; ){
+      let e = s+1; while(e<rows.length && rows[e].w===rows[s].w) e++;
+      if(e-s > 1){
+        const group = rows.slice(s, e), ids = group.map(r=>r.i);
+        group.forEach(r=>{
+          let w=0, l=0; ids.forEach(o=>{ if(o===r.i) return; const x=(h2h[r.i]||{})[o]; if(x){ w+=x.w; l+=x.l; } });
+          r._h2h = (w+l) ? w/(w+l) : 0.5;   /* never met the others: neutral, so points-for places them */
+        });
+        group.sort((a,b)=> b._h2h-a._h2h || b.pf-a.pf);
+        group.forEach(r=>{ delete r._h2h; });
+        rows.splice(s, e-s, ...group);
+      }
+      s = e;
+    }
+  }
+  return rows;
 }
 /* ---- all-play ----
    Your score each week against EVERY other team's, not just the one the schedule happened to

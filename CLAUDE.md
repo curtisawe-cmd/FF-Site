@@ -591,6 +591,11 @@ Thu-Mon from `NFL_2026_WEEK1 = Sep 10 2026`. Fantasy pairings are league-vs-leag
 round-robin (`genSchedule`); the NFL schedule only drives week structure and labels.
 Matchups auto-generate at boot if `!S.season`.
 
+**Standings order** (`seasonStandings`): wins, then - when Settings > League rules has
+"Standings tiebreaker: Head-to-head record" - the record among the teams tied on wins, then
+points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
+(`poSeedBracket`), the playoff picture and the playoff odds all read this one order.
+
 ## Design
 
 Buffalo Bills colors - the league is Bills fans. Primary royal blue `#00338d` (`--turf`),
