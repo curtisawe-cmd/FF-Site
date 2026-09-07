@@ -2384,6 +2384,35 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .wp.live .wp-lbl::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--charge);margin:0 5px 1px 0;animation:wp-pulse 1.4s ease-in-out infinite}
 @keyframes wp-pulse{0%,100%{opacity:1}50%{opacity:.25}}
 .wp-sub{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);margin-top:4px;text-align:center;font-variant-numeric:tabular-nums}
+/* the Sunday sweat card */
+.sw-card{margin:0 0 18px;max-width:760px}
+.sw-card .wp{background:transparent;border-bottom:none;padding:8px 0 0}
+.sw-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:8px}
+.sw-col{min-width:0}
+.sw-team{display:flex;align-items:center;gap:6px;font-weight:700;font-size:13px;margin-bottom:2px;min-width:0}
+.sw-team > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-team em{font-style:normal;font-family:var(--f-ui);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--turf);margin-left:2px}
+.sw-tot{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sw-tot b{color:var(--chalk);font-weight:700}
+.sw-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto auto;gap:7px;align-items:center;padding:4px 0;border-bottom:1px solid var(--line)}
+.sw-row:last-of-type{border-bottom:none}
+.sw-nm{min-width:0;display:flex;flex-direction:column;font-size:12.5px;font-weight:600;line-height:1.15}
+.sw-nm,.sw-nm small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-nm small{font-family:var(--f-mono);font-weight:400;font-size:10px;color:var(--chalk-dim)}
+.sw-gs{font-family:var(--f-mono);font-size:10.5px;color:var(--chalk-dim);white-space:nowrap}
+.sw-gs.in{color:var(--charge);font-weight:700}
+.sw-num{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--f-mono);font-size:12px;line-height:1.1;font-variant-numeric:tabular-nums}
+.sw-num small{font-size:9.5px;color:var(--chalk-dim)}
+.sw-need{font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--turf);white-space:nowrap;min-width:64px;text-align:right}
+.sw-need.ok{color:var(--turf-bright)}
+.sw-none,.sw-done{font-size:11.5px;color:var(--chalk-dim);padding:4px 0}
+.sw-line{margin:10px 0 0;font-size:13.5px;line-height:1.4}
+.sw-line b{color:var(--turf)}
+@media(max-width:560px){
+  .sw-grid{grid-template-columns:minmax(0,1fr);gap:10px}
+  .sw-row{grid-template-columns:20px minmax(0,1fr) auto auto auto;gap:5px}
+  .sw-need{min-width:0;font-size:10.5px} .sw-nm{font-size:12px} .sw-gs{font-size:10px}
+}
 /* a player's game clock in Game Center */
 .gc-gs{white-space:nowrap;opacity:.8}
 .gc-gs.in{color:var(--charge);opacity:1;font-weight:700}
@@ -2578,6 +2607,10 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
   <!-- A warning nobody sees is not a warning: the same banner rides on the landing page, since
        the manager who has left a slot empty is exactly the one not visiting My Team. -->
   <div id="homeLineupWarn"></div>
+
+  <!-- the Sunday sweat: your matchup this week, live - odds, who is still to play on both sides
+       and what each of yours needs. Hidden outside the week being played. -->
+  <div id="homeSweat" style="display:none"></div>
 
   <!-- Every corner of the league, one tap from the front door. Rendered by renderHomeLaunch so
        the subtitles carry live facts and the badges live-update. -->
@@ -5283,6 +5316,10 @@ setInterval(()=>{
   maybeAutoScore();
   try{ checkScoreAlerts(); }catch(e){}      /* who on your team just scored */
   try{ maybeWriteRecap(); }catch(e){}       /* the week's write-up, once the games are over */
+  /* the Sunday sweat keeps time with the clock: a minute is the beat, the fetches underneath
+     have their own TTLs so this costs nothing between games */
+  try{ if(window.currentView==='home') renderHomeSweat(); }catch(e){}
+  try{ if(window.currentView==='teams' && window.teamsSub==='my') renderSweatInto('myTeamSweat', myTeamIdx()); }catch(e){}
   /* Game Center pulls fresh stats itself (3-min TTL on the live week) */
   if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
 }catch(e){} }, 60000);
@@ -8282,6 +8319,7 @@ function renderHome(){
       }).join('')}
     </table>`;
   try{ renderHeroBits(); renderHomeLaunch(); renderHomePulse(); }catch(e){}
+  try{ renderHomeSweat(); }catch(e){}
   try{ renderHomeRecap(); }catch(e){}
   try{ renderHomeShame(); }catch(e){}
   try{ renderHomeThisWeek(); }catch(e){}
@@ -14440,6 +14478,118 @@ function liveWinSub(ea, eb, la, lb){
   const still = (la||0) + (lb||0);
   return `On pace ${(+ea).toFixed(1)} – ${(+eb).toFixed(1)}${still ? ` · ${la} v ${lb} still to play` : ''}`;
 }
+/* ===================== THE SUNDAY SWEAT =====================
+   The one screen for a Sunday: your matchup, live. The odds, what both sides have scored and
+   are on pace for, every starter still to play on either side with his kickoff or his game
+   clock, and - the number nobody else gives you - the line each of yours needs to hit. "Needs"
+   is worked out against the other side's on-pace final with the rest of your lineup hitting
+   its own lines, so it is exactly what it says: if everyone else does their job, this is his.
+   Sits at the top of Home and on My Team from Thursday's kickoff to Tuesday morning. */
+function sweatSide(ti, stats, wk, oppMap){
+  const r1 = n => Math.round(n*10)/10;
+  const rows = starterPicks(ti).map(p=>{
+    const st = stats && stats[p.playerId];
+    const pts = st ? r1(scoreWeekStats(st, p.pos)||0) : 0;
+    const proj = projWeekPoints(p.playerId, p.pos, wk) || 0;
+    const g = gameOf(p.nfl);
+    const state = g ? g.state : (st ? 'post' : 'none');
+    const remain = state==='pre' ? 1 : state==='in' ? g.remain : 0;
+    return { p, pts, proj, state, remain, exp: r1(pts + proj*remain), kick: g ? g.kick : 0, label: g ? g.label : '', opp: oppMap ? oppLabel(p.nfl, oppMap) : '' };
+  });
+  const sum = f => r1(rows.reduce((t,x)=>t+f(x), 0));
+  const live = x => x.state==='pre' || x.state==='in';
+  return { rows, scored: sum(x=>x.pts), exp: sum(x=>x.exp), left: rows.filter(live), done: rows.filter(x=>!live(x)) };
+}
+async function sweatData(ti){
+  if(!Number.isInteger(ti) || !(S.season && S.season.schedule)) return null;
+  const wk = currentNflWeek(); if(!wk || weekIsOver(wk)) return null;
+  const games = S.season.schedule[String(wk)] || S.season.schedule[wk] || [];
+  const m = games.findIndex(g=>g && (g[0]===ti || g[1]===ti));
+  if(m<0) return { wk, none:true };
+  const g = games[m], opp = g[0]===ti ? g[1] : g[0];
+  if(!statsLoaded){ try{ await loadCareerStats(); }catch(e){} }
+  const season = +(S.season.year) || PROJ_SEASON;
+  let stats = {}; try{ stats = (await fetchWeekStats(season, wk)) || {}; }catch(e){}
+  let oppMap = null; try{ oppMap = await loadOpponents(season, wk); }catch(e){}
+  try{ await loadKickoffs(); }catch(e){}
+  const mine = sweatSide(ti, stats, wk, oppMap), theirs = sweatSide(opp, stats, wk, oppMap);
+  let LW = null; try{ LW = liveWinModel(ti, opp, stats, wk); }catch(e){}
+  return { wk, m, ti, opp, mine, theirs, LW };
+}
+/* what each of my remaining players needs for the week, everyone else on my side hitting his line */
+function sweatNeeds(D){
+  const target = D.theirs.exp;
+  return D.mine.left.map(x=>{
+    const others = D.mine.rows.filter(q=>q!==x).reduce((t,q)=>t+q.exp, 0);
+    return { x, need: Math.round((target - others)*10)/10 };
+  });
+}
+function sweatCardHTML(D){
+  if(!D) return '';
+  if(D.none) return `<div class="card sw-card"><div class="eyebrow">Week ${esc(String(D.wk))}</div><p class="sub" style="margin:4px 0 0">No game for you this week.</p></div>`;
+  const tMe = S.teams[D.ti]||{}, tOp = S.teams[D.opp]||{};
+  const LW = D.LW, state = LW ? LW.state : 'pre';
+  const bar = !LW ? winBarHTML(D.mine.exp, D.theirs.exp, false, 'Win probability · from projections')
+    : state==='final' ? winBarHTML(D.mine.scored, D.theirs.scored, true, 'Final')
+    : state==='live' ? winBarHTML(0, 0, false, 'Live win probability', { pct: LW.pA, sub: liveWinSub(LW.a.exp, LW.b.exp, LW.a.left+LW.a.playing, LW.b.left+LW.b.playing) })
+    : winBarHTML(LW.a.exp, LW.b.exp, false, 'Win probability · from projections', { pct: LW.pA, sub: `Projected ${LW.a.exp.toFixed(1)} – ${LW.b.exp.toFixed(1)}` });
+  const needs = sweatNeeds(D);
+  const row = (x, mine) => {
+    const n = mine ? needs.find(q=>q.x===x) : null;
+    const needTxt = !n ? '' : n.need <= x.pts ? 'covered' : x.state==='in' ? `needs ${(n.need - x.pts).toFixed(1)} more` : `needs ${Math.max(0, n.need).toFixed(1)}`;
+    return `<div class="sw-row ${x.state}">${playerFace(x.p, 22)}
+      <span class="sw-nm">${esc(x.p.name)}<small>${esc(x.p.pos)}${x.p.nfl?' · '+esc(x.p.nfl):''}${x.opp?' '+esc(x.opp):''}</small></span>
+      <span class="sw-gs ${x.state}">${esc(x.label||'—')}</span>
+      <span class="sw-num">${x.state==='in' ? `<b>${x.pts.toFixed(1)}</b><small>proj ${x.proj.toFixed(1)}</small>` : `<b>${x.proj.toFixed(1)}</b><small>proj</small>`}</span>
+      ${mine ? `<span class="sw-need${n && n.need<=x.pts?' ok':''}">${esc(needTxt)}</span>` : ''}
+    </div>`;
+  };
+  const col = (side, mine, t) => `<div class="sw-col">
+    <div class="sw-team">${teamMarkHTML(t, 24)}<span>${esc(t.name||'?')}${mine?' <em>you</em>':''}</span></div>
+    <div class="sw-tot"><b>${side.scored.toFixed(1)}</b> scored · <b>${side.exp.toFixed(1)}</b> on pace · ${side.left.length} to play</div>
+    ${side.left.length ? side.left.slice().sort((a,b)=>(a.kick||0)-(b.kick||0)).map(x=>row(x, mine)).join('') : `<div class="sw-none">Everyone's done.</div>`}
+    ${side.done.length ? `<div class="sw-done">${side.done.length} done · ${side.done.reduce((t,x)=>t+x.pts,0).toFixed(1)} pts</div>` : ''}
+  </div>`;
+  const diff = Math.round((D.mine.exp - D.theirs.exp)*10)/10;
+  let line = '';
+  if(state==='final') line = diff>0 ? `You won by ${diff.toFixed(1)}.` : diff<0 ? `You lost by ${Math.abs(diff).toFixed(1)}.` : 'A tie. Nobody wins.';
+  else if(D.mine.left.length){
+    const decider = needs.slice().sort((a,b)=>(b.x.kick||0)-(a.x.kick||0))[0];
+    const pace = diff>=0 ? `On pace to win by ${diff.toFixed(1)}.` : `On pace to lose by ${Math.abs(diff).toFixed(1)}.`;
+    const dn = decider.x.state==='in' ? decider.need - decider.x.pts : decider.need;
+    line = `${pace} If the rest hit their lines, <b>${esc(decider.x.p.name)}</b> needs <b>${Math.max(0, dn).toFixed(1)}${decider.x.state==='in'?' more':''}</b> and you win.`;
+  } else {
+    const gap = Math.round((D.mine.scored - D.theirs.scored)*10)/10;
+    line = gap>0
+      ? `You're done at ${D.mine.scored.toFixed(1)}. They need <b>${gap.toFixed(1)}</b> more from ${D.theirs.left.length} player${D.theirs.left.length===1?'':'s'} to catch you - on pace for ${(D.theirs.exp - D.theirs.scored).toFixed(1)}.`
+      : `You're done at ${D.mine.scored.toFixed(1)}, ${Math.abs(gap).toFixed(1)} behind with nobody left. Start praying for a goose egg.`;
+  }
+  const title = state==='live' ? 'Sunday sweat' : state==='final' ? 'Final' : 'This week';
+  return `<div class="card sw-card">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="eyebrow" style="margin:0">${title} · Week ${esc(String(D.wk))} · vs ${esc(tOp.name||'?')}${tOp.manager?` (${esc(tOp.manager)})`:''}</span>
+      <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="showView('matchups');setMuTab('gc')">Game Center</button>
+    </div>
+    ${bar}
+    <div class="sw-grid">${col(D.mine, true, tMe)}${col(D.theirs, false, tOp)}</div>
+    <p class="sw-line">${line}</p>
+  </div>`;
+}
+/* fills a container, or hides it outside the live week; a stale fetch never overwrites a
+   fresher one */
+async function renderSweatInto(id, ti){
+  const el = document.getElementById(id); if(!el) return;
+  const wk = currentNflWeek();
+  if(!Number.isInteger(ti) || !wk || weekIsOver(wk) || !(S.season && S.season.schedule)){ el.innerHTML=''; el.style.display='none'; return; }
+  const token = String(Date.now()); el.dataset.token = token;
+  try{
+    const D = await sweatData(ti);
+    if(el.dataset.token !== token) return;
+    const html = sweatCardHTML(D);
+    el.innerHTML = html; el.style.display = html ? 'block' : 'none';
+  }catch(e){ el.innerHTML=''; el.style.display='none'; }
+}
+function renderHomeSweat(){ renderSweatInto('homeSweat', myTeamIdx()); }
 /* ---- who each NFL team plays in a given week ----
    Off the same ESPN scoreboard loadKickoffs and loadByeWeeks already read, so no new source and
    no second opinion about team codes. Keyed by season AND week, because Game Center can look
@@ -15548,6 +15698,7 @@ function renderMyTeam(){
   const irRows = irFilled.map(p=>playerRow(p,'IR')).join('')
     + Array(Math.max(0,(+S.roster.IR||0)-irFilled.length)).fill(emptyRow('IR')).join('');
   el.innerHTML = `
+    <div id="myTeamSweat" style="display:none;max-width:760px"></div>
     <div class="card myteam-card" style="max-width:760px">
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
@@ -15572,6 +15723,7 @@ function renderMyTeam(){
       <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>`:''}
     </div>`;
   if(canEditTeam(mi)) renderFreeAgents(mi);
+  try{ renderSweatInto('myTeamSweat', mi); }catch(e){}
 }
 function renderTeams(){
   const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
@@ -16270,7 +16422,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · playoff odds';
+const BUILD_STAMP = '2026-09-07 · the Sunday sweat card';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

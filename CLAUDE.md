@@ -292,6 +292,19 @@ no per-week lineup history anywhere in `S`). So the number is captured when the 
   same games (`luckWins`, the schedule's doing) and **vs proj** (the players' doing). Callouts
   need two **real** games (an all-play row's `games` is eleven comparisons a week, not games).
 
+## The Sunday sweat card
+
+`sweatData(ti)` (async: this week's stats, opponents, kickoffs) → `sweatSide` per team (each
+starter's state/clock/points/projection/expected, split into `left` and `done`) → `sweatNeeds`
+(for each of my remaining starters, the week total he needs for my side to beat the other
+side's on-pace final with the rest of my lineup hitting its own lines) → `sweatCardHTML`: the
+live bar, both columns, "needs X" per player, "covered" once he has it, and a closing line
+naming the decider (the latest kickoff). `renderSweatInto(id, ti)` fills `#homeSweat` (top of
+Home, `renderHomeSweat` from `renderHome` and the one-minute pulse) and `#myTeamSweat` (top of
+My Team). Hidden outside `currentNflWeek()` or once `weekIsOver`. No new data sources - the
+week stats, `NFL_KICKS.games`, `NFL_OPP` and `liveWinModel` all already exist and carry their
+own TTLs, so the minute beat is free between games.
+
 ## Playoff odds
 
 `playoffOdds()` is a Monte Carlo of the rest of the regular season plus the bracket
