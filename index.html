@@ -6312,7 +6312,7 @@ function renderPlayers(){
     <tr><th style="width:44px">Pos</th><th>Player</th><th style="width:58px">Team</th><th style="width:62px;text-align:right" title="Projected points a week, scored through this league's own rules. The same number Game Center shows beside what he actually scored.">Proj/wk</th><th style="width:52px;text-align:center" title="The week this player's NFL team does not play">Bye</th><th style="width:52px;text-align:center">Age</th><th style="width:52px;text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
-      <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}</span></span></td>
+      <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}${gameLineHTML(p.team, true) ? `<div style="color:var(--chalk-dim);font-size:11px">${gameLineHTML(p.team, true)}</div>` : ''}</span></span></td>
       <td style="font-family:var(--f-mono)">${esc(p.team)}</td>
       <td class="pl-proj">${projWkTxt(p)}${canAdd?pickupBadgeHTML(p, addTi):''}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${byeCellHTML(null, p.team)}</td>
@@ -14853,7 +14853,8 @@ function renderPickups(){
   const gainTxt = (p, why) => { if(!hasTeam) return ''; const g = pickupGain(ti, p); return g ? ` · <b class="pk-gain">${signed1(g.gain)} ${esc(why || pickupWhy(g))}</b>` : ''; };
   const row = (p, why) => {
     const wv = onWaivers(p.id), w = wv ? wireEntry(p.id) : null;
-    const meta = [esc(p.team||''), esc(oppTxt(p.team, oppNow, wk))].filter(Boolean).join(' ')
+    const gl = gameLineHTML(p.team);   /* " · Sun 1:00 PM vs KC" once the slate is in; the bare opponent until then */
+    const meta = [esc(p.team||''), gl ? '' : esc(oppTxt(p.team, oppNow, wk))].filter(Boolean).join(' ') + (gl||'')
       + (wv ? ` · on waivers, clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p, why);
     return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
@@ -14911,12 +14912,12 @@ function renderPickups(){
   const stream = (pos, label) => {
     const top = avail.filter(p=>p.pos===pos && pNow(p)!=null && pNow(p)>0).sort((a,b)=>pNow(b)-pNow(a)).slice(0,6);
     const mine = yours(pos);
-    const mineTxt = mine ? `<p class="pk-yours">Yours: <b>${esc(mine.q.name)}</b> ${fmt(mine.v)} ${esc(oppTxt(mine.q.nfl, oppNow, wk))}${wk2?` · next ${fmt(nextReady?projWeekPoints(mine.q.playerId, mine.q.pos, wk2):null)} ${esc(oppTxt(mine.q.nfl, oppNext, wk2))}`:''}</p>`
+    const mineTxt = mine ? `<p class="pk-yours">Yours: <b>${esc(mine.q.name)}</b> ${fmt(mine.v)} ${gameLineHTML(mine.q.nfl, true) || esc(oppTxt(mine.q.nfl, oppNow, wk))}${wk2?` · next ${fmt(nextReady?projWeekPoints(mine.q.playerId, mine.q.pos, wk2):null)} ${esc(oppTxt(mine.q.nfl, oppNext, wk2))}`:''}</p>`
       : (hasTeam ? `<p class="pk-yours">You don't have a ${label.toLowerCase()} starting.</p>` : '');
     const rows = top.map(p=>{
       const wv = onWaivers(p.id), w = wv ? wireEntry(p.id) : null;
       const nx = wk2 ? ` · next ${fmt(pNext(p))} ${esc(oppTxt(p.team, oppNext, wk2))}` : '';
-      const meta = `${esc(oppTxt(p.team, oppNow, wk)||p.team)}${nx}` + (wv ? ` · clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p);
+      const meta = `${gameLineHTML(p.team, true) || esc(oppTxt(p.team, oppNow, wk)||p.team)}${nx}` + (wv ? ` · clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p);
       return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
         <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
         <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
@@ -15110,12 +15111,12 @@ function gameOf(nfl){ const g = NFL_KICKS.games; return (g && g[String(nfl||'').
    before kickoff, "LIVE Q2 5:12 vs KC" while it runs, "Final vs KC" after. Off NFL_KICKS, so a
    week with no scoreboard yet says nothing rather than guessing; a bye says nothing here because
    the BYE chip beside the name already does. */
-function gameLineHTML(nfl){
+function gameLineHTML(nfl, bare){
   const g = gameOf(nfl); if(!g || !g.label) return '';
   const opp = g.opp ? ` ${g.home ? 'vs' : '@'} ${esc(g.opp)}` : '';
   const cls = g.state==='in' ? ' live' : g.state==='post' ? ' final' : '';
   const title = g.state==='in' ? 'His game is under way' : g.state==='post' ? 'His game is over' : 'Kicks off ' + kickoffLabel(g.kick);
-  return `<span class="pgame${cls}" title="${esc(title)}"><span class="pgame-sep"> \u00B7 </span>${g.state==='in' ? 'LIVE ' : ''}${esc(g.label)}${opp}</span>`;
+  return `<span class="pgame${cls}" title="${esc(title)}">${bare ? '' : '<span class="pgame-sep"> \u00B7 </span>'}${g.state==='in' ? 'LIVE ' : ''}${esc(g.label)}${opp}</span>`;
 }
 function liveSide(ti, stats, wk){
   const r1 = n => Math.round(n*10)/10;
@@ -16165,7 +16166,7 @@ function renderWaivers(){
         return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
           <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${byeTagHTML(w.pid, w.nfl)}</span>
-          <span class="pmeta">${esc(w.nfl||'')} · ${from} · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(w)} proj</b></span>
+          <span class="pmeta">${esc(w.nfl||'')}${gameLineHTML(w.nfl)} · ${from} · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(w)} proj</b></span>
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
           ${mineIn
             ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
