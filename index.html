@@ -11443,6 +11443,9 @@ async function renderGameCenter(){
      totals as before. */
   const finalWeek = season!==PROJ_SEASON || weekIsOver(wk) || (currentNflWeek()>0 && wk < currentNflWeek());
   const liveWeek = !finalWeek && season===PROJ_SEASON && wk===currentNflWeek();
+  /* the slate is known all preseason (loadKickoffs loads week 1 before the opener), so the kickoff
+     tags and "yet to play" can show from the day the rosters lock, not from the first whistle */
+  const slateWeek = !finalWeek && season===PROJ_SEASON && wk===(currentNflWeek() || projWeekNow());
   const gcBar = (ax, bx, A, B, pp) => {
     if(finalWeek) return winBarHTML(A.total, B.total, true, 'Final');
     let LW = null;
@@ -11456,12 +11459,12 @@ async function renderGameCenter(){
   /* the game clock beside a player: Q3 8:12 while he is playing, Final when he is done, the
      kickoff time until he starts - only for the week being played */
   const gameTag = p => {
-    if(!liveWeek || !p) return '';
+    if(!slateWeek || !p) return '';
     const g = gameOf(p.nfl); if(!g) return '';
     return `<span class="gc-gs ${g.state}">${esc(g.label)}</span>`;   /* the separator is CSS: inline on desktop, its own line on a phone */
   };
   /* what an empty stat line means depends on the clock: before kickoff nobody has played */
-  const noLine = p => { const g = liveWeek && p ? gameOf(p.nfl) : null;
+  const noLine = p => { const g = slateWeek && p ? gameOf(p.nfl) : null;
     return g && g.state==='pre' ? 'yet to play' : g && g.state==='in' ? 'nothing yet' : 'did not play'; };
   const h2hHead = (ax, bx, A, B, bar) => {
     const tA=S.teams[ax]||{}, tB=S.teams[bx]||{};
