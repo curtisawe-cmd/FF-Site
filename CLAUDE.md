@@ -414,6 +414,12 @@ earlier years are season totals, so lifetime series start there.
 
 ## Live win probability
 
+`NFL_KICKS.games[team]` also carries `opp` and `home`, and `loadKickoffs` loads **week 1 all preseason**
+(`currentNflWeek() || projWeekNow()`) so the My Team rows can say when everybody plays; nothing locks
+off it until `currentNflWeek()` itself is 1 (`playerKickoff` checks the week). `gameLineHTML(nfl)`
+prints "Sun 1:00 PM vs KC" / "LIVE Q2 5:12" / "Final" after the position line of each My Team row,
+and a slate that changed redraws the Teams view once per fetch.
+
 `loadKickoffs` now keeps `NFL_KICKS.games[TEAM] = {kick, state:'pre'|'in'|'post', remain, label}`
 off the same ESPN scoreboard (`status.type.state`, `period`, `displayClock`; `gameRemain`
 turns period + clock into the fraction of the game left, halftime = 0.5, OT ≈ 0.05), and

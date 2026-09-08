@@ -1297,6 +1297,12 @@ nav.tabs button{position:relative}
   background:transparent;border:1px solid var(--line-strong);color:var(--chalk-dim);
   white-space:nowrap;vertical-align:middle;margin-left:5px}
 .byetag.now{border-color:var(--charge);color:var(--charge);font-weight:800}
+/* when he plays, on the line under his name: the clock in turf while the game runs, faded once it is final;
+   on a phone it takes a line of its own, without the separator */
+.pgame{white-space:nowrap}
+.pgame.live{color:var(--turf);font-weight:700}
+.pgame.final{opacity:.8}
+@media(max-width:560px){ .pgame{display:block} .pgame .pgame-sep{display:none} }
 /* the bare number in the Players table's Bye column */
 .byenum{display:inline-block;min-width:22px;font-family:var(--f-mono);color:var(--chalk-dim)}
 .byenum.now{color:var(--charge);font-weight:800}
@@ -15055,7 +15061,9 @@ function slateActive(){
 }
 const kickoffLabel = t => new Date(t).toLocaleString([], { weekday:'short', hour:'numeric', minute:'2-digit' });
 async function loadKickoffs(force){
-  const wk = currentNflWeek();
+  /* all preseason it is week 1's slate: the roster rows say when everybody plays, and nothing
+     locks off it until currentNflWeek() itself says the week is on (see playerKickoff) */
+  const wk = currentNflWeek() || projWeekNow();
   if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, games: {}, at: Date.now() }; return; }
   const ttl = slateActive() ? 3*60000 : 6*3600000;
   if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < ttl) return;
@@ -15072,14 +15080,20 @@ async function loadKickoffs(force){
       const period = +st.period||0, clock = String(st.displayClock||'');
       const remain = state==='post' ? 0 : state==='pre' ? 1 : gameRemain(period, clock);
       const label = state==='post' ? 'Final' : state==='in' ? ((period>4?'OT':'Q'+period) + (clock?' '+clock:'')) : kickoffLabel(t);
-      (comp.competitors||[]).forEach(c=>{
-        const ab = String((c.team||{}).abbreviation||'').toUpperCase();
-        if(!ab) return;
-        const code = ESPN_TEAM_FIX[ab]||ab;
-        map[code] = t; games[code] = { kick:t, state, remain, label };
+      const cs = comp.competitors||[];
+      const codeOf = c => { const ab = String((c.team||{}).abbreviation||'').toUpperCase(); return ab ? (ESPN_TEAM_FIX[ab]||ab) : ''; };
+      cs.forEach((c,i)=>{
+        const code = codeOf(c); if(!code) return;
+        const other = cs.find((o,k)=>k!==i);
+        map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home' };
       });
     });
-    if(Object.keys(map).length) NFL_KICKS = { wk, map, games, at: Date.now() };
+    if(Object.keys(map).length){
+      const before = JSON.stringify(NFL_KICKS.games||{});
+      NFL_KICKS = { wk, map, games, at: Date.now() };
+      /* the My Team rows carry the slate, so a slate that moved redraws them - and only then */
+      if(before !== JSON.stringify(games) && window.currentView==='teams'){ try{ renderTeams(); }catch(e){} }
+    }
   }catch(e){}
 }
 /* ===================== LIVE WIN PROBABILITY =====================
@@ -15092,6 +15106,17 @@ async function loadKickoffs(force){
    starters still to kick off is a coin flip with a lean. When nothing is left to play the
    odds are the result. Needs this week's scoreboard (NFL_KICKS.games) - without it, nothing. */
 function gameOf(nfl){ const g = NFL_KICKS.games; return (g && g[String(nfl||'').toUpperCase()]) || null; }
+/* the day and time a player plays, then his game's clock, for the roster rows: "Sun 1:00 PM vs KC"
+   before kickoff, "LIVE Q2 5:12 vs KC" while it runs, "Final vs KC" after. Off NFL_KICKS, so a
+   week with no scoreboard yet says nothing rather than guessing; a bye says nothing here because
+   the BYE chip beside the name already does. */
+function gameLineHTML(nfl){
+  const g = gameOf(nfl); if(!g || !g.label) return '';
+  const opp = g.opp ? ` ${g.home ? 'vs' : '@'} ${esc(g.opp)}` : '';
+  const cls = g.state==='in' ? ' live' : g.state==='post' ? ' final' : '';
+  const title = g.state==='in' ? 'His game is under way' : g.state==='post' ? 'His game is over' : 'Kicks off ' + kickoffLabel(g.kick);
+  return `<span class="pgame${cls}" title="${esc(title)}"><span class="pgame-sep"> \u00B7 </span>${g.state==='in' ? 'LIVE ' : ''}${esc(g.label)}${opp}</span>`;
+}
 function liveSide(ti, stats, wk){
   const r1 = n => Math.round(n*10)/10;
   let scored = 0, exp = 0, rem = 0, proj = 0, left = 0, playing = 0, done = 0;
@@ -16350,7 +16375,7 @@ function renderMyTeam(){
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}${gameLineHTML(p.nfl)}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
