@@ -1259,6 +1259,13 @@ nav.tabs button{position:relative}
 .mt-block{width:104px;text-align:center;white-space:nowrap}
 .mt-bye .byetag{margin-left:0}
 .mt-block .blockchip{margin-left:0;min-width:92px}
+/* this week's projection, right-aligned in the mono face so a column of them reads straight;
+   a phone drops the column and prints it on the position line instead */
+.mt-proj{width:58px;text-align:right;white-space:nowrap;vertical-align:middle}
+.mt-proj b{display:block;font-family:var(--f-mono);font-size:14px;line-height:1.1}
+.mt-proj small{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
+.mt-projinline{display:none}
+.mt-projinline b{color:var(--chalk)}
 .mt-chips{display:none}
 /* A phone cannot afford the columns: the card is ~310px wide and the five fixed cells alone come
    to 354, which squeezed the player's NAME to zero and put the whole table on a sideways scroll.
@@ -1268,7 +1275,8 @@ nav.tabs button{position:relative}
    the trade builder's full/short names; CSS picks one. */
 .blockchip .bc-s{display:none}
 @media(max-width:560px){
-  .mt-bye,.mt-block{display:none}
+  .mt-bye,.mt-block,.mt-proj{display:none}
+  .mt-projinline{display:inline}
   .mt-chips{display:flex;align-items:center;gap:5px;margin-top:4px}
   /* a fixed width, not a min: BYE 14 is a character wider than BYE 9, and the block chips
      behind them inherited the wobble */
@@ -16379,7 +16387,8 @@ function renderMyTeam(){
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}${gameLineHTML(p.nfl)}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}<span class="mt-projinline"> \u00B7 <b>${projWkTxt(p)}</b> proj</span>${gameLineHTML(p.nfl)}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
+      <td class="mt-proj" title="Projected this week under this league's rules"><b>${projWkTxt(p)}</b><small>proj</small></td>
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
@@ -16396,10 +16405,10 @@ function renderMyTeam(){
        nothing on a roster with a hole in it and the ones below would step out of line */
     if(s2==='IR') return `<tr><td style="width:56px">${slotTag(s2)}</td>
       <td style="color:var(--chalk-dim)">Empty<div style="font-size:11px">Move a player here from your roster once they are listed out</div></td>
-      <td class="mt-bye"></td><td class="mt-block"></td>
+      <td class="mt-proj"></td><td class="mt-bye"></td><td class="mt-block"></td>
       <td></td><td style="width:58px"></td></tr>`;
     return `<tr><td style="width:56px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td>
-      <td class="mt-bye"></td><td class="mt-block"></td><td></td>
+      <td class="mt-proj"></td><td class="mt-bye"></td><td class="mt-block"></td><td></td>
       <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn" style="padding:2px 9px;font-size:12px" title="Find a player for this slot" onclick="addFromSlot('${s2}')">Add</button>`:''}</td></tr>`;
   };
   order.forEach(s2=>{
