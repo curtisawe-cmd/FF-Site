@@ -1229,6 +1229,10 @@ nav.tabs button{position:relative}
 .teamcard .tnamesel{flex:1 1 150px;min-width:120px}
 .divtag{display:inline-block;vertical-align:middle;font-family:var(--f-ui);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--turf);background:var(--turf-wash);border:1px solid var(--turf);border-radius:20px;padding:1px 9px;margin-left:6px}
 .team-card .team-head .sub{margin:0}
+/* this week's projection on every rival's row, the same column My Team carries */
+.at-proj{width:52px;text-align:right;white-space:nowrap;vertical-align:middle}
+.at-proj b{display:block;font-family:var(--f-mono);font-size:13px;line-height:1.1}
+.at-proj small{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
 .statpill{
   display:inline-flex;align-items:center;justify-content:center;min-width:46px;padding:2px 11px;
   border-radius:999px;font-family:var(--f-mono);font-weight:700;font-size:14px;
@@ -16470,14 +16474,14 @@ function renderTeams(){
     const head = `<div class="team-head">${teamMarkHTML(t,88)}<div style="min-width:0"><h2 style="margin:0">${esc(t.name)}${(+S.divisions>0)?` <span class="divtag">Div ${+t.div||1}</span>`:''}</h2>${t.manager?`<p class="sub" style="margin:2px 0 0">${esc(t.manager)}</p>`:'<p class="sub" style="margin:2px 0 0;font-style:italic">Unassigned</p>'}</div></div>`+champBannersHTML(liveMgrOf(t));
     if(!picks.length) return `<div class="card team-card">${head}<p style="color:var(--chalk-dim)">No players yet — roster fills in during the draft.</p></div>`;
     const lu = ensureLineup(i);
-    const row = (p, label) => `<tr><td style="width:44px">${slotTag(label, p.pos)}</td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`;
+    const row = (p, label) => `<tr><td style="width:44px">${slotTag(label, p.pos)}</td><td><span class="pcell">${playerFace(p,28)}<span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}</span></td><td class="at-proj" title="Projected this week under this league's rules"><b>${projWkTxt(p)}</b><small>proj</small></td><td style="text-align:right;color:var(--chalk-dim)">${p.nfl||''}</td></tr>`;
     const starters = [];
     const consumed = new Set();
     ['QB','RB','WR','TE','FLEX','K','DEF'].forEach(s2=>{
       for(let k=0;k<(+S.roster[s2]||0);k++){
         const p = picks.find(x=>lu[x.playerId]===s2 && !consumed.has(x.playerId));
         if(p){ consumed.add(p.playerId); starters.push(row(p, s2)); }
-        else starters.push(`<tr><td style="width:44px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td></tr>`);
+        else starters.push(`<tr><td style="width:44px">${slotTag(s2)}</td><td style="color:var(--chalk-dim)">Empty</td><td></td><td></td></tr>`);
       }
     });
     const bench = picks.filter(p=>lu[p.playerId]==='BN').map(p=>row(p, p.pos));
