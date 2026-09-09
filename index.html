@@ -17062,6 +17062,19 @@ function setScoreRelay(on){
 }
 /* Ask the relay to do a run right now and report what it found. The whole chain is invisible
    until it either works or does not, and finding that out on a Sunday is too late. */
+/* The relay's own words for "nothing to do", made honest for the day before the opener: the
+   snapshot's week is 0 until currentNflWeek() flips at kickoff, so every watcher that needs a
+   live week says "no live week" - which read as a fault the evening before week 1. It is not:
+   the lineup check runs before kickoff, the rest start the moment a game does. */
+function relaySkipText(j){
+  const why = String((j && j.skipped) || '');
+  const preseason = (typeof currentNflWeek==='function' && typeof projWeekNow==='function') && !currentNflWeek() && projWeekNow()>=1;
+  if(why==='no live week' && preseason){
+    let when = ''; try{ when = ' (' + kickoffShort() + ')'; }catch(e){}
+    return 'Nothing to do yet - the season is not live until the opener' + when + '. The score, swing and bench watches start the moment a game does; lineup alerts are the ones that run before kickoff.';
+  }
+  return 'Relay ran, nothing to do: ' + why;
+}
 async function testRelayWatch(){
   if(!pushRelay()){ toast('Set the relay URL first.'); return; }
   toast('Asking the relay to run…');
@@ -17071,7 +17084,7 @@ async function testRelayWatch(){
     const txt = await r.text();
     let j={}; try{ j=JSON.parse(txt); }catch(e){}
     if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
-    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped); return; }
+    if(j.skipped){ toast(relaySkipText(j)); return; }
     if(j.baseline){ toast(`Baseline set for ${j.players} players — the next run is the live one`); return; }
     toast(j.sent ? `Relay sent ${j.sent} notification${j.sent>1?'s':''}` : 'Relay ran — nobody has scored since the last look');
   }catch(e){ toast('Could not reach the relay.'); }
@@ -17102,7 +17115,7 @@ async function testBenchWatch(){
     const txt = await r.text();
     let j={}; try{ j=JSON.parse(txt); }catch(e){}
     if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
-    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped+(j.to?' (to '+j.to+')':'')); return; }
+    if(j.skipped){ toast(relaySkipText(j)+(j.to?' (to '+j.to+')':'')); return; }
     if(j.note){ toast(`Relay checked: ${j.note}${j.worst?` — worst was ${j.worst.name} at ${(+j.worst.left).toFixed(1)}`:''}`); return; }
     toast(`Relay ${j.sent?'sent the bench crime to':'found'} ${j.worst.name}: ${(+j.worst.left).toFixed(1)} left on the bench`);
   }catch(e){ toast('Could not reach the relay.'); }
@@ -17121,7 +17134,7 @@ async function testSwingWatch(){
     const txt = await r.text();
     let j={}; try{ j=JSON.parse(txt); }catch(e){}
     if(!r.ok){ toast('Relay said '+r.status+' — '+txt.slice(0,80)); return; }
-    if(j.skipped){ toast('Relay ran, nothing to do: '+j.skipped); return; }
+    if(j.skipped){ toast(relaySkipText(j)); return; }
     const odds = (j.matchups||[]).map(m=>`${m.a} ${m.pA}% v ${m.b}`).join(' · ');
     toast(`Relay sent ${j.sent||0} swing alert${j.sent===1?'':'s'}${odds?' — '+odds.slice(0,150):''}`);
   }catch(e){ toast('Could not reach the relay.'); }
