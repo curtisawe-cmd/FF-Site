@@ -539,6 +539,18 @@ for me this week?**
   `#wvView` so `#pickView` shares them). Re-rendered by `setPlTab('pick')`, the one-minute
   pulse, `maybeRefreshWeekProj` and the projections-arrived callback in `showView('players')`.
 
+## Waivers: the game lock
+
+`waiverWire()` is the one list every waiver question reads (`onWaivers`, `wireEntry`, the Add/Claim
+buttons, `addPlayer`/`addWithDrop` guards, `claimWaiver` and settlement). Besides dropped players it now
+holds **every free agent whose NFL game this week has kicked off** (`gameLockFor(p)`: `NFL_KICKS`
+must be this week's slate, kickoff behind us, and now before `weekClearAt(wk)` = `weekOverAt(wk)` + 24h,
+i.e. Wednesday 4am local). Such an entry has `from:null, lock:true`; a dropped player whose game has
+started keeps the later `until`. Claims on locked players settle at that clear time through the
+existing `maybeProcessWaivers`. The On waivers card lists dropped players only and states the count
+of locked free agents (`data-note="wv-gamelock"`). Fails open like the lineup lock: no scoreboard,
+no lock; and `currentNflWeek()` is 0 in the playoffs, so nothing locks in weeks 15-17.
+
 ## Trades
 
 Offers live at `league/main/tradeOffers`, votes at `league/main/tradeVetoes` - separate

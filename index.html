@@ -15808,7 +15808,33 @@ function waiverWire(){
     if(!prev || at>prev.at)                                   /* dropped twice: the later drop rules */
       byPid.set(pid,{pid, at, until, from:x.teamIndex, name:x.player||'', pos:x.pos||'', nfl:x.nfl||''});
   });
+  /* THE GAME LOCK. A free agent whose NFL game this week has kicked off is on waivers too, until
+     the wire clears on Wednesday morning - otherwise a breakout player could be scooped off the
+     wire with his game already on the board, and the manager with the worse record who should
+     have had first call on him never got one. Same list, same claim, same settlement as a
+     dropped player; a dropped player whose game has started keeps the later of the two clears. */
+  POOL.forEach(p=>{
+    if(!p || !p.team || p.team==='FA') return;
+    const pid=String(p.id); if(rostered.has(pid)) return;
+    const g=gameLockFor(p); if(!g) return;
+    const prev=byPid.get(pid);
+    if(prev){ if(g.until>prev.until) prev.until=g.until; prev.lock=true; }
+    else byPid.set(pid,{pid, at:g.at, until:g.until, from:null, lock:true, name:p.name||'', pos:p.pos||'', nfl:p.team||''});
+  });
   return [...byPid.values()].sort((a,b)=>a.until-b.until);
+}
+/* Wednesday 4am local, the morning after the week rolls over (weekOverAt is Tuesday 4am): when
+   the weekly wire clears and a locked free agent can be added outright again */
+function weekClearAt(wk){ return weekOverAt(wk) + 24*3600000; }
+/* the lock on one free agent: his team's kickoff this week is behind us and the clear is ahead.
+   Off the same slate the lineup locks read (NFL_KICKS, this week's only), so with no scoreboard
+   nothing locks - fails open, like the lineup lock, for the same reason. */
+function gameLockFor(p){
+  const wk=(typeof currentNflWeek==='function') ? currentNflWeek() : 0;
+  if(!wk || !NFL_KICKS || NFL_KICKS.wk!==wk) return null;
+  const tm=String((p && (p.team||p.nfl))||'').toUpperCase(); if(!tm) return null;
+  const k=NFL_KICKS.map[tm], now=Date.now(), until=weekClearAt(wk);
+  return (Number.isFinite(k) && now>=k && now<until) ? { at:k, until } : null;
 }
 /* Player lists ask "is he on waivers?" once per row, hundreds of times per render, so the
    derived wire is memoised for a beat. Anything that changes it busts the cache by hand. */
@@ -16152,7 +16178,10 @@ function renderWaivers(){
   const el=document.getElementById('wvView'); if(!el) return;
   /* the interval calls this every tick; skip the work when nobody is looking at it */
   if(el.style.display==='none') return;
-  const mine=addTargetTeam(), order=waiverOrder(), wire=waiverWireCached().list, all=claimList();
+  const mine=addTargetTeam(), order=waiverOrder(), wireAll=waiverWireCached().list, all=claimList();
+  /* the card lists the dropped players; the game-locked free agents are a count and a sentence,
+     because on a Sunday night that is most of the pool */
+  const wire=wireAll.filter(w=>w.from!=null), lockedFA=wireAll.filter(w=>w.from==null);
 
   if(!waiversOn()){
     el.innerHTML=`<div class="card"><h2>Waivers</h2>
@@ -16259,7 +16288,7 @@ function renderWaivers(){
      the priority list and the how-it-works notes */
   el.innerHTML = `
     ${blockedHTML}
-    <div class="card"><h2>On waivers</h2>${wireHTML}</div>
+    <div class="card"><h2>On waivers</h2>${wireHTML}${lockedFA.length ? `<p class="sub" data-note="wv-gamelock" style="margin:10px 0 0">${lockedFA.length} free agent${lockedFA.length===1?'':'s'} whose game has kicked off ${lockedFA.length===1?'is':'are'} on waivers too - claim them from the Players tab. They clear Wednesday 4:00 AM (${esc(waiverClearLabel(lockedFA[0].until))}).</p>` : ''}</div>
     ${mineHTML}
     ${budgetHTML}
     <div class="card">
