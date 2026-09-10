@@ -15522,6 +15522,16 @@ function lockGuard(pid, what){
   toast(`${nm} is locked — his game has started. Lineups unlock next week.`);
   return false;
 }
+/* Dropping is not moving. A bench player whose game has already been played is scoring for
+   nobody, so letting him go costs the week nothing and frees the spot for a claim - the lock
+   exists to stop a dud being benched after the fact, not to hold a spare hostage. A locked
+   STARTER stays put: his points are on the board and dropping him would leave a hole nobody
+   can fill until next week. IR sits with the bench here. */
+function dropLockGuard(ti, pid, what){
+  const slot = ((S.lineups||{})[ti]||{})[pid];
+  if(slot==='BN' || slot==='IR') return true;
+  return lockGuard(pid, what);
+}
 function setSlot(ti, pid, slot){
   if(!requireTeam(ti)){ renderTeams(); return; }
   if(!lockGuard(pid, 'move him')){ renderTeams(); return; }
@@ -15619,7 +15629,7 @@ function cutPick(ti, pid, d){
 function dropPlayer(ti, pid){
   if(!requireTeam(ti)) return;
   if(!keeperGuard(ti, pid)) return;
-  if(!lockGuard(pid, 'drop him')) return;
+  if(!dropLockGuard(ti, pid, 'drop him')) return;
   const d = realDraft();
   const p = d.picks.find(x=>x.teamIndex===ti && x.playerId===pid && !x.cut);
   if(!p) return;
@@ -15684,7 +15694,7 @@ function addWithDrop(ti, pid){
 function swapPlayer(ti, dropPid, addPid){
   if(!requireTeam(ti)) return;
   if(!keeperGuard(ti, dropPid)) return;
-  if(!lockGuard(dropPid, 'drop him')) return;
+  if(!dropLockGuard(ti, dropPid, 'drop him')) return;
   const d = realDraft();
   const dropped = cutPick(ti, dropPid, d);
   /* no drop, no add. The add went through regardless, so a refused drop - or one somebody else
@@ -16436,6 +16446,8 @@ function renderMyTeam(){
        the commissioner keeps live ones because lockGuard asks instead of refusing. */
     const locked = playerLocked(p.playerId);
     const dead = locked && !isAdmin();
+    /* a locked bench or IR player can still be dropped (dropLockGuard) - only a locked starter cannot */
+    const deadDrop = dead && slotLabel!=='BN' && slotLabel!=='IR';
     const keep = keeperOnRoster(mi, p.playerId, realDraft());
     const lockChip = locked ? ` <span class="inj q" title="His game has started \u2014 locked until next week">\uD83D\uDD12</span>` : '';
     /* every player carries his bye week, so you can see a stack of them coming; the one that is
@@ -16447,7 +16459,7 @@ function renderMyTeam(){
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
       <td style="text-align:right"><select style="width:84px"${dead?' disabled title="Locked \u2014 his game has started"':(canIR?'':' title="IR is only for players designated Out, IR, PUP, Suspended, NA, DNR or COV"')} onchange="slotChange(${mi}, '${p.playerId}', this.value)">${optHtml}</select></td>
-      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${(dead||keep)?' disabled':''} title="${dead?'Locked \u2014 his game has started':(keep?'Keeper \u2014 he stays on this roster. Bench or IR him instead.':'Drop to free agents')}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
+      <td style="text-align:right;width:58px">${canEditTeam(mi)?`<button class="btn danger" style="padding:2px 9px;font-size:12px"${(deadDrop||keep)?' disabled':''} title="${deadDrop?'Locked \u2014 his game has started':(keep?'Keeper \u2014 he stays on this roster. Bench or IR him instead.':'Drop to free agents')}" onclick="dropPlayer(${mi}, '${p.playerId}')">Drop</button>`:''}</td></tr>`;
   };
   /* every unfilled slot renders as an Empty row with an Add button that jumps to the
      Players tab, pre-filtered to the position the hole is for — except IR, see below */
