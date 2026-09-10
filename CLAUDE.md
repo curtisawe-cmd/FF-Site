@@ -374,9 +374,9 @@ own TTLs, so the minute beat is free between games.
 `playoffOdds()` is a Monte Carlo of the rest of the regular season plus the bracket
 (`PO_SIMS` = 4000, weekly spread `PO_SD` = 21). Settled games (score on the board and
 `weekIsOver` or official) go in as fixed; every other game is two Gaussian draws around each
-side's projection for that week - the current week from the live post's expected finals with
-the spread shrunk to each side's share still to come (`liveScoresMap[wk].live.g{m}`, fresh
-within 30 min) or `projectedTotal` (the lineup as set), later weeks from `optimalLineupOf` over
+side's projection for that week - the current week from the lineups as set, with the full spread,
+because a week counts for nothing until it is over (`resultScore` rule; the live win bar on the
+board is where the live picture lives) - and the weeks after from `optimalLineupOf` over
 the roster with `tradeWeekPts` (weekly file, else season average, byes zero). Seeding is the
 standings sort (wins, then points for); `poSpots()` make it; byes fill to the next power of
 two; the bracket is `seedPairs`, playoff games drawn off each roster's average strength over

@@ -12289,14 +12289,11 @@ function playoffOdds(){
       }
       let ea, eb, sa = PO_SD, sb = PO_SD;
       if(w === now){
-        /* the week being played: the live post's expected finals when it has them, with the
-           spread shrunk to the share of each side still to come; else the lineups as set */
-        const lv = liveScoresMap && liveScoresMap[w] && liveScoresMap[w].live && liveScoresMap[w].live['g'+m];
-        if(lv && lv.ea!=null && lv.eb!=null && Date.now()-liveStamp(w) < 30*60000){
-          ea = +lv.ea; eb = +lv.eb;
-          const share = (e, s) => Math.max(0, e - (s||0)) / Math.max(1, e);
-          sa = Math.max(1.5, PO_SD * Math.sqrt(share(ea, pa))); sb = Math.max(1.5, PO_SD * Math.sqrt(share(eb, pb)));
-        } else { ea = Math.max(pa||0, projectedTotal(g[0], w)); eb = Math.max(pb||0, projectedTotal(g[1], w)); }
+        /* the week being played counts for nothing until it is over (Tuesday 4am), the same rule
+           the standings keep: the lineups as they are set, the full spread, no live score and no
+           live expected final - so the odds do not swing on a Thursday night and settle with the
+           week, not during it. The live win probability on the board is where the live picture lives. */
+        ea = projectedTotal(g[0], w); eb = projectedTotal(g[1], w);
       } else { ea = strength(g[0], w); eb = strength(g[1], w); }
       remaining.push({ w, m, a:g[0], b:g[1], ea, eb, sa, sb });
     });
@@ -12367,7 +12364,7 @@ function playoffOddsHTML(){
       <h2 style="margin:0">Playoff odds</h2>
       <span class="sub" style="margin:0">${O.sims.toLocaleString()} seasons from here${O.left?` · ${O.left} game${O.left===1?'':'s'} still to play`:' · regular season complete'}</span>
     </div>
-    <p class="sub" data-note="po-odds" style="margin:4px 0 10px">The rest of the schedule, played out ${O.sims.toLocaleString()} times: this week from the lineups and live scores as they stand, the weeks after from the best lineup each roster can field off its projections, byes included. Top ${O.spots} make it, seeded on wins then points for; the bracket is played out too for the title. Same numbers on every phone, and they move when a score, a lineup or a projection does.</p>
+    <p class="sub" data-note="po-odds" style="margin:4px 0 10px">The rest of the schedule, played out ${O.sims.toLocaleString()} times: this week from the lineups as set (a week counts only once it is over, like the standings), the weeks after from the best lineup each roster can field off its projections, byes included. Top ${O.spots} make it, seeded on wins then points for; the bracket is played out too for the title. Same numbers on every phone, and they move when a score, a lineup or a projection does.</p>
     <div class="od-head"><span></span><span>Playoffs</span>${showBye?'<span>Bye</span>':''}<span>Title</span>${showSwing?'<span>This week</span>':''}</div>
     ${rows}
   </div>`;
