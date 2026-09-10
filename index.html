@@ -16202,11 +16202,11 @@ function renderWaivers(){
     wire and the priority order below are correct, but pressing Claim will not store anything.
     The rules to paste are in <code>push/firebase-rules.json</code> in the repo.</div>`;
 
-  const wireHTML = !wire.length
-    ? `<p class="sub" data-note="wv-empty" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for {waitTime} before anyone can just pick them up.</p>`
-    : wire.map(w=>{
+  /* one row for a dropped player and for a game-locked free agent alike: the same face, the
+     same clear pill, the same Claim - only the reason he is here differs */
+  const wireRow = w=>{
         const claims=pendingClaimsFor(w.pid), mineIn=mine===null?null:claims.find(c=>c.team===mine);
-        const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : 'dropped';
+        const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : (w.lock ? 'game started' : 'dropped');
         return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
           <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${byeTagHTML(w.pid, w.nfl)}</span>
@@ -16216,7 +16216,21 @@ function renderWaivers(){
             ? `<button class="btn ghost" style="padding:3px 11px;font-size:13px" onclick="cancelClaim('${mineIn.id}')">Withdraw</button>`
             : `<button class="pick" onclick="claimWaiver('${w.pid}')">Claim</button>`}
         </div>${claimantsHTML(w.pid)}</div>`;
-      }).join('');
+      };
+  const wireHTML = !wire.length
+    ? `<p class="sub" data-note="wv-empty" style="margin:6px 0 0">Nobody is on waivers. Dropped players land here for {waitTime} before anyone can just pick them up.</p>`
+    : wire.map(wireRow).join('');
+  /* the game lock: most projected first, because that is who anyone is here for; forty at a
+     time, since a Sunday night locks most of the pool */
+  const lockedSorted = lockedFA.slice().sort((a,b)=>((projWkPts(b)??-1)-(projWkPts(a)??-1)) || String(a.name).localeCompare(String(b.name)));
+  const lockedShown = window.wvAllLocked ? lockedSorted : lockedSorted.slice(0,40);
+  const lockedHTML = !lockedFA.length ? '' : `<div class="card"><h2>Game started \u00B7 on waivers</h2>
+    <p class="sub" data-note="wv-gamelock-list" style="margin:0 0 8px">Free agents whose game has kicked off this week. They can be claimed but not added until the wire clears Wednesday 4:00 AM - ${esc(waiverClearLabel(lockedSorted[0].until))} from now.</p>
+    ${lockedShown.map(wireRow).join('')}
+    ${lockedSorted.length > lockedShown.length
+      ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=true;renderWaivers()">Show all ${lockedSorted.length}</button>`
+      : (window.wvAllLocked && lockedSorted.length > 40 ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=false;renderWaivers()">Show fewer</button>` : '')}
+  </div>`;
 
   const mineClaims = myPendingClaims();
   /* One claim has no order to set, so the ranking only appears once there is a choice to make */
@@ -16288,7 +16302,8 @@ function renderWaivers(){
      the priority list and the how-it-works notes */
   el.innerHTML = `
     ${blockedHTML}
-    <div class="card"><h2>On waivers</h2>${wireHTML}${lockedFA.length ? `<p class="sub" data-note="wv-gamelock" style="margin:10px 0 0">${lockedFA.length} free agent${lockedFA.length===1?'':'s'} whose game has kicked off ${lockedFA.length===1?'is':'are'} on waivers too - claim them from the Players tab. They clear Wednesday 4:00 AM (${esc(waiverClearLabel(lockedFA[0].until))}).</p>` : ''}</div>
+    <div class="card"><h2>On waivers</h2>${wireHTML}</div>
+    ${lockedHTML}
     ${mineHTML}
     ${budgetHTML}
     <div class="card">
