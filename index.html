@@ -8420,11 +8420,11 @@ async function renderHomeShame(){
   const hide = ()=>{ el.style.display='none'; el.innerHTML=''; };
   try{
     if(!(S.season && S.season.schedule)) return hide();
-    let wk = 0; for(let w=REG_WEEKS; w>=1; w--){ if(weekHasScores(w)){ wk=w; break; } }
+    let wk = 0; for(let w=REG_WEEKS; w>=1; w--){ if(weekHasResults(w)){ wk=w; break; } }
     if(!wk) return hide();
     const rows = [];
     (S.season.schedule[wk]||[]).forEach((g,m)=>{
-      const [pa,pb] = mScore(wk,m);
+      const [pa,pb] = resultScore(wk,m);
       if(pa!=null && pb!=null){
         rows.push({ti:g[0], pts:pa, win:pa>pb, tie:pa===pb});
         rows.push({ti:g[1], pts:pb, win:pb>pa, tie:pa===pb});
@@ -10233,7 +10233,7 @@ function h2hAll(from, to){
     const mgrOfIdx = i => String(((S.teams||[])[i]||{}).manager || '').trim() || null;
     Object.keys(S.season.schedule).map(Number).filter(Number.isFinite).sort((a,b)=>a-b).forEach(wk=>{
       (S.season.schedule[wk]||[]).forEach((g,m)=>{
-        const [pa,pb] = mScore(String(wk),m);
+        const [pa,pb] = resultScore(String(wk),m);
         pair(mgrOfIdx(g[0]), mgrOfIdx(g[1]), num(pa), num(pb), liveYear, wk, null);
       });
     });
@@ -11046,6 +11046,19 @@ function liveScoreOf(wk,m){
   const v = w[m]; return (Array.isArray(v) && (v[0]!=null || v[1]!=null)) ? v : null;
 }
 function mScore(wk,m){ return officialScore(wk,m) || liveScoreOf(wk,m) || [null,null]; }
+/* A score that COUNTS: an official one, or a live one from a week that is over (Tuesday 4am).
+   A live score from the week being played is a scoreboard, not a result - the standings,
+   all-play, the rivalries, the shame report, the Toilet Bowl and the team schedule all read
+   this, so nobody is 1-0 on a Thursday night. The board, the ticker and Game Center keep
+   reading mScore, because a live score is exactly what they are for. */
+function resultScore(wk,m){
+  const o = officialScore(wk,m); if(o) return o;
+  return weekIsOver(wk) ? (liveScoreOf(wk,m) || [null,null]) : [null,null];
+}
+function weekHasResults(w){
+  const games = (S.season && S.season.schedule && S.season.schedule[w]) || [];
+  return games.some((g,m)=>{ const [a,b] = resultScore(String(w), m); return a!=null && b!=null; });
+}
 function isLiveScore(wk,m){ return !officialScore(wk,m) && !!liveScoreOf(wk,m); }
 function liveStamp(wk){ const w=liveScoresMap&&liveScoresMap[wk]; return w? (+w.at||0) : 0; }
 /* =====================================================
@@ -12397,7 +12410,7 @@ function seasonStandings(){
   const mark = (a, b, k) => { (h2h[a] = h2h[a] || {}); (h2h[a][b] = h2h[a][b] || {w:0,l:0}); h2h[a][b][k]++; };
   Object.entries(S.season.schedule).forEach(([wk,games])=>{
     games.forEach((g,m)=>{
-      const [pa,pb] = mScore(wk,m);
+      const [pa,pb] = resultScore(wk,m);
       if(pa===null||pb===null) return;
       const A=rows[g[0]], B=rows[g[1]];
       if(!A||!B) return;
@@ -12443,7 +12456,7 @@ function allPlayRows(){
   Object.entries(sched).forEach(([wk, games])=>{
     const pts = {};
     (games||[]).forEach((g,m)=>{
-      const [pa,pb] = mScore(wk,m);
+      const [pa,pb] = resultScore(wk,m);
       if(pa!=null && rows[g[0]]) pts[g[0]] = pa;
       if(pb!=null && rows[g[1]]) pts[g[1]] = pb;
     });
@@ -12558,10 +12571,10 @@ const signed1 = n => (n>0?'+':n<0?'−':'') + Math.abs(n).toFixed(1);
 function toiletBowlTeam(){
   if(!(S.season && S.season.schedule)) return null;
   for(let wk=REG_WEEKS; wk>=1; wk--){
-    if(!weekHasScores(wk)) continue;
+    if(!weekHasResults(wk)) continue;
     let worst=null;
     (S.season.schedule[wk]||[]).forEach((g,m)=>{
-      const [pa,pb]=mScore(wk,m);
+      const [pa,pb]=resultScore(wk,m);
       if(pa!=null && (!worst || pa<worst.pts)) worst={ti:g[0], pts:pa, wk};
       if(pb!=null && (!worst || pb<worst.pts)) worst={ti:g[1], pts:pb, wk};
     });
@@ -13493,7 +13506,7 @@ function schedGame(ti, wk){
     const g=games[m]; if(!g) continue;
     const side = (+g[0]===+ti) ? 0 : ((+g[1]===+ti) ? 1 : -1);
     if(side<0) continue;
-    const sc=mScore(wk,m)||[null,null];
+    const sc=resultScore(wk,m)||[null,null];   /* a live week reads "in progress", not W or L */
     /* name the other side once rather than writing the flip twice - the second one came out as
        side?1:0, which is the SAME index as mine, and every game rendered as a tie with itself */
     const other = side===0 ? 1 : 0;

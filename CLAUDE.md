@@ -618,6 +618,12 @@ Thu-Mon from `NFL_2026_WEEK1 = Sep 10 2026`. Fantasy pairings are league-vs-leag
 round-robin (`genSchedule`); the NFL schedule only drives week structure and labels.
 Matchups auto-generate at boot if `!S.season`.
 
+**A live score is not a result.** `resultScore(wk,m)` is an official score, or a live one only once
+`weekIsOver(wk)` (Tuesday 4am); `weekHasResults(w)` likewise. `seasonStandings`, `allPlayRows`, `h2hAll`
+(live season), the shame report, the Toilet Bowl and the team schedule read those, so nobody is 1-0
+mid-week. `mScore` stays the live view for the board, ticker and Game Center; `playoffOdds` settles
+on the same rule inline.
+
 **Standings order** (`seasonStandings`): wins, then - when Settings > League rules has
 "Standings tiebreaker: Head-to-head record" - the record among the teams tied on wins, then
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
