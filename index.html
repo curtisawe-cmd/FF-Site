@@ -5412,7 +5412,6 @@ setInterval(()=>{
   /* the Sunday sweat keeps time with the clock: a minute is the beat, the fetches underneath
      have their own TTLs so this costs nothing between games */
   try{ if(window.currentView==='home') renderHomeSweat(); }catch(e){}
-  try{ if(window.currentView==='teams' && window.teamsSub==='my') renderSweatInto('myTeamSweat', myTeamIdx()); }catch(e){}
   /* Game Center pulls fresh stats itself (3-min TTL on the live week) */
   if(window.currentView==='matchups' && window.muTab==='gc') renderGameCenter();
 }catch(e){} }, 60000);
@@ -16598,7 +16597,6 @@ function renderMyTeam(){
     + Array(Math.max(0,(+S.roster.IR||0)-irFilled.length)).fill(emptyRow('IR')).join('');
   el.innerHTML = `
     ${commishBarHTML(own, asTi)}
-    <div id="myTeamSweat" style="display:none;max-width:760px"></div>
     <div class="card myteam-card${asTi!=null?' cm-on':''}" style="max-width:760px">
       ${(t.logo && !sel)?`<img class="myteam-hero" src="${t.logo}" alt="" aria-hidden="true">`:''}
       <div class="row" style="justify-content:space-between">
@@ -16623,7 +16621,6 @@ function renderMyTeam(){
       <div id="faList" style="margin-top:8px;max-height:360px;overflow-y:auto"></div>`:''}
     </div>`;
   if(canEditTeam(mi)) renderFreeAgents(mi);
-  try{ renderSweatInto('myTeamSweat', mi); }catch(e){}
 }
 function renderTeams(){
   const sub2 = window.teamsSub || (window.teamsSub = (myTeamIdx()!==null?'my':'all'));
