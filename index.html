@@ -16719,13 +16719,13 @@ function renderWaivers(){
       </dl>
     </div>`;
 
-  /* the wire first: who is on waivers is what the tab is opened for, and it was sitting under
-     the priority list and the how-it-works notes */
+  /* Trending first, then the wire: what the rest of fantasy football is grabbing is the question
+     this tab gets opened with, and the league's own wire reads better underneath it. */
   el.innerHTML = `
     ${blockedHTML}
+    ${trendingCardHTML()}
     <div class="card"><h2>On waivers</h2>${wireHTML}</div>
     ${lockedHTML}
-    ${trendingCardHTML()}
     ${mineHTML}
     ${budgetHTML}
     <div class="card">

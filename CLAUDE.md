@@ -520,7 +520,7 @@ quiet or unreachable feed no more than every 5 minutes, and discards a restored 
 
 `trendChipHTML(pid, addOnly)` is the chip beside a name - turf with an up arrow for adds, charge with a
 down arrow when the drops are heavier - on the waiver wire, the Pickups rows, the Players table and the
-free-agent list. `trendingCardHTML()` is the "Trending" card on the Waivers tab (also shown when waivers
+free-agent list. `trendingCardHTML()` is the "Trending" card at the top of the Waivers tab (also shown when waivers
 are off, since it lists free agents): the most-added players this league can have, minus anyone rostered
 and anyone already in the dropped-players card above it, eight at a time. Inside the card the chip is
 forced to the add count (`addOnly`) or a row would contradict the heading that put it there. `trendWarm()`
