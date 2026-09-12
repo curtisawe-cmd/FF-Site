@@ -15934,7 +15934,7 @@ function addPlayer(ti, pid){
     if(!confirm(`${w?w.name:'This player'} is on waivers for another ${waiverClearLabel(w&&w.until)}.\n\nAdd him anyway? This skips every claim already in on him.`)) return;
   }
   if(rosterCount(ti) >= rosterLimit()){ toast(`Roster is full (${rosterLimit()} max) — drop a player first.`); return; }
-  const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
+  const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid) || findPlayerMeta(pid);   /* the Players tab lists past the pool */
   if(!p){ toast("Player not found."); return; }
   const d = realDraft();
   d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
@@ -15951,7 +15951,7 @@ function addWithDrop(ti, pid){
   /* caught here too: this is the path both Add buttons use, and a full roster would otherwise
      open the drop-a-player modal before anything checked the wire */
   if(onWaivers(pid) && !isAdmin()){ const w=wireEntry(pid); toast(`${w?w.name:'He'} is on waivers — put a claim in.`); return; }
-  const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid);
+  const p = POOL.find(x=>x.id===pid) || POOL_MAP.get(pid) || findPlayerMeta(pid);   /* the Players tab lists past the pool */
   if(!p){ toast("Player not found."); return; }
   if(rosterCount(ti) < rosterLimit()){ addPlayer(ti, pid); return; }
   /* keepers are not on the table, so they are not in the list */
@@ -16106,7 +16106,10 @@ function waiverWire(){
      wire with his game already on the board, and the manager with the worse record who should
      have had first call on him never got one. Same list, same claim, same settlement as a
      dropped player; a dropped player whose game has started keeps the later of the two clears. */
-  POOL.forEach(p=>{
+  /* every player the Players tab can show, not just the pool: the pool stops at Sleeper's 600th
+     search rank, and a backup quarterback who mopped up on Wednesday night sits past it */
+  const extra = (typeof PLAYERS!=='undefined' && PLAYERS && PLAYERS.length) ? PLAYERS.filter(p=>p && !POOL_MAP.has(p.id)) : [];
+  POOL.concat(extra).forEach(p=>{
     if(!p || !p.team || p.team==='FA') return;
     const pid=String(p.id); if(rostered.has(pid)) return;
     const g=gameLockFor(p); if(!g) return;
