@@ -756,10 +756,10 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 
    The negative margins pull the background out to the card edges, so rows pass BENEATH the
    toolbar instead of through the gutters either side of it. */
-#plCard .pltools{position:sticky;top:var(--vhead-bottom,var(--hdr-h,72px));z-index:4;
+#plCard .pltools,#wkStatCard .pltools{position:sticky;top:var(--vhead-bottom,var(--hdr-h,72px));z-index:4;
   margin:0 -20px 10px;padding:4px 20px 9px;background:var(--panel);
   box-shadow:0 9px 10px -10px rgba(0,0,0,.55)}
-#plPosFilters{margin:0 0 8px}
+#plPosFilters,#wkStatPosBar{margin:0 0 8px}
 #plSearch{flex:1;min-width:180px;max-width:360px}
 .posfilters button{
   font-family:var(--f-ui);font-weight:600;font-size:13px;letter-spacing:.04em;
@@ -1345,6 +1345,20 @@ nav.tabs button{position:relative}
 .plplayers .inj{margin-left:0}
 .plplayers tr[onclick]{cursor:pointer}
 .plplayers tbody tr[onclick]:hover td,.plplayers tr[onclick]:hover td{background:var(--turf-wash)}
+/* the week stats toolbar: the density lives here, not inline, so the phone block below can tighten it */
+#wkStatCard .pltools .row{gap:10px;margin-bottom:10px}
+#wkStatCard .pltools .row > label{white-space:nowrap;color:var(--chalk-dim);font-size:14px}
+#wkStatQIn{flex:1 1 180px;min-width:140px}
+#wkStatStatus{font-size:13px;color:var(--chalk-dim);margin-top:6px}
+/* the week stats table: numbers never wrap, the stat line in words does, the name cell keeps its width */
+table.wkstats th,table.wkstats td{white-space:nowrap}
+table.wkstats .pcell{min-width:150px}
+table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-dim);font-size:12.5px}
+/* a phone: Pos, the name (which may wrap) and Pts fit the screen; the stat columns swipe */
+@media(max-width:640px){
+  table.wkstats .pcell{min-width:160px} table.wkstats .pcell > .pface{display:none} table.wkstats td:nth-child(2){white-space:normal}
+  #wkStatQIn{flex:1 1 100%;min-width:0} #wkStatWeekSel{flex:1 1 0;min-width:0}
+}
 /* player detail modal + career bar chart */
 /* Safe-area padding: without it the card slides under the notch or dynamic island and takes
    the close button with it. dvh, not vh, so the height accounts for the iOS toolbars. */
@@ -1825,22 +1839,22 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
   nav.tabs button{flex:0 0 auto;white-space:nowrap;font-size:18px;padding:8px 14px}
   main{padding:12px calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l))}
   .card{padding:16px 14px}
-  #plCard .pltools{margin:0 -14px 10px;padding:3px 14px 8px}   /* match the card padding it pulls out to */
+  #plCard .pltools,#wkStatCard .pltools{margin:0 -14px 10px;padding:3px 14px 8px}   /* match the card padding it pulls out to */
   /* every row of the pinned block costs list, so the toolbar is tighter on a phone */
-  #plCard .pltools .row{gap:6px;margin-bottom:6px}
+  #plCard .pltools .row,#wkStatCard .pltools .row{gap:6px;margin-bottom:6px}
   /* Search gets its own line so the two selects are readable instead of the 55px stubs they were
      squeezed into, and they share the next line with the tickbox. Every line of a PINNED bar is
      a line of players you cannot see, so it is two lines and no more. */
   #plSearch{flex:1 1 100%;min-width:0;max-width:none}
   #plCard #plTeam,#plCard #plSort{flex:1 1 0;min-width:0;font-size:12px;padding:5px 6px}
-  #plCard .pltools .row > label{flex:0 0 auto;font-size:12px}
+  #plCard .pltools .row > label,#wkStatCard .pltools .row > label{flex:0 0 auto;font-size:12px}
   /* All eight chips on one line and still worth a thumb: 34px is the same floor the free-agent
      list uses. min-height buys the height without widening them, which is what keeps them on one
      row - and one row of tappable chips beats two rows, or eight hidden behind a sideways swipe. */
-  #plPosFilters{margin:0 0 6px;gap:4px}
-  #plPosFilters button{padding:5px 9px;font-size:12px;min-height:34px;
+  #plPosFilters,#wkStatPosBar{margin:0 0 6px;gap:4px}
+  #plPosFilters button,#wkStatPosBar button{padding:5px 9px;font-size:12px;min-height:34px;
     display:inline-flex;align-items:center}
-  #plStatus{font-size:11px;line-height:1.3}
+  #plStatus,#wkStatStatus{font-size:11px;line-height:1.3}
   .hero{padding:30px 20px}
   h1{font-size:clamp(30px,9vw,40px)}
 }
@@ -2785,6 +2799,7 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
   <h1>Players</h1>
   <div class="row subnav">
     <button class="btn" data-k="pl-all" onclick="goSub('pl-all')">Players</button>
+    <button class="btn ghost" data-k="pl-week" onclick="goSub('pl-week')">Week stats</button>
     <button class="btn ghost" data-k="pl-wv" onclick="goSub('pl-wv')">Waivers</button>
     <button class="btn ghost" data-k="pl-pick" onclick="goSub('pl-pick')">Pickups</button>
     <button class="btn ghost" data-k="pl-inj" onclick="goSub('pl-inj')">Injuries</button>
@@ -2795,6 +2810,7 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
   <div id="newsView" style="display:none"></div>
   <div id="wvView" style="display:none"></div>
   <div id="pickView" style="display:none"></div>
+  <div id="wkView" style="display:none"></div>
   <div class="card" id="plCard">
     <!-- Search, filters and the count pin together as one block: filtering a 900-row list is
          useless if you have to scroll back to the top to do it. One sticky wrapper rather than
@@ -5399,6 +5415,7 @@ setInterval(()=>{
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   if(window.currentView==='players' && window.plTab==='pick') renderPickups();      /* waiver countdowns and fresh lines */
+  if(window.currentView==='players' && window.plTab==='week') wkStatTick();          /* the live week's file, once its three minutes are up */
   if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();   /* pending claim countdowns */
   if(typeof maybeExpirePolls==='function') maybeExpirePolls();     /* stamps closed once a poll timer runs out */
   try{ checkRecordAlerts(); }catch(e){}                             /* the record watch rides the same pulse */
@@ -5487,6 +5504,7 @@ async function loadPlayers(force){
   fetchEspnInjuries(true);                            /* pull fresh news alongside the feed */
   renderPlayers();
   if(window.plTab==='inj') renderInjuries();          /* keep the injury report in step with the feed */
+  if(window.plTab==='week') renderWeekStats();        /* the week stats name players off this feed */
 }
 function ensurePlayers(){ if(playersReady) renderPlayers(); else if(!playersLoading) loadPlayers(); }
 
@@ -5640,15 +5658,17 @@ function setPlTab(t){
   window.plTab = t;
   syncSubnav();
   const card=document.getElementById('plCard'), inj=document.getElementById('injView'), news=document.getElementById('newsView');
-  const wv=document.getElementById('wvView'), pick=document.getElementById('pickView');
+  const wv=document.getElementById('wvView'), pick=document.getElementById('pickView'), wkv=document.getElementById('wkView');
   if(card) card.style.display = t==='all' ? 'block':'none';
   if(inj)  inj.style.display  = t==='inj' ? 'block':'none';
   if(news) news.style.display = t==='news' ? 'block':'none';
   if(wv)   wv.style.display   = t==='wv'  ? 'block':'none';
   if(pick) pick.style.display = t==='pick' ? 'block':'none';
+  if(wkv)  wkv.style.display  = t==='week' ? 'block':'none';
   if(t==='wv'){ bustWire(); renderWaivers(); }
   if(t==='pick'){ bustWire(); renderPickups(); }
   if(t==='inj') renderInjuries();
+  if(t==='week') renderWeekStats();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
   updateGhost();
 }
@@ -5971,7 +5991,13 @@ function renderBreakdown(id){
     ? `Sleeper's ${PROJ_SEASON} projection × your league's rules, as a season total - what the draft board ranks on. A defence's points-allowed tier is scored on its average game.`
     : `Real ${y} season totals × your league's rules — check each line against what you expect (e.g. a passing TD = ${(+S.scoring['Passing TD']||0)} pts). Per-game and long-play bonuses aren't in season totals.`}</p>`;
 }
-function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || null; }
+function findPlayerMeta(id){ return (PLAYERS||[]).find(p=>p.id===id) || POOL_MAP.get(id) || pickMeta(id); }
+/* a player in neither feed but on somebody's roster (a kicker cut on Tuesday after kicking on
+   Sunday) still has a name, a position and a team: the pick's own */
+function pickMeta(id){
+  const p = (realDraft().picks||[]).find(x=>String(x.playerId)===String(id) && !x.cut);
+  return p ? { id:String(id), name:p.name||'', pos:p.pos||'', team:p.nfl||'' } : null;
+}
 /* =====================================================
    Weekly scoring — real Sleeper week stats × your league's rules.
    Field names verified against live 2024 week data. Unlike the season-total
@@ -6028,22 +6054,29 @@ function scoreWeekStats(st, pos){
 /* cache of fetched week stats, keyed "season-week" */
 const WEEK_STATS = {};                      /* key -> {at, data} */
 const STATS_TTL_MS = 3*60*1000;             /* only the in-progress week goes stale; three minutes - the pulse runs every one, so it refetches on every third */
+const WEEK_STATS_INFLIGHT = {};             /* key -> the download under way, so callers share it */
 async function fetchWeekStats(season, week, force){
   const key = `${season}-${week}`;
   const hit = WEEK_STATS[key];
-  const liveWeek = (+season === +((S.season&&S.season.year)||0)) && (+week === currentNflWeek());
+  const liveWeek = (+season === (+((S.season&&S.season.year)) || curDraftYear())) && (+week === currentNflWeek());
   const fresh = hit && (!liveWeek || (Date.now()-hit.at < STATS_TTL_MS));
   if(hit && fresh && !force) return hit.data;          /* finished weeks are final — cache them for good */
-  try{
-    const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${season}/${week}`);
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const d = await r.json();
-    WEEK_STATS[key] = { at: Date.now(), data: d || {} };
-    return WEEK_STATS[key].data;
-  }catch(e){
-    if(hit) return hit.data;                           /* network blip: keep showing what we had */
-    throw e;
-  }
+  /* a page that redraws on every keystroke must not start a download per keystroke */
+  if(WEEK_STATS_INFLIGHT[key] && !force) return WEEK_STATS_INFLIGHT[key];
+  const job = (async()=>{
+    try{
+      const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${season}/${week}`);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const d = await r.json();
+      WEEK_STATS[key] = { at: Date.now(), data: d || {} };
+      return WEEK_STATS[key].data;
+    }catch(e){
+      if(hit) return hit.data;                         /* network blip: keep showing what we had */
+      throw e;
+    }finally{ if(WEEK_STATS_INFLIGHT[key]===job) delete WEEK_STATS_INFLIGHT[key]; }   /* a forced fetch may have taken the slot */
+  })();
+  WEEK_STATS_INFLIGHT[key] = job;
+  return job;
 }
 /* starters for a team (bench + IR excluded) */
 function starterPicks(ti){
@@ -8442,7 +8475,7 @@ function updateGhost(){
   const v = window.currentView; if(!v) return;
   let label = GHOST_LABEL[v] || '';
   if(v==='matchups' && window.muTab==='gc') label = 'GAME CENTER';
-  if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='news') label='PLAYER NEWS'; else if(window.plTab==='pick') label='PICKUPS'; else if(window.plTab==='wv') label='WAIVERS'; }
+  if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='week') label='WEEK STATS'; else if(window.plTab==='news') label='PLAYER NEWS'; else if(window.plTab==='pick') label='PICKUPS'; else if(window.plTab==='wv') label='WAIVERS'; }
   if(v==='teams' && window.teamsSub==='my') label = 'MY TEAM';
   if(v==='trades' && window.trTab==='moves') label = 'TRANSACTIONS';
   const sec = document.getElementById('view-' + (v==='mock' ? 'draft' : v));
@@ -13574,6 +13607,151 @@ function draftGradeStripHTML(F){
   if(!F || !F.order) return '';
   return `<div class="dg-strip">${F.order.map(t=>`<span class="dg-chip"><b class="${drGradeClass(t.grade)}">${esc(t.grade)}</b>${esc(t.name)}</span>`).join('')}</div>`;
 }
+/* ===================== WEEK STATS =====================
+   Players > Week stats: every player's real line for one week - yards, catches, touchdowns,
+   the lot - with the points it scored under this league's rules beside it. It reads the same
+   Sleeper file the matchups are scored from (fetchWeekStats), so this page and Game Center
+   can never disagree about a number. ALL shows the compact stat line for any position; one
+   position opens its numeric columns (statCols, plus a defence set of its own). Sort on any
+   column. Rostered players say who owns them and free agents say so, because this is where
+   a Sunday-night waiver hunt starts.
+
+   The shell (week select, search, chips) is built once and kept, so typing in the search box
+   never loses the caret; only the status line and the table redraw, and the sideways scroll
+   is put back where the reader left it. */
+const WK_DEF_COLS = [['Sack','sack'],['Int','int'],['FR','fum_rec'],['FF','ff'],['Saf','safe'],['TD','def_td'],['ST TD','def_st_td'],['Pts Allow','pts_allow'],['Yds Allow','yds_allow']];
+const WK_STAT_POS = ['QB','RB','WR','TE','K','DEF'];
+const WK_STAT_SHOW = 150;
+/* every bit of the page's state in one object, never on window - there an element id would
+   shadow it (window.wkStatQ would be the search box itself), and the sort function would
+   shadow the sort state */
+const WK = { week:0, pos:'ALL', q:'', fa:false, all:false, sort:{ key:'pts', dir:-1 }, oppTried:{} };
+function wkStatCols(pos){ return pos==='DEF' ? WK_DEF_COLS : statCols(pos); }
+/* the weeks with a stat file to show: everything up to the week being played; after the
+   regular season, all of it; before the opener, week 1 (which says "not published yet") */
+function wkStatWeeks(){
+  const now = (typeof currentNflWeek==='function') ? currentNflWeek() : 0;
+  const last = now ? now : (Date.now() > NFL_2026_KICKOFF.getTime() ? REG_WEEKS : 1);
+  return Array.from({length: Math.max(1, Math.min(REG_WEEKS, last))}, (_,i)=>i+1);
+}
+function wkStatSort(key){
+  const s = WK.sort;
+  if(s.key===key) s.dir = -s.dir; else { s.key = key; s.dir = (key==='name' || key==='team') ? 1 : -1; }
+  renderWeekStats();
+}
+function wkStatSet(k, v){
+  const changed = WK[k] !== v;
+  WK[k] = v; WK.all = false;
+  if(k==='pos' && changed) WK.sort = { key:'pts', dir:-1 };     /* the columns just changed under the sort */
+  renderWeekStats();
+}
+/* the minute tick: only the live week's file can change, and only once its three minutes are
+   up - a redraw a minute for nothing would yank the sideways scroll back to the left */
+function wkStatTick(){
+  const season = +((S.season && S.season.year)) || curDraftYear();
+  const hit = WEEK_STATS[`${season}-${WK.week}`];
+  if(WK.week && WK.week===currentNflWeek() && (!hit || Date.now()-hit.at >= STATS_TTL_MS)) renderWeekStats();
+}
+async function renderWeekStats(){
+  const el = document.getElementById('wkView'); if(!el) return;
+  const season = +((S.season && S.season.year)) || curDraftYear();
+  const weeks = wkStatWeeks();
+  const wk = weeks.includes(WK.week) ? WK.week : weeks[weeks.length-1];
+  WK.week = wk;
+  const pos = WK.pos, q = String(WK.q||'').toLowerCase().trim(), sort = WK.sort, faOnly = !!WK.fa;
+  /* the shell, once */
+  if(!document.getElementById('wkStatList')){
+    el.innerHTML = `<div class="card" id="wkStatCard">
+      <div class="pltools">
+        <div class="row" style="align-items:center;flex-wrap:wrap">
+          <select id="wkStatWeekSel" onchange="wkStatSet('week', +this.value)"></select>
+          <input type="text" id="wkStatQIn" placeholder="Search player, team, or owner…" oninput="wkStatSet('q', this.value)">
+          <label><input type="checkbox" id="wkStatFAIn" style="width:auto" onchange="wkStatSet('fa', this.checked)"> free agents only</label>
+        </div>
+        <div class="posfilters" id="wkStatPosBar"></div>
+        <div id="wkStatStatus"></div>
+      </div>
+      <div id="wkStatList"></div>
+    </div>`;
+  }
+  /* the controls follow the state: a week select drawn before the opener only knew week 1 */
+  const sel = document.getElementById('wkStatWeekSel');
+  if(sel && sel.options.length !== weeks.length) sel.innerHTML = weeks.map(w=>`<option value="${w}">Week ${w} · ${esc(nflWeekRange(w).label)}</option>`).join('');
+  if(sel) sel.value = String(wk);
+  const qEl = document.getElementById('wkStatQIn'); if(qEl && qEl.value !== WK.q) qEl.value = WK.q;
+  const faEl = document.getElementById('wkStatFAIn'); if(faEl) faEl.checked = faOnly;
+  document.getElementById('wkStatPosBar').innerHTML = ['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(p=>`<button class="${p===pos?'on':''}" onclick="wkStatSet('pos','${p}')">${p}</button>`).join('');
+  const status = document.getElementById('wkStatStatus'), list = document.getElementById('wkStatList');
+  status.textContent = `Loading week ${wk}…`;
+  if(!playersReady && !playersLoading) ensurePlayers();
+  const token = (WK.token = (WK.token||0) + 1);
+  let stats = null, err = '';
+  try{ stats = await fetchWeekStats(season, wk); }catch(e){ err = "Couldn't reach the NFL stat feed"; }
+  if(token !== WK.token) return;                            /* a newer redraw is under way */
+  if(err){ status.textContent = err + ' — try again in a minute.'; list.innerHTML=''; return; }
+  if(!stats || !Object.keys(stats).length){
+    status.textContent = `No week ${wk} stats published yet. They land as the games are played.`;
+    list.innerHTML = ''; return;
+  }
+  /* opponents for the week, once the scoreboard has been read - drawn without them first, and
+     one attempt per five minutes, so an outage does not cost a request per keystroke */
+  const oppKey = `${season}-${wk}`, oppMap = NFL_OPP[oppKey] || null;
+  if(!oppMap && !(WK.oppTried[oppKey] && Date.now()-WK.oppTried[oppKey] < 300000)){
+    WK.oppTried[oppKey] = Date.now();
+    loadOpponents(season, wk).then(m=>{ if(m && window.plTab==='week' && WK.week===wk) renderWeekStats(); }, ()=>{});
+  }
+  const picks = (realDraft().picks||[]).filter(p=>!p.cut);
+  const own = new Map(picks.map(p=>[String(p.playerId), p.teamIndex]));
+  const pickById = new Map(picks.map(p=>[String(p.playerId), p]));
+  const known = new Map((PLAYERS||[]).map(p=>[String(p.id), p]));
+  /* the player feed, then the pool, then the roster pick itself - a kicker cut on Tuesday after
+     kicking on Sunday is in nobody's feed but still on somebody's team */
+  const metaOf = id => known.get(id) || POOL_MAP.get(id) || (pickById.has(id) ? { id, name:pickById.get(id).name||'', pos:pickById.get(id).pos||'', team:pickById.get(id).nfl||'' } : null);
+  /* the file carries every active player; only the ones who actually did something are a line */
+  const played = st => !!(st && (st.pass_att||st.rush_att||st.rec_tgt||st.rec||st.fga||st.xpa||st.xpm||st.xpmiss||st.kr_td||st.pr_td||st.st_td||st.fum_rec_td||st.fum_lost||st.pts_allow!=null||st.sack||st.int||st.def_td||st.fum_rec||st.ff));
+  const numeric = WK_STAT_POS.includes(pos);
+  const cols = numeric ? wkStatCols(pos) : [];
+  /* newer Sleeper files split 50+ into 50-59 and 60+; the columns and the scorer read 50+ */
+  const fix = st => (st && st.fgm_50p==null && (st.fgm_50_59!=null || st.fgm_60p!=null)) ? { ...st, fgm_50p:(+st.fgm_50_59||0)+(+st.fgm_60p||0) } : st;
+  const colVal = (st, c) => typeof c[1]==='function' ? c[1](st) : +(st[c[1]]||0);
+  const rows = [];
+  Object.keys(stats).forEach(id=>{
+    if(!played(stats[id])) return;
+    const m = metaOf(id); if(!m || !WK_STAT_POS.includes(m.pos)) return;
+    if(!posMatches(m.pos, pos)) return;
+    const ti = own.has(id) ? own.get(id) : null;
+    if(faOnly && ti!=null) return;
+    const name = String(m.name||''), team = String(m.team||''), owner = ti!=null ? teamName(ti) : '';
+    if(q && !(name.toLowerCase().includes(q) || team.toLowerCase().includes(q) || owner.toLowerCase().includes(q))) return;
+    const st = fix(stats[id]);
+    rows.push({ id, m, st, pts: Math.round((scoreWeekStats(st, m.pos)||0)*10)/10, ti, name, team, owner });
+  });
+  const colIdx = String(sort.key).charAt(0)==='c' ? +String(sort.key).slice(1) : -1;
+  const metric = r => sort.key==='pts' ? r.pts : sort.key==='name' ? r.name.toLowerCase() : sort.key==='team' ? r.team
+                    : (colIdx>=0 && cols[colIdx]) ? colVal(r.st, cols[colIdx]) : r.pts;
+  rows.sort((a,b)=>{ const A=metric(a), B=metric(b); const c = (typeof A==='string') ? A.localeCompare(B) : A-B; return (sort.dir*c) || (b.pts-a.pts) || a.name.localeCompare(b.name); });
+  const shown = WK.all ? rows : rows.slice(0, WK_STAT_SHOW);
+  const th = (k, label, right) => `<th class="sortable ${sort.key===k?'on':''}"${right?' style="text-align:right"':''} onclick="wkStatSort('${k}')">${label}${sort.key===k?(sort.dir<0?' ▼':' ▲'):''}</th>`;
+  const cell = (st, c) => { const v = colVal(st, c); return c[2]==='dec' ? (+v).toFixed(1) : Math.round(v); };
+  status.textContent = `${rows.length} player${rows.length===1?'':'s'} with a week ${wk} line${pos!=='ALL'?' at '+pos:''}${faOnly?', free agents only':''}${shown.length<rows.length?` · showing ${shown.length} of ${rows.length}`:''}`;
+  /* keep the sideways scroll where the reader left it across a redraw */
+  const oldWrap = list.querySelector('.wk-wrap'), keepX = oldWrap ? oldWrap.scrollLeft : 0;
+  list.innerHTML = `<div class="wk-wrap" style="overflow-x:auto"><table class="plain plplayers wkstats">
+    <tr><th style="width:44px">Pos</th>${th('name','Player')}${th('pts','Pts',true)}${th('team','Team')}${numeric ? cols.map((c,i)=>th('c'+i, c[0], true)).join('') : '<th>Stat line</th>'}</tr>
+    ${shown.map(r=>{
+      const opp = (oppMap && r.team && r.team!=='FA') ? oppLabel(r.team, oppMap) : '';
+      return `<tr onclick="openPlayer('${r.id}')" title="View stats">
+        <td><span class="postag pos-${r.m.pos}" style="--pc:var(--${String(r.m.pos).toLowerCase()})">${r.m.pos}</span></td>
+        <td><span class="pcell">${playerFace(r.m,32)}<span style="min-width:0"><b>${esc(r.name)}</b>${injById(r.id)}<div style="color:var(--chalk-dim);font-size:11px">${r.owner ? esc(r.owner) : 'Free agent'}</div></span></span></td>
+        <td class="pl-proj" style="font-weight:700">${r.pts.toFixed(1)}</td>
+        <td style="font-family:var(--f-mono)">${esc(r.team)}${opp?` <span style="color:var(--chalk-dim)">${esc(opp)}</span>`:''}</td>
+        ${numeric ? cols.map(c=>`<td style="text-align:right;font-family:var(--f-mono)">${cell(r.st, c)}</td>`).join('') : `<td class="wk-line">${esc(statLine(r.st, r.m.pos))||'—'}</td>`}
+      </tr>`; }).join('')}
+  </table></div>
+  ${rows.length > shown.length ? `<div style="text-align:center;margin-top:10px"><button class="btn ghost" onclick="WK.all=true;renderWeekStats()">Show all ${rows.length}</button></div>` : ''}
+  <p class="sub" data-note="wk-stats" style="margin:12px 0 0;font-size:12px">Real stat lines from the NFL feed, scored through this league's own rules - the same file Game Center is scored from. Pick a position for the full columns; ALL shows each player's line in words. Tap a player for his career.</p>`;
+  const newWrap = list.querySelector('.wk-wrap'); if(newWrap && keepX) newWrap.scrollLeft = keepX;
+}
 /* ===================== THE SEASON SCHEDULE =====================
    The board only ever showed one week at a time, so "who do I play in week 9" was a question
    the app could not answer without clicking through nine weeks. This is the whole season in one
@@ -17387,7 +17565,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-11 · game center score style';
+const BUILD_STAMP = '2026-09-12 · week stats';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

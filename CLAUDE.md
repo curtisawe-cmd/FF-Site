@@ -509,6 +509,22 @@ the shared copy is written the moment the board fills. Mock boards are not grade
 `drToggle` (`window.drOpen`), `drRedraw`. Chat posting follows the weekly opt-in
 (`maybeAnnounceRecap` posts whichever recap is latest, draft included).
 
+## Week stats (Players > Week stats)
+
+`renderWeekStats()` (sub-tab key `week`, container `#wkView`, `setPlTab`): every player with a line in
+`fetchWeekStats(season, wk)` - the same Sleeper file the matchups are scored from - with `scoreWeekStats`
+points beside it. All state lives in the `WK` object (week, pos, q, fa, all, sort, oppTried), never on
+window: an element id would shadow it there, and the shell's ids are deliberately distinct (`wkStatQIn`,
+`wkStatFAIn`, `wkStatPosBar`, `wkStatWeekSel`). Week select (`wkStatWeeks()`: 1..currentNflWeek, all 14
+after the season, week 1 in preseason), search, "free agents only", position chips. ALL and FLEX show
+`statLine` in words; a single position shows `statCols(pos)` columns plus `WK_DEF_COLS` for defences;
+changing position resets the sort. Sortable headers (`wkStatSort`), top 150 with Show all. Only players
+who did something are rows (`played`); names come from PLAYERS, then POOL, then the roster pick itself.
+The shell is built once (search caret survives), a token drops stale async results, the sideways scroll
+is restored after a redraw. `fetchWeekStats` dedupes in-flight downloads (`WEEK_STATS_INFLIGHT`);
+opponents from `loadOpponents`, one attempt per five minutes. The pulse calls `wkStatTick()`, which
+redraws only when the live week's file is due for a refresh.
+
 ## Pickups (waiver and streaming suggestions)
 
 Players > **Pickups** (`renderPickups`, panel `#pickView`, sub-tab key `pl-pick`, ghost word
