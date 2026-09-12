@@ -580,8 +580,8 @@ holds **every free agent whose NFL game this week has kicked off** (`gameLockFor
 must be this week's slate, kickoff behind us, and now before `weekClearAt(wk)` = `weekOverAt(wk)` + 24h,
 i.e. Wednesday 4am local). Such an entry has `from:null, lock:true`; a dropped player whose game has
 started keeps the later `until`. Claims on locked players settle at that clear time through the
-existing `maybeProcessWaivers`. The On waivers card lists dropped players only and states the count
-of locked free agents (`data-note="wv-gamelock"`). Fails open like the lineup lock: no scoreboard,
+existing `maybeProcessWaivers`. The "Game started" card lists them ten at a time (`WV_LOCK_SHOW`) with a Show all button and the
+position chips; the On waivers card above it lists dropped players only. Fails open like the lineup lock: no scoreboard,
 no lock; and `currentNflWeek()` is 0 in the playoffs, so nothing locks in weeks 15-17.
 
 **Dropping a locked player**: `dropLockGuard(ti, pid, what)` lets a player whose lineup slot is BN or

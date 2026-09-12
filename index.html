@@ -16177,6 +16177,7 @@ function faabBidInput(){
   return el ? el.value : 0;
 }
 
+const WV_LOCK_SHOW = 10;     /* game-locked free agents shown before the Show all button */
 function waiverHours(){ const h=+S.waiverHours; return Number.isFinite(h) && h>=0 ? h : 24; }
 function waiverMs(){ return waiverHours()*3600000; }
 function waiversOn(){ return waiverHours() > 0; }   /* 0 hours turns the system off league-wide */
@@ -16637,20 +16638,22 @@ function renderWaivers(){
   /* the game lock: most projected first, because that is who anyone is here for; forty at a
      time, since a Sunday night locks most of the pool */
   const lockedAll = lockedFA.slice().sort((a,b)=>((projWkPts(b)??-1)-(projWkPts(a)??-1)) || String(a.name).localeCompare(String(b.name)));
+  /* ten is a glance; a Sunday night locks most of the pool, and nobody reads four hundred rows
+     without being asked to */
   /* a position filter, the same chips the player list wears - "who is the best locked RB" is
      the question, and scrolling four hundred rows is not the answer */
   const lockPos = window.wvLockPos || 'ALL';
   const lockedSorted = lockedAll.filter(w=>posMatches(w.pos, lockPos));
-  const lockedShown = window.wvAllLocked ? lockedSorted : lockedSorted.slice(0,40);
+  const lockedShown = window.wvAllLocked ? lockedSorted : lockedSorted.slice(0,WV_LOCK_SHOW);
   const lockCount = pos => lockedAll.filter(w=>posMatches(w.pos, pos)).length;
   const lockChips = `<div class="posfilters" style="margin:0 0 10px">${['ALL','QB','RB','WR','TE','FLEX','K','DEF'].map(pos=>`<button class="${pos===lockPos?'on':''}" onclick="window.wvLockPos='${pos}';window.wvAllLocked=false;renderWaivers()" title="${lockCount(pos)} locked">${pos}</button>`).join('')}</div>`;
   const lockedHTML = !lockedFA.length ? '' : `<div class="card"><h2>Game started \u00B7 on waivers</h2>
     <p class="sub" data-note="wv-gamelock-list" style="margin:0 0 8px">Free agents whose game has kicked off this week. They can be claimed but not added until the wire clears Wednesday 4:00 AM - ${esc(waiverClearLabel(lockedAll[0].until))} from now.</p>
     ${lockChips}
     ${lockedShown.length ? lockedShown.map(wireRow).join('') : `<p class="sub" style="margin:0">No ${lockPos==='ALL'?'':lockPos+' '}free agent is locked right now.</p>`}
-    ${lockedSorted.length > lockedShown.length
-      ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=true;renderWaivers()">Show all ${lockedSorted.length}</button>`
-      : (window.wvAllLocked && lockedSorted.length > 40 ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=false;renderWaivers()">Show fewer</button>` : '')}
+    ${window.wvAllLocked
+      ? (lockedSorted.length > WV_LOCK_SHOW ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=false;renderWaivers()">Show fewer</button>` : '')
+      : (lockedSorted.length > lockedShown.length ? `<button class="btn ghost" style="margin-top:10px" onclick="window.wvAllLocked=true;renderWaivers()">Show all ${lockedSorted.length}</button>` : '')}
   </div>`;
 
   const mineClaims = myPendingClaims();
