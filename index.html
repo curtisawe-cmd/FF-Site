@@ -1310,6 +1310,11 @@ nav.tabs button{position:relative}
   background:transparent;border:1px solid var(--line-strong);color:var(--chalk-dim);
   white-space:nowrap;vertical-align:middle;margin-left:5px}
 .byetag.now{border-color:var(--charge);color:var(--charge);font-weight:800}
+/* how hard the rest of fantasy football is chasing him today: turf for adds, charge for drops */
+.trend{display:inline-flex;align-items:center;gap:2px;flex:none;font-family:var(--f-mono);font-weight:700;font-size:10px;
+  padding:0 5px;height:16px;line-height:1;border-radius:4px;white-space:nowrap;vertical-align:middle;margin-left:5px;
+  border:1px solid var(--turf);color:var(--turf);background:var(--turf-wash)}
+.trend.cold{border-color:var(--charge);color:var(--charge);background:var(--charge-wash)}
 /* when he plays, on the line under his name: the clock in turf while the game runs, faded once it is final;
    on a phone it takes a line of its own, without the separator */
 .pgame{white-space:nowrap}
@@ -1469,7 +1474,7 @@ table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-di
   #wvView .faRow, #pickView .faRow, #faList .faRow{flex-wrap:wrap;row-gap:5px}
   #wvView .faRow .pmeta, #pickView .faRow .pmeta, #faList .faRow .pmeta{min-width:0}
   /* and the name keeps a floor, so it can wrap but never vanish */
-  #faList .faRow .faName{flex:1 1 60%;min-width:110px}
+  #faList .faRow .faName{flex:1 1 60%;min-width:110px;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 }
 /* pickups: the "would start for you" badge, and the sections of the Pickups tab. The rows are
    the waiver wire's (.wv-item .faRow), so they get its phone grid for free. */
@@ -5668,6 +5673,7 @@ function setPlTab(t){
   if(wkv)  wkv.style.display  = t==='week' ? 'block':'none';
   if(t==='wv'){ bustWire(); renderWaivers(); }
   if(t==='pick'){ bustWire(); renderPickups(); }
+  if(t==='wv' || t==='pick' || t==='all') trendWarm();   /* who the rest of fantasy is chasing */
   if(t==='inj') renderInjuries();
   if(t==='week') renderWeekStats();
   if(t==='news'){ renderNews(); fetchNews().then(fresh=>{ if(fresh && window.plTab==='news') renderNews(); }); }
@@ -6375,7 +6381,7 @@ function renderPlayers(){
     <tr><th style="width:44px">Pos</th><th>Player</th><th style="width:58px">Team</th><th style="width:62px;text-align:right" title="Projected points a week, scored through this league's own rules. The same number Game Center shows beside what he actually scored.">Proj/wk</th><th style="width:52px;text-align:center" title="The week this player's NFL team does not play">Bye</th><th style="width:52px;text-align:center">Age</th><th style="width:52px;text-align:center">Exp</th><th>Injury</th><th>Status</th>${canAdd?`<th style="width:56px"></th>`:''}</tr>
     ${shown.map(p=>`<tr onclick="openPlayer('${p.id}')" title="View career points">
       <td><span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span></td>
-      <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}${gameLineHTML(p.team, true) ? `<div style="color:var(--chalk-dim);font-size:11px">${gameLineHTML(p.team, true)}</div>` : ''}</span></span></td>
+      <td><span class="pcell">${playerFace(p,40)}<span style="min-width:0"><b>${esc(p.name)}</b>${trendChipHTML(p.id)}${p.num!=null?` <span style="color:var(--chalk-dim);font-size:12px">#${p.num}</span>`:''}${(p.college||p.ht)?`<div style="color:var(--chalk-dim);font-size:11px">${[esc(p.college), p.ht?esc(p.ht):'', p.wt?esc(p.wt)+' lb':''].filter(Boolean).join(' · ')}</div>`:''}${gameLineHTML(p.team, true) ? `<div style="color:var(--chalk-dim);font-size:11px">${gameLineHTML(p.team, true)}</div>` : ''}</span></span></td>
       <td style="font-family:var(--f-mono)">${esc(p.team)}</td>
       <td class="pl-proj">${projWkTxt(p)}${canAdd?pickupBadgeHTML(p, addTi):''}</td>
       <td style="text-align:center;font-family:var(--f-mono)">${byeCellHTML(null, p.team)}</td>
@@ -13608,6 +13614,115 @@ function draftGradeStripHTML(F){
   if(!F || !F.order) return '';
   return `<div class="dg-strip">${F.order.map(t=>`<span class="dg-chip"><b class="${drGradeClass(t.grade)}">${esc(t.grade)}</b>${esc(t.name)}</span>`).join('')}</div>`;
 }
+/* ===================== TRENDING =====================
+   What the rest of the football world is doing with the wire right now. Sleeper publishes, over
+   every league on its platform, how many times each player was added or dropped in the last
+   day - the closest thing to a league-wide consensus, and exactly the question a manager asks
+   on a Tuesday morning. Adds drive the card; a heavy drop colours the chip the other way,
+   because "everybody is dropping him" is worth knowing before you spend a claim on him.
+
+   Thirty-minute cache in localStorage, same shape as the news feed, so a tab that is opened
+   ten times an hour costs one request; a quiet or unreachable feed is not retried for five
+   minutes, so a tap cannot become a request. Read-only and entirely outside the league's own
+   data: nothing here can change a roster, and a feed that is down just means no chips. */
+const TREND_TTL_MS = 30*60*1000, TREND_RETRY_MS = 5*60*1000, TREND_MAX_AGE_MS = 24*60*60*1000;
+let TREND = { at:0, add:null, drop:null };
+/* a day-old copy is not "today": past that it is thrown away rather than shown as news */
+try{ const c=JSON.parse(store.get('ffl_trend_v1')||'null');
+  if(c && c.add && Date.now()-(+c.at||0) < TREND_MAX_AGE_MS) TREND=c; }catch(e){}
+let _trendBusy = false, _trendTried = 0, _trendPainted = 0;
+async function loadTrending(force){
+  if(_trendBusy) return null;
+  if(!force && TREND.add && Date.now()-TREND.at < TREND_TTL_MS) return TREND;      /* fresh enough */
+  if(!force && Date.now()-_trendTried < TREND_RETRY_MS) return null;               /* just tried, and it had nothing */
+  _trendBusy = true; _trendTried = Date.now();
+  try{
+    const one = async (kind, limit) => {
+      const r = await fetch(`https://api.sleeper.app/v1/players/nfl/trending/${kind}?lookback_hours=24&limit=${limit}`);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json(), o = {};
+      (Array.isArray(j)?j:[]).forEach((x,i)=>{ if(x && x.player_id) o[String(x.player_id)] = { n:+x.count||0, rank:i+1 }; });
+      return o;
+    };
+    /* the drops only colour a chip, so a failure there must never void the adds */
+    const [add, drop] = await Promise.all([one('add',100), one('drop',50).catch(()=>({}))]);
+    if(!Object.keys(add).length) return null;
+    TREND = { at:Date.now(), add, drop };
+    try{ store.set('ffl_trend_v1', JSON.stringify(TREND)); }catch(e){}
+    return TREND;
+  }catch(e){ return null; }
+  finally{ _trendBusy = false; }
+}
+/* fetch when a page that shows the chips is opened, and redraw it when the numbers land - once
+   per set of numbers, so a redraw cannot call this again and loop */
+function trendWarm(){
+  loadTrending().then(t=>{
+    if(!t || _trendPainted === TREND.at) return;
+    _trendPainted = TREND.at;
+    const v = window.currentView;
+    if(v==='players'){
+      if(window.plTab==='wv') renderWaivers();
+      else if(window.plTab==='pick') renderPickups();
+      else if(window.plTab==='all') renderPlayers();
+    } else if(v==='teams') renderTeams();
+  }, ()=>{});
+}
+const trendAdd  = pid => (TREND.add  || {})[String(pid)] || null;
+const trendDrop = pid => (TREND.drop || {})[String(pid)] || null;
+function trendNum(n){
+  n = +n||0; const k = n/1000;
+  return n>=9950 ? Math.round(k)+'k' : n>=1000 ? (Math.round(k*10)/10)+'k' : String(n);
+}
+/* The chip beside a name: which way the traffic is going, and how hard. `addOnly` is for the
+   trending card itself, where every row earned its place on the add count - showing a red drop
+   number there would contradict the card's own heading. The count is transactions across
+   Sleeper, not leagues: one league can add and drop the same man twice in a day. */
+function trendChipHTML(pid, addOnly){
+  const a = trendAdd(pid), d = trendDrop(pid);
+  if(a && (addOnly || !d || a.n >= d.n))
+    return ` <span class="trend" title="Added ${(+a.n).toLocaleString()} times across fantasy football in the last 24 hours — the ${ordinal(a.rank)} most added player">▲ ${trendNum(a.n)}</span>`;
+  if(d)
+    return ` <span class="trend cold" title="Dropped ${(+d.n).toLocaleString()} times across fantasy football in the last 24 hours — the ${ordinal(d.rank)} most dropped player">▼ ${trendNum(d.n)}</span>`;
+  return '';
+}
+/* The card: the most-added players THIS league can actually have, with the same Claim/Add
+   button as everywhere else. Anyone already rostered is left out - knowing the world is hot on
+   a player you cannot have is a tease, not information - and so is anyone already listed in the
+   dropped-players card directly above this one. Players whose game has kicked off stay: on a
+   Sunday that is most of the pool, and they are claimable. */
+function trendingCardHTML(){
+  if(!TREND.add) return '';
+  const rostered = rosteredIds();
+  const all = Object.keys(TREND.add)
+    .map(id=>({ id:String(id), t:TREND.add[id], p:findPlayerMeta(String(id)) }))
+    .filter(x=>x.p && ['QB','RB','WR','TE','K','DEF'].includes(x.p.pos) && !rostered.has(x.id))
+    .filter(x=>{ const w = wireEntry(x.id); return !(w && w.from!=null); })
+    .sort((a,b)=>a.t.rank-b.t.rank);
+  if(!all.length) return '';
+  const open = !!window.trendAll, shown = open ? all : all.slice(0,8);
+  const rows = shown.map(({id,p})=>{
+    const wv = onWaivers(id), w = wv ? wireEntry(id) : null;
+    const meta = esc(p.team||'') + gameLineHTML(p.team)
+      + (wv ? ` · on waivers, clears ${esc(waiverClearLabel((w||{}).until))}` : '')
+      + ` · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(p)} proj</b>`;
+    return `<div class="wv-item"><div class="faRow">${playerFace(p,32)}
+      <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
+      <span class="faName pstat" onclick="openPlayer('${id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(id, true)}${byeTagHTML(id, p.team)}</span>
+      <span class="pmeta">${meta}</span>
+      <button class="pick" onclick="addFromPlayers('${id}', event)">${wv?'Claim':'Add'}</button>
+    </div></div>`;
+  }).join('');
+  const more = open
+    ? `<button class="btn ghost" onclick="window.trendAll=false;renderWaivers()">Show fewer</button>`
+    : (all.length > shown.length ? `<button class="btn ghost" onclick="window.trendAll=true;renderWaivers()">Show all ${all.length}</button>` : '');
+  return `<div class="card"><h2>Trending · the wire everywhere else</h2>
+    <p class="sub" data-note="trend-intro" style="margin:0 0 8px">The players fantasy football is picking up fastest today, and available here. Rostered players are left out, and so is anyone already on the wire above.</p>
+    ${rows}
+    ${more ? `<div style="text-align:center;margin-top:10px">${more}</div>` : ''}
+    <p class="sub" data-note="trend-note" style="margin:10px 0 0;font-size:12px">Counts are adds across every league on Sleeper in the last 24 hours. A red chip means the traffic is the other way and he is being dropped, which is its own kind of news.</p>
+    <p class="sub" style="margin:2px 0 0;font-size:11px">Updated ${esc(timeAgo(TREND.at) || 'just now')}.</p>
+  </div>`;
+}
 /* ===================== WEEK STATS =====================
    Players > Week stats: every player's real line for one week - yards, catches, touchdowns,
    the lot - with the points it scored under this league's rules beside it. It reads the same
@@ -15157,7 +15272,7 @@ function renderPickups(){
       + (wv ? ` · on waivers, clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p, why);
     return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
-      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${byeTagHTML(p.id, p.team)}</span>
+      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(p.id)}${byeTagHTML(p.id, p.team)}</span>
       <span class="pmeta">${meta}</span>
       <span class="statpill pl-projpill" title="Projected this week under this league's rules">${fmt(pNow(p))} proj</span>
       ${hasTeam ? `<button class="pick" onclick="addFromPlayers('${p.id}', event)">${wv?'Claim':'Add'}</button>` : ''}
@@ -15219,7 +15334,7 @@ function renderPickups(){
       const meta = `${gameLineHTML(p.team, true) || esc(oppTxt(p.team, oppNow, wk)||p.team)}${nx}` + (wv ? ` · clears ${esc(waiverClearLabel((w||{}).until))}` : '') + gainTxt(p);
       return `<div class="wv-item"><div class="faRow pk-row">${playerFace(p,32)}
         <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
-        <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+        <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(p.id)}</span>
         <span class="pmeta">${meta}</span>
         <span class="statpill pl-projpill" title="Projected this week">${fmt(pNow(p))} proj</span>
         ${hasTeam ? `<button class="pick" onclick="addFromPlayers('${p.id}', event)">${wv?'Claim':'Add'}</button>` : ''}
@@ -16481,9 +16596,11 @@ function renderWaivers(){
   const wire=wireAll.filter(w=>w.from!=null), lockedFA=wireAll.filter(w=>w.from==null);
 
   if(!waiversOn()){
+    /* no wire, but the trending card is a list of free agents and belongs here either way */
     el.innerHTML=`<div class="card"><h2>Waivers</h2>
       <div class="notice" style="margin:0">Waivers are switched off, so every dropped player goes straight back to free agency.
-      The commissioner can set a waiver period in Settings.</div></div>`;
+      The commissioner can set a waiver period in Settings.</div></div>
+      ${trendingCardHTML()}`;
     return;
   }
 
@@ -16506,7 +16623,7 @@ function renderWaivers(){
         const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : (w.lock ? 'game started' : 'dropped');
         return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
-          <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${byeTagHTML(w.pid, w.nfl)}</span>
+          <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${trendChipHTML(w.pid)}${byeTagHTML(w.pid, w.nfl)}</span>
           <span class="pmeta">${esc(w.nfl||'')}${gameLineHTML(w.nfl)} · ${from} · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(w)} proj</b></span>
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
           ${mineIn
@@ -16608,6 +16725,7 @@ function renderWaivers(){
     ${blockedHTML}
     <div class="card"><h2>On waivers</h2>${wireHTML}</div>
     ${lockedHTML}
+    ${trendingCardHTML()}
     ${mineHTML}
     ${budgetHTML}
     <div class="card">
@@ -16639,6 +16757,7 @@ function faSetQuery(q, ti){
 }
 function renderFreeAgents(ti){
   const el = document.getElementById('faList'); if(!el) return;
+  try{ trendWarm(); }catch(e){}     /* the rows carry the trending chip; warm it once per set of numbers */
   if(!poolReady){ el.innerHTML = `<p class="sub" style="margin:8px 0 0">Loading player pool…</p>`; return; }
   const full = rosterCount(ti) >= rosterLimit();
   const fa = freeAgents(window.faQuery), shown = fa.slice(0,40);
@@ -16647,7 +16766,7 @@ function renderFreeAgents(ti){
   el.innerHTML = filters + note + (shown.map(p=>`
     <div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${p.pos.toLowerCase()})">${p.pos}</span>
-      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}</span>
+      <span class="faName pstat" onclick="openPlayer('${p.id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(p.id)}</span>
       <span class="pmeta">${p.team||''}</span>${byeTagHTML(null, p.team)}
       <span class="statpill pl-projpill" title="Projected points a week under this league's rules">${projWkTxt(p)} proj${pickupBadgeHTML(p, ti)}</span>
       ${onWaivers(p.id)
@@ -17569,7 +17688,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-12 · week stats';
+const BUILD_STAMP = '2026-09-12 · trending on the wire';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

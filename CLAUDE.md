@@ -509,6 +509,23 @@ the shared copy is written the moment the board fills. Mock boards are not grade
 `drToggle` (`window.drOpen`), `drRedraw`. Chat posting follows the weekly opt-in
 (`maybeAnnounceRecap` posts whichever recap is latest, draft included).
 
+## Trending on the wire
+
+Sleeper publishes add/drop counts across every league on its platform:
+`https://api.sleeper.app/v1/players/nfl/trending/{add|drop}?lookback_hours=24&limit=N`, an array of
+`{count, player_id}` whose ids are this app's own player ids (defences included, keyed by team code).
+`loadTrending()` caches both lists in `TREND` and localStorage `ffl_trend_v1` for 30 minutes, retries a
+quiet or unreachable feed no more than every 5 minutes, and discards a restored copy over 24 hours old
+(a stale count must never read as "today"). A `/drop` failure cannot void the adds.
+
+`trendChipHTML(pid, addOnly)` is the chip beside a name - turf with an up arrow for adds, charge with a
+down arrow when the drops are heavier - on the waiver wire, the Pickups rows, the Players table and the
+free-agent list. `trendingCardHTML()` is the "Trending" card on the Waivers tab (also shown when waivers
+are off, since it lists free agents): the most-added players this league can have, minus anyone rostered
+and anyone already in the dropped-players card above it, eight at a time. Inside the card the chip is
+forced to the add count (`addOnly`) or a row would contradict the heading that put it there. `trendWarm()`
+fetches and repaints once per set of numbers (`_trendPainted`), so a repaint cannot call it into a loop.
+
 ## Week stats (Players > Week stats)
 
 `renderWeekStats()` (sub-tab key `week`, container `#wkView`, `setPlTab`): every player with a line in
