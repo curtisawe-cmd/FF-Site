@@ -629,6 +629,19 @@ on the same rule inline.
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
 (`poSeedBracket`), the playoff picture and the playoff odds all read this one order.
 
+## Game Center score style
+
+Settings > Look & Alarms > **Game Center scores** (`S.gcScore = {family,size,color,lead,proj}`,
+`setGcScore`/`resetGcScore`/`renderGcScore`, admin-only, staged behind the Apply bar like every
+league setting). `applyGcScoreStyle()` sets five CSS variables on `:root` - `--gc-font`, `--gc-size`
+(`GC_SIZES`: compact 13px, normal 16px, large 20px, huge 24px; normal is the design), `--gc-color`,
+`--gc-lead`, `--gc-proj` - and the score rules (`.gc-pts`, `.gc-tot`, `.gc-proj`, `.h2h-pts`, `.h2h-htot`,
+`.h2h-proj`) read them with the design's values as fallbacks; totals are 1.3x the player line, the
+projection line .8x (.62x on a phone), the phone score tracks are `minmax(42px,auto)` so they grow.
+A font outside the four typography roles is fetched by `#gcScoreFont`. Runs at boot, in
+`reRenderLive` (remote settings) and on every change. The mono typography role no longer lists
+`.gc-pts`/`.gc-tot`, so its colour cannot override the score card.
+
 ## Design
 
 Buffalo Bills colors - the league is Bills fans. Primary royal blue `#00338d` (`--turf`),

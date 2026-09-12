@@ -2321,8 +2321,11 @@ section.view[data-ghost] > *{position:relative;z-index:1}
   .gc-side:last-of-type{flex-direction:row-reverse;justify-content:flex-start}
   .gc-side:last-of-type .nm{text-align:left}
 }
-.gc-tot{font-family:var(--f-mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto}
-.gc-tot.win{color:var(--turf-bright)}
+/* Game Center scores ride five variables (--gc-font, --gc-size, --gc-color, --gc-lead, --gc-proj) that
+   Settings > Look & Alarms > Game Center scores sets league-wide; the fallbacks are the design. The
+   player line is --gc-size, the team totals 1.3x, the projection line .8x (.62x on a phone). */
+.gc-tot{font-family:var(--gc-font,var(--f-mono));font-size:calc(var(--gc-size,16px)*1.3);font-weight:700;font-variant-numeric:tabular-nums;flex:0 0 auto;color:var(--gc-color,inherit)}
+.gc-tot.win{color:var(--gc-lead,var(--turf-bright))}
 .gc-vs{font-family:var(--f-display);color:var(--chalk-dim);font-size:11px;letter-spacing:.1em;flex:0 0 auto}
 .gc-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}   /* two teams, always two columns */
 /* ---- phone head-to-head: the two rosters interleaved, slot in the middle ----
@@ -2339,8 +2342,8 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .h2h-ht{min-width:0;display:flex;flex-direction:column;gap:2px}
 .h2h-ht.r{align-items:flex-end;text-align:right}
 .h2h-htop{display:flex;align-items:center;gap:8px}
-.h2h-htot{font-family:var(--f-mono);font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;color:var(--chalk)}
-.h2h-htot.win{color:var(--turf-bright)}
+.h2h-htot{font-family:var(--gc-font,var(--f-mono));font-weight:800;font-size:calc(var(--gc-size,16px)*1.3);font-variant-numeric:tabular-nums;color:var(--gc-color,var(--chalk))}
+.h2h-htot.win{color:var(--gc-lead,var(--turf-bright))}
 .h2h-hname{font-family:var(--f-ui);font-weight:700;font-size:13px;line-height:1.2;color:var(--chalk);
   overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .h2h-hmgr{font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono);
@@ -2491,7 +2494,7 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .mu-wp{flex:0 0 100%;width:100%;order:10}
 .mu-wp .wp{background:transparent;border-bottom:none;padding:4px 0 0}
 @media(max-width:640px){ .mu-wp{grid-column:1/-1} }
-.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 36px 42px minmax(0,1fr);
+.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(max(42px,calc(var(--gc-size,16px)*2.6)),auto) 36px minmax(max(42px,calc(var(--gc-size,16px)*2.6)),auto) minmax(0,1fr);   /* the score tracks grow with the score size, and every row agrees on the width */
   align-items:center;gap:4px;padding:7px 6px;border-bottom:1px solid var(--line)}
 .h2h-row:last-child{border-bottom:none}
 /* thumbnail on the outside edge, text stacked beside it, mirrored on the right-hand side */
@@ -2513,23 +2516,24 @@ section.view[data-ghost] > *{position:relative;z-index:1}
   overflow-wrap:anywhere;max-width:100%;cursor:pointer}
 .h2h-meta{font-size:10px;color:var(--chalk-dim);font-family:var(--f-mono);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
-.h2h-pts{font-family:var(--f-mono);font-weight:700;font-size:13px;text-align:center;
-  font-variant-numeric:tabular-nums;color:var(--chalk-dim)}
-.h2h-pts.win{color:var(--turf-bright)}
+.h2h-pts{font-family:var(--gc-font,var(--f-mono));font-weight:700;font-size:var(--gc-size,16px);text-align:center;
+  font-variant-numeric:tabular-nums;color:var(--gc-color,var(--chalk-dim))}
+.h2h-pts.win{color:var(--gc-lead,var(--turf-bright))}
 /* The projection sits under the live score inside the same 46px column, dimmer and smaller, so
    the row still reads as one number with a footnote rather than two numbers competing. It stays
    dim even on the winning side - the point of the pair is what he DID against what was expected,
    and colouring both would flatten that. One caption per card names it; repeating "proj" on
    every row does not fit 46px and would be noise. */
-.h2h-proj{display:block;font-weight:400;font-size:9.5px;line-height:1.3;color:var(--chalk-dim);opacity:.85}
-.h2h-pts.win .h2h-proj{color:var(--chalk-dim)}
+.h2h-proj{display:block;font-weight:400;font-size:calc(var(--gc-size,16px)*.62);line-height:1.3;color:var(--gc-proj,var(--chalk-dim));opacity:.85}
+.h2h-pts.win .h2h-proj{color:var(--gc-proj,var(--chalk-dim))}
 .h2h-key{font-family:var(--f-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--chalk-dim);text-align:center;padding:6px 8px 0}
 .h2h-slot{display:flex;align-items:center;justify-content:center}
 @media(max-width:360px){
-  .h2h-row{grid-template-columns:minmax(0,1fr) 36px 30px 36px minmax(0,1fr);gap:3px;padding:6px 4px}
-  .h2h-nm{font-size:12px} .h2h-pts{font-size:12px}
+  .h2h-row{grid-template-columns:minmax(0,1fr) minmax(max(36px,calc(var(--gc-size,16px)*.9*2.6)),auto) 30px minmax(max(36px,calc(var(--gc-size,16px)*.9*2.6)),auto) minmax(0,1fr);gap:3px;padding:6px 4px}
+  .h2h-nm{font-size:12px} .h2h-pts{font-size:calc(var(--gc-size,16px)*.9)}
   .h2h-side{gap:4px} .h2h-det{font-size:8.5px}
+  .h2h-htot{font-size:calc(var(--gc-size,16px)*1.15)}
   /* playerFace writes its size inline, so this has to out-rank it */
   .h2h-side .pface{width:18px !important;height:18px !important}
   .h2h-side .pface .pface-i{font-size:8px !important}
@@ -2544,14 +2548,16 @@ table.gc-tbl tr:last-child td{border-bottom:none}
 /* NOT .slot — that's the draft board's empty-pick square (dashed border, clamped 42-60px tall)
    and it was leaking in here, dotting every row and forcing them twice as high as they need. */
 table.gc-tbl .gc-slot{width:38px}
-table.gc-tbl .gc-pts{width:50px;text-align:right;font-family:var(--f-mono);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.gc-tbl .gc-pts{width:calc(var(--gc-size,16px)*3.4 + 10px);text-align:right;font-family:var(--gc-font,var(--f-mono));font-size:var(--gc-size,16px);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--gc-color,var(--chalk))}
 /* Desktop has the width for a real column, so the projection gets one with a heading rather than
    being tucked under the score - side by side is easier to compare down a roster than stacked.
    Not bold: the number that happened outranks the number that was guessed. */
-table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
-  font-variant-numeric:tabular-nums;color:var(--chalk-dim);white-space:nowrap}
+table.gc-tbl .gc-proj{width:calc(var(--gc-size,16px)*.8*2.6 + 14px);text-align:right;font-family:var(--gc-font,var(--f-mono));font-size:calc(var(--gc-size,16px)*.8);
+  font-variant-numeric:tabular-nums;color:var(--gc-proj,var(--chalk-dim));white-space:nowrap}
 .gc-hrow td{font-family:var(--f-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--chalk-dim);padding-top:0;padding-bottom:2px;border-bottom:1px solid var(--line)}
+/* the caption cells carry the score classes, so they must out-rank the score rules or 'PTS' grows with the setting */
+table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color:var(--chalk-dim);font-family:var(--f-mono);font-weight:600}
 .gc-pl{font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gc-meta{color:var(--chalk-dim);font-size:10px;line-height:1.25}
 /* This week's fixture, beside the player's team. Kept quieter than the team code: the team is
@@ -3149,6 +3155,15 @@ table.gc-tbl .gc-proj{width:46px;text-align:right;font-family:var(--f-mono);
     </div>
     <p class="sub" data-note="set-type" style="margin:6px 0 12px">Four roles cover the whole site. Change the font, weight, spacing, case, slant or colour of any of them — everything updates as you pick.</p>
     <div id="typeInputs"></div>
+  </div>
+
+  <div data-spage="look" class="card" style="margin-bottom:18px">
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <h2 style="margin:0">Game Center scores</h2>
+      <button class="btn ghost" style="padding:3px 11px;font-size:12px" onclick="resetGcScore()">Reset to default</button>
+    </div>
+    <p class="sub" data-note="set-gcscore" style="margin:6px 0 12px">The points beside every player and the team totals in Game Center. Pick the font, the size and the colours - league-wide, like the fonts above - and the whole panel keeps its proportions.</p>
+    <div id="gcScoreInputs"></div>
   </div>
 
   <!-- alarms and other noise-makers live down here, out of the way of real league settings.
@@ -5100,7 +5115,9 @@ function applySettings(){
   if(changed.length) try{ logCommish('changed league settings', changed.join(', ')); }catch(e){}
   toast('Settings applied ✓');
 }
-function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar(); try{ renderSettings(); renderHome(); }catch(e){} }
+function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar();
+  try{ applyTypography(); }catch(e){}     /* the staged look was already painted; put the league's back */
+  try{ renderSettings(); renderHome(); }catch(e){} }
 function pushDraftRemote(){
   if(applyingRemote || !fbOk() || !isAdmin() || draftMode!=='real') return;
   clearTimeout(_pushDT);
@@ -5110,6 +5127,7 @@ function reRenderLive(){
   try{
     applyTeamTheme(myTeamTheme());
     applyTypography();                       /* commish may have restyled the league */
+    try{ applyGcScoreStyle(); }catch(e){}     /* or the Game Center scores */
     const v = window.currentView || 'home';
     if(v==='draft' || v==='mock') refreshDraftUI(); else showView(v);
     renderHome();
@@ -7434,9 +7452,9 @@ const TYPE_ROLES = {
   ui:{ label:'Headings & buttons', hint:'H2, tabs, buttons, chips, badges', def:'Barlow Condensed',
     sel:'h2, nav.tabs button, .btn, table.plain th, .postag, .autodraft-toggle, .roundnow .rn-label, .board .bhead, .posfilters button, .prow .pick,.divtag, .theme-toggle, .role-btn, .team-picker, .alarm-sub, .sticker .nm' },
   body:{ label:'Body text', hint:'Paragraphs, tables, form labels', def:'Barlow',
-    sel:'body, p, td, label, .sub, .gc-pl, .gc-meta' },
+    sel:'body, p, td:not(.gc-pts):not(.gc-proj), label, .sub, .gc-pl, .gc-meta' },
   mono:{ label:'Numbers & stats', hint:'Scores, clocks, standings, the draft rail', def:'IBM Plex Mono',
-    sel:'.eyebrow, .gc-band, .clock, .board .rnd, .sticker .mt, .prow .pmeta, .tabbadge, .teamcard .num, .bgame .brow .bpts, .statpill, .prize-pot, .tk-pts, .gc-tot, .gc-ptot, .h2h-hproj, .gc-pts, .gc-stat, .gc-jnum, .wk-date, .inj-sev, .lk-sub b' }
+    sel:'.eyebrow, .gc-band, .clock, .board .rnd, .sticker .mt, .prow .pmeta, .tabbadge, .teamcard .num, .bgame .brow .bpts, .statpill, .prize-pot, .tk-pts, .gc-ptot, .h2h-hproj, .gc-stat, .gc-jnum, .wk-date, .inj-sev, .lk-sub b' }
 };
 function typeCfg(){
   const t = (S && S.typography) || {};
@@ -7485,12 +7503,90 @@ function applyTypography(){
   if(!tag){ tag=document.createElement('style'); tag.id='typeOverrides'; document.head.appendChild(tag); }
   tag.textContent=css;
   loadTypeFonts(cfg);
+  try{ applyGcScoreStyle(); }catch(e){}   /* the Game Center scores share the font links, so they follow */
 }
 function setType(role, field, val){
   S.typography = S.typography || {};
   S.typography[role] = S.typography[role] || {};
   S.typography[role][field] = val;
   saveState(); applyTypography();
+}
+/* ===================== GAME CENTER SCORES =====================
+   The points beside every player and the team totals in Game Center, as a league-wide look
+   setting beside the fonts: the family, the size, and three colours (the points, the side that
+   is winning, the projection). Rides five CSS variables with the design's own values as the
+   fallbacks, so an empty setting IS the default look and nothing else on the site moves. The
+   size presets are the player line; the totals sit at 1.3x and the projection line at .8x
+   (.62x on a phone), so one number keeps the whole panel in proportion. */
+const GC_SIZES = { compact:'13px', normal:'16px', large:'20px', huge:'24px' };
+function gcScoreCfg(){
+  const g = (S && S.gcScore) || {};
+  const size = Object.prototype.hasOwnProperty.call(GC_SIZES, String(g.size||'')) ? g.size : 'normal';
+  return { family:g.family||'', size, color:g.color||'', lead:g.lead||'', proj:g.proj||'' };
+}
+function applyGcScoreStyle(){
+  const c = gcScoreCfg(), el = document.documentElement;
+  const set = (k,v) => v ? el.style.setProperty(k, v) : el.style.removeProperty(k);
+  set('--gc-font', c.family ? fontStackFor(c.family) : '');
+  set('--gc-size', c.size==='normal' ? '' : GC_SIZES[c.size]);
+  set('--gc-color', c.color); set('--gc-lead', c.lead); set('--gc-proj', c.proj);
+  /* a family none of the four typography roles use still has to be fetched */
+  let link = document.getElementById('gcScoreFont');
+  if(c.family && !Object.values(typeCfg()).some(r=>r.family===c.family)){
+    const href = 'https://fonts.googleapis.com/css2?family=' + encodeURIComponent(c.family).replace(/%20/g,'+') + ':wght@400;500;600;700;800;900&display=swap';
+    if(!link){ link=document.createElement('link'); link.id='gcScoreFont'; link.rel='stylesheet'; document.head.appendChild(link); }
+    if(link.getAttribute('href')!==href) link.setAttribute('href', href);
+  } else if(link){ link.remove(); }
+}
+function setGcScore(field, val){
+  if(!requireAdmin()) return;
+  S.gcScore = S.gcScore || {};
+  const wasSet = !!S.gcScore[field];
+  S.gcScore[field] = val;
+  saveState(); applyGcScoreStyle();
+  /* the font and size selects redraw the card; a colour pick must not, or the native picker it
+     came from closes under the finger - so only the 'auto' affordance beside it is swapped */
+  if(field==='family' || field==='size') renderGcScore();
+  else if(wasSet!==!!val){ const a = document.getElementById('gcAuto_'+field); if(a) a.outerHTML = gcAutoHTML(field, !!val); }
+}
+function gcAutoHTML(field, set){
+  return set ? `<a id="gcAuto_${field}" href="#" style="color:var(--charge);font-size:12px" onclick="setGcScore('${field}','');return false">auto</a>`
+             : `<span id="gcAuto_${field}" class="sub" style="margin:0;font-size:12px">auto</span>`;
+}
+function resetGcScore(){
+  if(!requireAdmin()) return;
+  if(!confirm('Reset the Game Center scores to the original look?')) return;
+  S.gcScore = {}; saveState(); applyGcScoreStyle(); renderGcScore();
+  toast('Game Center scores reset');
+}
+function renderGcScore(){
+  const el = document.getElementById('gcScoreInputs'); if(!el) return;
+  const c = gcScoreCfg();
+  let fopts = `<option value=""${c.family?'':' selected'}>Same as the numbers font</option>`, group='';
+  FONT_LIST.forEach(([name,kind])=>{
+    if(kind!==group){ if(group) fopts+='</optgroup>'; group=kind;
+      fopts+=`<optgroup label="${kind==='display'?'Display':kind==='sans'?'Sans':kind==='serif'?'Serif':'Mono'}">`; }
+    fopts+=`<option value="${esc(name)}"${name===c.family?' selected':''}>${esc(name)}</option>`;
+  });
+  fopts += '</optgroup>';
+  const sizes = [['compact','Compact'],['normal','Normal'],['large','Large'],['huge','Huge']];
+  const colour = (field, label, hint) => `<div class="setrow"><label>${label}</label>
+      <span class="row" style="gap:6px;align-items:center">
+        <input type="color" value="${esc(c[field]||'#888888')}" style="width:44px;padding:2px" title="${esc(hint)}" onchange="setGcScore('${field}',this.value)">
+        ${gcAutoHTML(field, !!c[field])}
+      </span></div>`;
+  el.innerHTML = `<div class="setgrid">
+      <div class="setrow"><label>Font</label><select style="max-width:190px" onchange="setGcScore('family',this.value)">${fopts}</select></div>
+      <div class="setrow"><label>Size</label><select style="max-width:190px" onchange="setGcScore('size',this.value)">${sizes.map(([v,l])=>`<option value="${v}"${v===c.size?' selected':''}>${l}</option>`).join('')}</select></div>
+      ${colour('color','Points','Each player and the team totals')}
+      ${colour('lead','Leader','The side that is winning: its total, and its players on a phone')}
+      ${colour('proj','Projection','The projected number under each score')}
+    </div>
+    <div style="margin-top:10px;padding:9px 12px;background:var(--panel-2);border-radius:var(--r-ctrl);display:flex;gap:18px;align-items:baseline;font-family:var(--gc-font,var(--f-mono));font-weight:700">
+      <span style="font-size:calc(var(--gc-size,16px)*1.3);color:var(--gc-lead,var(--turf-bright))">131.2</span>
+      <span style="font-size:var(--gc-size,16px);color:var(--gc-color,var(--chalk))">24.6</span>
+      <span style="font-size:calc(var(--gc-size,16px)*.8);font-weight:400;color:var(--gc-proj,var(--chalk-dim))">proj 19.8</span>
+    </div>`;
 }
 function resetTypography(){
   if(!confirm('Reset all fonts back to the original design?')) return;
@@ -7669,7 +7765,7 @@ const SETTING_LABELS={
   lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps', swingAlerts:'swing alerts', benchAlerts:'bench alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
-  snapshotExtras:'snapshot rows', typography:'fonts', alarmInsults:'draft alarms',
+  snapshotExtras:'snapshot rows', typography:'fonts', gcScore:'Game Center scores', alarmInsults:'draft alarms',
   tradeAlarmLines:'trade alarms', mockTrash:'mock trash talk', clockLines:'on-the-clock line',
   seasonStartedAt:'season start',
   tabFlash:'tab flash', tabFlashEvery:'tab flash', tabFlashRandom:'tab flash',
@@ -16899,7 +16995,7 @@ function renderSettings(){
     try{ renderScoreAlertSetting(); }catch(e){}
     renderPushState(); renderBuildStamp(); }
   renderSnapExtras();
-  renderTypography();
+  renderTypography(); renderGcScore();
   renderTradeReview();
   { const fa=document.getElementById('setFeeAdd'); if(fa) fa.value=String(S.txFeeAdd??0.5);
     const fd=document.getElementById('setFeeDrop'); if(fd) fd.value=String(S.txFeeDrop??0.5); }
@@ -17294,7 +17390,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-07 · draft room is the board only';
+const BUILD_STAMP = '2026-09-11 · game center score style';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -17708,6 +17804,7 @@ function importLeague(ev){
       const data = JSON.parse(r.result);
       if(data.settings) { S = {...structuredClone(DEFAULTS), ...data.settings}; saveState(); }
       if(data.draft) { D = data.draft; saveDraft(); }
+      try{ applyTypography(); }catch(e){}
       renderSettings(); renderHome(); refreshDraftUI();
       toast("League file imported ✓");
     }catch(e){ toast("That file didn't look like a league export."); } };
@@ -18635,6 +18732,7 @@ syncHeaderH();
 
 applyTheme(store.get('ffl_theme') || (document.documentElement.getAttribute('data-theme')) || 'light');
 applyTypography();
+try{ applyGcScoreStyle(); }catch(e){}
 /* push starts itself at the end of its own script block — initPush() is defined there,
    and calling it from here would hit the temporal dead zone and be swallowed */
 function fixPlayoffs2025(){   /* restore the real 2025 bracket (NFL.com export) whenever it's missing or empty */
