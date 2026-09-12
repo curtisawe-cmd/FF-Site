@@ -16787,14 +16787,14 @@ function renderMyTeam(){
         ${sel}
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:14px">
-        <span class="eyebrow" style="margin:0">Starting lineup${statsLoaded?` · <span style="color:var(--turf)">${projectedTotal(mi).toFixed(1)} projected</span>`:''}</span>
+        <span class="eyebrow mt-sec" style="margin:0">Starting lineup${statsLoaded?` · <span style="color:var(--turf)">${projectedTotal(mi).toFixed(1)} projected</span>`:''}</span>
         ${canEditTeam(mi)?`<button class="btn ghost" style="padding:3px 11px;font-size:12px" title="Start whoever projects highest this week under your league's scoring. Nobody is dropped — the bench is only reordered." onclick="optimizeLineup(${mi})">Best lineup</button>`:''}
       </div>
       ${lineupWarningHTML(mi)}
       <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${slotRows.join('')}</table></div>
-      <div class="eyebrow" style="margin-top:14px">Bench</div>
+      <div class="eyebrow mt-sec" style="margin-top:14px">Bench</div>
       <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${benchRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>
-      ${(+S.roster.IR||0)? `<div class="eyebrow" style="margin-top:14px">Reserve (IR)</div>
+      ${(+S.roster.IR||0)? `<div class="eyebrow mt-sec" style="margin-top:14px">Reserve (IR)</div>
       <div style="overflow-x:auto"><table class="plain mt-tbl" style="min-width:300px">${irRows || `<tr><td style="color:var(--chalk-dim)">Empty</td></tr>`}</table></div>`:''}
       ${roster.length? '' : `<p class="sub" style="margin-top:10px">No players yet \u2014 the roster fills in from the draft.</p>`}
       ${canEditTeam(mi)?`<div class="eyebrow" style="margin-top:16px">Add a free agent · <span style="color:${rosterCount(mi)>=rosterLimit()?'var(--danger)':'var(--turf)'}">${rosterCount(mi)} / ${rosterLimit()} rostered</span></div>
