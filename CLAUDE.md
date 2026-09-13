@@ -703,6 +703,34 @@ on the same rule inline.
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
 (`poSeedBracket`), the playoff picture and the playoff odds all read this one order.
 
+## The field line (Game Center)
+
+Every live player row carries a field: his own goal line at one end, the post his team is attacking
+at the other, and a team-logo marker where the ball actually is. `fieldSpot(nfl)` then
+`fieldBarHTML(nfl, flip)`; the CSS is `.fld*` plus `.h2h-fld` for the phone.
+
+The arithmetic. ESPN's `situation.yardLine` is the absolute spot **0-100 measured from the HOME
+goal line** - verified against the live feed ("GB 46" with Minnesota at home arrives as 54, "ARI 3"
+with the Chargers at home as 97). So a team's own progress up the field is that number when it is
+home and its mirror when it is away: `pos = g.home ? g.yl : 100 - g.yl`, where 0 is its own goal
+line and 100 the end zone it attacks. One field, oriented per player - the same game shows a
+Chargers man at 97 and a Cardinal at 3.
+
+Possession is a separate question from orientation. The marker is whoever has the ball
+(`games[code].possCode`), so a defence watches the other team's logo come at its own end zone; the
+fill is turf when his own offence is out there and a dim line when it is not; the red band sits at
+whichever end the team in possession is attacking. The caption is ESPN's short down and distance
+plus the spot ("1st & 10 at ARI 16"), and the tooltip spells the whole thing out in a sentence.
+
+Nothing is drawn unless the game is live AND somebody has possession AND a down is posted:
+`loadKickoffs` sets `yl` to null otherwise, because between a touchdown and the next kickoff ESPN
+blanks possession and parks `yardLine` at 100, which would paint a phantom drive on every roster
+row. Both call sites are behind `slateWeek`, so an archive week never borrows today's slate. The
+bar moves on the 45-second tick the football already rides (`liveBallOpen`).
+
+`--gold` is otherwise reserved for trophies and champions; the goal post is the one exception,
+because a goal post is yellow in life and reads as one instantly at nine pixels.
+
 ## One game's scoring (the popup behind a Game Center name)
 
 A name in Game Center opens `openGameScore(pid, wk, season)` - that game and only that game -
