@@ -730,19 +730,39 @@ Three questions that come apart, and each drives something different:
   when the other team does**. So a D/ST row lights up while it is being driven at, and the marker is
   the opponent's logo coming toward its own end zone.
 
-The shell is drawn for the whole of a live game, including the seconds ESPN posts no spot at all -
-after a touchdown it blanks possession and parks `yardLine` at 100. Drawing the drive then would be
-a lie, and removing the bar would be worse: Game Center replaces its markup wholesale every
-forty-five seconds, and a row that grows and shrinks walks the page under whoever is reading it. So
-the track stays, the ball comes off, and the caption says "Between plays". `yl` is gated on a down
-being posted, not on possession, because ESPN sometimes has the spot a beat before it names the
-offence - then the fill is drawn with no marker. A blanked `yardLine` is rejected by type
-(`typeof sit.yardLine === 'number'`), since `+null` and `+''` are both 0, which is a real yard line.
+The shell is drawn for the whole of a live game, including the seconds ESPN posts no spot at all.
+Drawing a drive then would be a lie, and removing the bar would be worse: Game Center replaces its
+markup wholesale every forty-five seconds, and a row that grows and shrinks walks the page under
+whoever is reading it. So the track stays and the ball comes off.
+
+What the feed actually does in those gaps, measured over 776 live `situation` objects and the full
+play-by-play of four games (553/553 exact rebuilds of `possessionText` from `yardLine`, 261/261 on
+the play-by-play, 540/540 on `isRedZone`):
+
+- **After a score**, `possession` and the down text are all absent, `down` is **-1**, and `yardLine`
+  is the scoring end zone itself (100 when the home team scored, 0 when the away team did).
+- **At halftime**, `state` stays `"in"` and the `situation` object survives *stripped*: no
+  possession, no down text, and a `yardLine` of 65 left over from an "End of Half" pseudo-play. It
+  is not a ball spot. Thirteen minutes of "Between plays" would be the wrong word, so
+  `loadKickoffs` names the long pauses (`pause`: Halftime, End of Q3) and the caption uses it.
+- **Between quarters**, by contrast, the real spot and down survive, so the bar keeps drawing.
+- **Pre and Final** carry no `situation` object at all - nothing to mistake for data.
+
+So `yl` needs a down on the board (`ddT && +sit.down>=1`) and a `yardLine` that is a number by type
+(`typeof sit.yardLine === 'number'` - `+null` and `+''` are both 0, which is a real yard line). It
+is **not** gated on possession, because ESPN can post the spot a beat before it names the offence;
+then the fill draws with no marker. The red-zone band, though, *is* gated on possession:
+`isRedZone` outlives the frame that named an offence, and without one there is no end to pin it to.
 
 Both call sites are behind `slateWeek`, so an archive week never borrows today's slate. The bar moves
 on the 45-second tick the football already rides (`liveBallOpen`). The marker is positioned in
 pixels, not percent (`left:calc(6.5px + (100% - 13px) * var(--p) / 100)`), so a ball on the goal line
-still sits inside the track on a phone.
+still sits inside the track on a phone. A tick at midfield (`.fld-t::after`) keeps 40 and 60 from
+being the same picture.
+
+`possessionText` is territory, not the offence: "MIA 22" can be Las Vegas's ball in Miami's half.
+The rule ESPN follows is `yardLine<50 ? home+' '+yardLine : yardLine>50 ? away+' '+(100-yardLine)
+: '50'`, and `situation.possession` is a **string** holding `team.id`.
 
 `--gold` is otherwise reserved for trophies and champions; the goal post is the one exception,
 because a goal post is yellow in life and reads as one instantly at nine pixels.

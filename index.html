@@ -2628,6 +2628,8 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .fld-fill{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--chalk-dim);opacity:.55}
 .fld.mine .fld-fill{background:var(--turf);opacity:1}
 .fld-rz{position:absolute;top:0;bottom:0;width:20%;border-radius:3px;background:var(--charge);opacity:.5}
+/* midfield, so a marker at 40 and one at 60 are not the same picture */
+.fld-t::after{content:'';position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-strong);opacity:.65}
 /* the ball can be ON the goal line, so the marker is placed in pixels, not percent: at 0 and at
    100 it still sits inside the track instead of hanging off the end of it */
 .fld-mk{position:absolute;top:50%;width:13px;height:13px;object-fit:contain;border-radius:50%;
@@ -15798,15 +15800,21 @@ async function loadKickoffs(force){
       /* "WSH 46" is ESPN's spelling; every other line in the app says WAS */
       const spotTxt = String(sit.possessionText||'').replace(/^[A-Z]{2,4}/, m => ESPN_TEAM_FIX[m] || m);
       /* a down on the board is what says the ball is somewhere real; who has it is asked
-         separately, because ESPN can post the spot a beat before it names the offence */
-      const yl = (state==='in' && ddT && Number.isFinite(ylN) && ylN>=0 && ylN<=100) ? ylN : null;
+         separately, because ESPN can post the spot a beat before it names the offence. down is
+         -1 in the frames just after a score, where the yard line is the end zone itself. */
+      const yl = (state==='in' && ddT && +sit.down>=1 && Number.isFinite(ylN) && ylN>=0 && ylN<=100) ? ylN : null;
+      /* halftime keeps a situation object with everything stripped but a pseudo-play's yard
+         line, so it lands here as "no spot" - and deserves its own word rather than the one
+         for the twenty seconds between two snaps */
+      const tyName = String((st.type||{}).name||'').toUpperCase();
+      const pause = tyName==='STATUS_HALFTIME' ? 'Halftime' : (tyName==='STATUS_END_PERIOD' ? 'End of Q'+(period||'') : '');
       const possCode = (yl!=null) ? (codeOf(cs.find(c=>hasBall(c)) || {}) || '') : '';
       cs.forEach((c,i)=>{
         const code = codeOf(c); if(!code) return;
         const other = cs.find((o,k)=>k!==i);
         map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home',
                                        ball: hasBall(c), oppBall: !!other && hasBall(other), rz: !!sit.isRedZone,
-                                       yl, possCode, dd: String(sit.shortDownDistanceText||'') || ddT.replace(/\s+at\s+\S.*$/, ''), spot: spotTxt };
+                                       yl, possCode, dd: String(sit.shortDownDistanceText||'') || ddT.replace(/\s+at\s+\S.*$/, ''), spot: spotTxt, pause };
       });
       list.push(nflGameEntry(ev, comp, st, cs, t, state, period, clock, label, codeOf));   /* the scoreboard tab's card */
     });
@@ -15932,7 +15940,7 @@ function fieldSpot(nfl, pos){
   return { known,
            pos: known ? (g.home ? g.yl : 100 - g.yl) : null,   /* 0 = his own goal line, 100 = the one he attacks */
            mine: def ? !!g.oppBall : !!g.ball,                  /* is HIS unit the one on the field */
-           poss: g.possCode||'', rz: !!g.rz, dd: g.dd||'', spot: g.spot||'', opp: g.opp||'' };
+           poss: g.possCode||'', rz: !!g.rz, dd: g.dd||'', spot: g.spot||'', opp: g.opp||'', pause: g.pause||'' };
 }
 /* The goal post, side on: two uprights, the crossbar, the stem. An inline SVG rather than an
    emoji, for the same reason the football is one - it is the same shape on every phone. */
@@ -15946,10 +15954,14 @@ function fieldBarHTML(nfl, flip, pos){
   const code = String(nfl||'').toUpperCase();
   const near = flip ? 'right' : 'left', far = flip ? 'left' : 'right';
   const cls = `fld${flip?' r':''}${f.mine?' mine':''}`;
-  if(!f.known)
-    return `<div class="${cls}" title="Between plays — no ball spot posted yet">
+  /* halftime is not "between plays", and thirteen minutes of the wrong word is worse than
+     none - loadKickoffs names the long pauses */
+  if(!f.known){
+    const why = f.pause || 'Between plays';
+    return `<div class="${cls}" title="${esc(why)} — no ball spot posted">
       <div class="fld-row"><span class="fld-post">${goalPostSVG()}</span><span class="fld-t"></span></div>
-      <div class="fld-cap">Between plays</div></div>`;
+      <div class="fld-cap">${esc(why)}</div></div>`;
+  }
   const pct = Math.max(0, Math.min(100, f.pos));
   /* Two different questions, and they come apart on a defence. `ours` is whether HIS NFL team
      has the ball, which sets the direction of travel - the red-zone end, the yards that are
@@ -15971,7 +15983,7 @@ function fieldBarHTML(nfl, flip, pos){
       <span class="fld-post">${goalPostSVG()}</span>
       <span class="fld-t">
         <span class="fld-fill" style="${near}:0;width:${pct}%"></span>
-        ${f.rz ? `<i class="fld-rz" style="${rzEnd}:0"></i>` : ''}
+        ${(f.rz && f.poss) ? `<i class="fld-rz" style="${rzEnd}:0"></i>` : ''}
         ${f.poss ? `<img class="fld-mk" src="https://sleepercdn.com/images/team_logos/nfl/${esc(String(f.poss).toLowerCase())}.png"
              style="--p:${pct}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">` : ''}
       </span>
@@ -18246,7 +18258,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-13 · down the field, steadier';
+const BUILD_STAMP = '2026-09-13 · down the field, verified';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
