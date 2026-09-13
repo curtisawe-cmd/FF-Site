@@ -15803,11 +15803,20 @@ async function loadKickoffs(force){
          separately, because ESPN can post the spot a beat before it names the offence. down is
          -1 in the frames just after a score, where the yard line is the end zone itself. */
       const yl = (state==='in' && ddT && +sit.down>=1 && Number.isFinite(ylN) && ylN>=0 && ylN<=100) ? ylN : null;
-      /* halftime keeps a situation object with everything stripped but a pseudo-play's yard
-         line, so it lands here as "no spot" - and deserves its own word rather than the one
-         for the twenty seconds between two snaps */
+      /* When the spot goes missing the bar has to say something, and "between plays" is a poor
+         word for a thirteen-minute half-time or the two minutes of adverts after a field goal.
+         ESPN names both: the status for the long breaks, and lastPlay for why the ball is not
+         down - measured live, an Official Timeout after a score holds this state for minutes. */
       const tyName = String((st.type||{}).name||'').toUpperCase();
-      const pause = tyName==='STATUS_HALFTIME' ? 'Halftime' : (tyName==='STATUS_END_PERIOD' ? 'End of Q'+(period||'') : '');
+      const lpType = String(((sit.lastPlay||{}).type||{}).text||'');
+      const pause =
+          tyName==='STATUS_HALFTIME'   ? 'Halftime'
+        : tyName==='STATUS_END_PERIOD' ? 'End of Q'+(period||'')
+        : /timeout/i.test(lpType)      ? 'Timeout'
+        : /kickoff/i.test(lpType)      ? 'Kickoff'
+        : /touchdown|field goal|extra point|two.?point|safety/i.test(lpType) ? 'After the score'
+        : /punt/i.test(lpType)         ? 'Punt away'
+        : '';
       const possCode = (yl!=null) ? (codeOf(cs.find(c=>hasBall(c)) || {}) || '') : '';
       cs.forEach((c,i)=>{
         const code = codeOf(c); if(!code) return;
@@ -18258,7 +18267,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-13 · down the field, verified';
+const BUILD_STAMP = '2026-09-13 · why the ball is not down';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

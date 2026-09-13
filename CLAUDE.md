@@ -743,8 +743,16 @@ the play-by-play, 540/540 on `isRedZone`):
   is the scoring end zone itself (100 when the home team scored, 0 when the away team did).
 - **At halftime**, `state` stays `"in"` and the `situation` object survives *stripped*: no
   possession, no down text, and a `yardLine` of 65 left over from an "End of Half" pseudo-play. It
-  is not a ball spot. Thirteen minutes of "Between plays" would be the wrong word, so
-  `loadKickoffs` names the long pauses (`pause`: Halftime, End of Q3) and the caption uses it.
+  is not a ball spot.
+- **During the adverts after a score**, the same shape holds for *minutes*: measured live, a field
+  goal put ARI@LAC into `down:-1`, `lastPlay.type.text:"Official Timeout"` for seven consecutive
+  ten-second polls, half of that game's samples.
+
+So "Between plays" is a poor word for most of the time this state is on screen, and ESPN names the
+reason twice over - `status.type.name` for the long breaks, `lastPlay.type.text` for why the ball is
+not down. `loadKickoffs` turns them into `pause`: **Halftime**, **End of Q3**, **Timeout**,
+**Kickoff**, **After the score**, **Punt away**, and only falls back to "Between plays" when it
+recognises nothing.
 - **Between quarters**, by contrast, the real spot and down survive, so the bar keeps drawing.
 - **Pre and Final** carry no `situation` object at all - nothing to mistake for data.
 
