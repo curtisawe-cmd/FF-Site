@@ -421,7 +421,8 @@ off it until `currentNflWeek()` itself is 1 (`playerKickoff` checks the week). `
 prints "Sun 1:00 PM vs KC" / "LIVE Q2 5:12" / "Final" after the position line of each My Team row,
 and a slate that changed redraws the Teams view once per fetch.
 
-`loadKickoffs` now keeps `NFL_KICKS.games[TEAM] = {kick, state:'pre'|'in'|'post', remain, label}`
+`loadKickoffs` now keeps `NFL_KICKS.games[TEAM] = {kick, state:'pre'|'in'|'post', remain, label, ball,
+oppBall, rz}` (the last three: who has the ball, by ESPN's team id against each side, and the red zone)
 off the same ESPN scoreboard (`status.type.state`, `period`, `displayClock`; `gameRemain`
 turns period + clock into the fraction of the game left, halftime = 0.5, OT ≈ 0.05), and
 refetches every **3 minutes while a slate is on** (`slateActive`) instead of every 6 hours.
@@ -470,6 +471,14 @@ nothing. `nflStop()` runs on any other sub-tab, a tick that finds the tab closed
 `document.hidden` skips, and coming back to the app ticks at once. The Refresh button
 (`nflRefresh(btn)`) forces one fetch and always redraws, so the button comes back even when nothing
 moved.
+
+The little football: `ballSVG()` is an inline SVG (the same brown ball on every phone and theme,
+not an emoji), and `ballTagHTML(p)` puts it inside the Game Center clock tag (`gameTag`) for an
+offence player whose team has the ball or a defence whose opponent has it (`games[code].ball` /
+`.oppBall`), with a red halo in the red zone; between plays ESPN names nobody and the ball is off
+for a moment. The NFL Scores cards show the same ball beside the side in possession. Because a
+football three minutes stale is wrong half the time, the 45-second tick runs while Game Center is
+open too (`liveBallOpen`), and a fetch that changed the list redraws whichever of the two is showing.
 
 ## Weekly recaps (auto-written)
 

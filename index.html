@@ -1341,8 +1341,12 @@ nav.tabs button{position:relative}
 .nfl-right{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
 .nfl-score{font-family:var(--f-mono);font-weight:800;font-size:22px;line-height:1;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums;color:var(--chalk)}
 .nfl-game.post .nfl-team.lose{opacity:.55}
-.nfl-ball{width:9px;height:9px;border-radius:50%;background:var(--turf);display:inline-block;flex:none}
-.nfl-ball.rz{background:var(--charge)}
+/* the little football beside whoever has the ball: brown on every theme, a red halo in the red zone */
+.gc-ball{display:inline-flex;align-items:center;vertical-align:-2px;margin-left:4px;line-height:0;flex:none}
+.gc-ball .ball{display:block;width:13px;height:13px}
+.gc-ball.rz .ball{filter:drop-shadow(0 0 2px var(--charge))}
+.nfl-ball{margin-left:0}
+.nfl-ball .ball{width:16px;height:16px}
 .nfl-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);
   border-top:1px solid var(--line);padding-top:7px;margin-top:2px;letter-spacing:.02em}
 .nfl-status .nfl-clock{color:var(--chalk);font-weight:700;display:inline-flex;align-items:center}
@@ -11359,7 +11363,8 @@ function setMuTab(t){
   if(sch)   sch.style.display   = t==='sched' ? 'block':'none';
   if(po)    po.style.display    = t==='po'    ? 'block':'none';
   if(t==='gc') renderGameCenter();
-  if(t==='nfl'){ renderNflScores(); nflStart(); } else nflStop();   /* the scoreboard's own clock runs only while it is open */
+  if(t==='nfl') renderNflScores();
+  if(t==='nfl' || t==='gc') nflStart(); else nflStop();   /* the 45-second clock runs while either scoreboard is open */
   if(t==='sched') renderSchedule();
   if(t==='po') renderPlayoffs();
   updateGhost();
@@ -11662,7 +11667,7 @@ async function renderGameCenter(){
   const gameTag = p => {
     if(!slateWeek || !p) return '';
     const g = gameOf(p.nfl); if(!g) return '';
-    return `<span class="gc-gs ${g.state}">${esc(g.label)}</span>`;   /* the separator is CSS: inline on desktop, its own line on a phone */
+    return `<span class="gc-gs ${g.state}">${esc(g.label)}${ballTagHTML(p)}</span>`;   /* the separator is CSS: inline on desktop, its own line on a phone */
   };
   /* what an empty stat line means depends on the clock: before kickoff nobody has played */
   const noLine = p => { const g = slateWeek && p ? gameOf(p.nfl) : null;
@@ -15538,10 +15543,14 @@ async function loadKickoffs(force){
       const label = state==='post' ? 'Final' : state==='in' ? ((period>4?'OT':'Q'+period) + (clock?' '+clock:'')) : kickoffLabel(t);
       const cs = comp.competitors||[];
       const codeOf = c => { const ab = String((c.team||{}).abbreviation||'').toUpperCase(); return ab ? (ESPN_TEAM_FIX[ab]||ab) : ''; };
+      /* who has the ball, by ESPN's team id, so a roster row can show the football */
+      const sit = comp.situation || {}, poss = (state==='in' && sit.possession!=null) ? String(sit.possession) : '';
+      const hasBall = c => !!poss && !!c && (poss===String((c.team||{}).id||'') || poss===String(c.id||''));
       cs.forEach((c,i)=>{
         const code = codeOf(c); if(!code) return;
         const other = cs.find((o,k)=>k!==i);
-        map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home' };
+        map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home',
+                                       ball: hasBall(c), oppBall: !!other && hasBall(other), rz: !!sit.isRedZone };
       });
       list.push(nflGameEntry(ev, comp, st, cs, t, state, period, clock, label, codeOf));   /* the scoreboard tab's card */
     });
@@ -15550,8 +15559,12 @@ async function loadKickoffs(force){
       NFL_KICKS = { wk, map, games, list, at: Date.now() };
       /* the My Team rows carry the slate, so a slate that moved redraws them - and only then */
       if(before !== JSON.stringify(games) && window.currentView==='teams'){ try{ renderTeams(); }catch(e){} }
-      /* and the scoreboard redraws when a score, clock or situation moved - not on every fetch */
-      if(scoresBefore !== JSON.stringify(list) && nflScoresOpen()){ try{ renderNflScores(); }catch(e){} }
+      /* and the scoreboard redraws when a score, clock or situation moved - not on every fetch;
+         the Game Center's football moves with the same fetch */
+      if(scoresBefore !== JSON.stringify(list)){
+        if(nflScoresOpen()){ try{ renderNflScores(); }catch(e){} }
+        else if(liveBallOpen()){ try{ renderGameCenter(); }catch(e){} }
+      }
     }
   }catch(e){}
 }
@@ -15596,6 +15609,8 @@ function nflGameEntry(ev, comp, st, cs, kick, state, period, clock, label, codeO
            last: String(((sit.lastPlay||{}).text)||'').replace(/\s+/g,' ').trim() };
 }
 function nflScoresOpen(){ return window.currentView==='matchups' && window.muTab==='nfl'; }
+/* Game Center shows the football too, so it wants the same clock while a game is on */
+function liveBallOpen(){ return window.currentView==='matchups' && (window.muTab==='nfl' || window.muTab==='gc'); }
 /* a game is on, or about to be - or ESPN still says "pre" for one that kicked off, which is
    the same thing to a scoreboard: keep asking */
 function nflSlateLive(){
@@ -15607,7 +15622,7 @@ let _nflTimer = null, _nflBusy = false;
    moved, so a tick only has to fetch; a forced one (the Refresh button) also redraws so the
    "Updated" line answers the tap. */
 async function nflTick(force){
-  if(!nflScoresOpen()){ nflStop(); return; }
+  if(!liveBallOpen()){ nflStop(); return; }
   if(document.hidden || _nflBusy) return;
   _nflBusy = true;
   try{ await loadKickoffs(force || nflSlateLive()); if(force && nflScoresOpen()) renderNflScores(); }
@@ -15621,7 +15636,21 @@ async function nflRefresh(btn){
   if(nflScoresOpen()) renderNflScores();      /* a tick that found nothing new still puts the button back */
 }
 /* coming back to the app with the scoreboard open: catch up now, not in 45 seconds */
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && nflScoresOpen()) nflTick(false); });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && liveBallOpen()) nflTick(false); });
+/* the little football: an inline SVG, so it is the same brown ball on every phone and theme
+   rather than whatever an emoji font makes of it */
+function ballSVG(){
+  return '<svg class="ball" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><ellipse cx="8" cy="8" rx="7.3" ry="4.4" transform="rotate(-45 8 8)" fill="#8a4b1f" stroke="#4e2a0f" stroke-width=".7"/><path d="M5.3 10.7L10.7 5.3M6.6 8.4l1 1M7.7 7.3l1 1M8.8 6.2l1 1" stroke="#fff" stroke-width=".9" stroke-linecap="round" fill="none"/></svg>';
+}
+/* "he is on the field right now": an offence player whose team has the ball, or a defence whose
+   opponent has it. Between plays ESPN can name nobody, so the ball is off for a moment. */
+function ballTagHTML(p){
+  const g = p ? gameOf(p.nfl) : null; if(!g || g.state!=='in') return '';
+  const def = String(p.pos||'').toUpperCase()==='DEF';
+  if(!(def ? g.oppBall : g.ball)) return '';
+  const who = def ? `${esc(g.opp||'')} has the ball · the defence is on the field` : `${esc(String(p.nfl||'').toUpperCase())} has the ball`;
+  return `<span class="gc-ball${g.rz?' rz':''}" title="${who}${g.rz?' · red zone':''}">${ballSVG()}</span>`;
+}
 /* "P. Mahomes" on a card that has room for three names, not one; a defence is its city code */
 function nflShortName(p){
   if(String(p.pos||'').toUpperCase()==='DEF') return String(p.nfl||p.name||'') + ' D/ST';
@@ -15661,7 +15690,7 @@ function renderNflScores(){
     const score = g.state==='pre' || s.score==null ? '' : String(s.score);
     return `<div class="${cls}">${nflLogoHTML(s.code)}
       <span class="nfl-name"><span class="nfl-nm">${esc(s.name||s.code||'TBD')}</span>${s.rec ? `<small>${esc(s.rec)}</small>` : ''}</span>
-      <span class="nfl-right">${ball ? `<i class="nfl-ball${g.rz?' rz':''}" title="${g.rz?'Has the ball, in the red zone':'Has the ball'}"></i>` : ''}<b class="nfl-score">${score}</b></span>
+      <span class="nfl-right">${ball ? `<span class="gc-ball nfl-ball${g.rz?' rz':''}" title="${g.rz?'Has the ball, in the red zone':'Has the ball'}">${ballSVG()}</span>` : ''}<b class="nfl-score">${score}</b></span>
     </div>`;
   };
   const statusHTML = g => {
@@ -17889,7 +17918,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-13 · NFL scores';
+const BUILD_STAMP = '2026-09-13 · football on the field';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
