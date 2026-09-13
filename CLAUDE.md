@@ -26,8 +26,9 @@ making this repo authoritative. See `README.txt` in that folder.
 
 **Main tabs**: Home, Draft Room, Matchups, Teams, Players, Chat, Stats, Settings - the same list in the
 top bar (`nav.tabs`) and the phone drawer (`.drawer-tabs`). Teams hosts My Team, All Teams, Trades and
-Transactions as sub-tabs; Players hosts the player list, Waivers, Pickups, Injuries and News. The
-`trades` view highlights the Teams tab (`showView` navV); `goSub(k)` routes every sub-tab.
+Transactions as sub-tabs; Players hosts the player list, Waivers, Pickups, Injuries and News;
+Matchups hosts the board, Game Center, NFL Scores, Schedule and Playoffs (`setMuTab`). The `trades`
+view highlights the Teams tab (`showView` navV); `goSub(k)` routes every sub-tab.
 
 | Path | Tracked | What it is |
 | --- | --- | --- |
@@ -438,6 +439,37 @@ beside each player. The matchups board reads `liveScoresMap[wk].live.g{m}` -
 shows it while the week is on (fresh within 30 minutes), `Final` only once `weekIsOver` or an
 official score exists. `winBarHTML(a, b, final, note, live)` takes `{pct, sub}` to draw a
 probability worked out elsewhere; a note starting with "Live" gets the pulsing dot.
+
+## NFL scores (Matchups > NFL Scores)
+
+The week's NFL slate as a scoreboard, the fifth sub-tab under Matchups (`#nflView`, `setMuTab('nfl')`,
+`renderNflScores`). It reads nothing new: `loadKickoffs` now also builds `NFL_KICKS.list`, one entry
+per ESPN event via `nflGameEntry` - `{id, kick, state, period, clock, detail, off, tv, odds, ou, venue,
+neutral, home:{id, code, name, score, rec, win}, away:{...}, poss, down, rz, last}`. `detail` is the
+clock the way the app writes it ("Q2 5:12", "Halftime", "End Q3", "Final/OT"); `off` marks a
+postponed, cancelled or delayed game, which shows ESPN's own word and never counts as live; `poss` is
+ESPN's *team id* (`situation.possession`), which is why each side keeps `id` (and the competitor's `cid`) beside `code`.
+`loadKickoffs` redraws the tab when the list changed (a `JSON` compare, like the Teams redraw beside
+it), so a fetch that found nothing new touches no DOM.
+
+Cards are grouped by local day and sorted by kickoff: away on top, home below, records beside the
+names, Sleeper's team logos (the defence badges' source, so nothing new is cached). Before kickoff a
+card shows the time, TV and the line ("CIN -3.5 · O/U 50.5"); live it shows the clock with the
+blinking dot, a turf dot beside the team with the ball (charge red in the red zone), down and
+distance, and the last play on one line; final dims the loser (a tie dims nobody). A neutral-site
+game names its venue. Each card names the starters of the device's team (`myTeamIdx`,
+`starterPicks`) and of this week's opponent (the `S.season.schedule[wk]` pair) who are in that game,
+"P. Mahomes" style (`nflShortName`; a defence is "KC D/ST") - the reason to watch a scoreboard here
+rather than on ESPN.
+
+Refresh: while the tab is closed the pulse's `loadKickoffs()` is all there is. Open, `nflStart()`
+runs `nflTick` every 45 s (`NFL_LIVE_MS`), which forces a fetch only while `nflSlateLive()` - a game
+is `in`, or a `pre` game is within two minutes of kickoff or up to four hours past it (ESPN can say
+"pre" for a minute after the whistle); otherwise `loadKickoffs` keeps its TTL and the tick costs
+nothing. `nflStop()` runs on any other sub-tab, a tick that finds the tab closed stops itself,
+`document.hidden` skips, and coming back to the app ticks at once. The Refresh button
+(`nflRefresh(btn)`) forces one fetch and always redraws, so the button comes back even when nothing
+moved.
 
 ## Weekly recaps (auto-written)
 

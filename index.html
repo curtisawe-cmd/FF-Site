@@ -1321,6 +1321,42 @@ nav.tabs button{position:relative}
 .pgame.live{color:var(--turf);font-weight:700}
 .pgame.final{opacity:.8}
 @media(max-width:560px){ .pgame{display:block} .pgame .pgame-sep{display:none} }
+/* ---- NFL scores: the week's slate, every game a card, grouped by day ---- */
+.nfl-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.nfl-wk{font-family:var(--f-mono);font-size:12px;font-weight:500;letter-spacing:.08em;color:var(--chalk-dim);margin-left:8px;vertical-align:middle}
+.nfl-chip{display:inline-flex;align-items:center;font-family:var(--f-mono);font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap;
+  color:var(--chalk-dim);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+.nfl-chip.live{color:var(--charge);border-color:var(--charge);background:var(--charge-wash)}
+.nfl-day{margin:16px 0 8px}
+.nfl-head + .nfl-day{margin-top:8px}
+.nfl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.nfl-game{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-ctrl);padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.nfl-game.in{border-color:var(--turf)}
+.nfl-game.off{opacity:.75}
+.nfl-team{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:32px}
+.nfl-logo{width:28px;height:28px;object-fit:contain;display:block}
+.nfl-name{display:flex;align-items:baseline;gap:6px;min-width:0;font-weight:700}
+.nfl-name .nfl-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.nfl-name small{flex:none;font-weight:500;color:var(--chalk-dim);font-family:var(--f-mono);font-size:11px}
+.nfl-right{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
+.nfl-score{font-family:var(--f-mono);font-weight:800;font-size:22px;line-height:1;min-width:2ch;text-align:right;font-variant-numeric:tabular-nums;color:var(--chalk)}
+.nfl-game.post .nfl-team.lose{opacity:.55}
+.nfl-ball{width:9px;height:9px;border-radius:50%;background:var(--turf);display:inline-block;flex:none}
+.nfl-ball.rz{background:var(--charge)}
+.nfl-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;color:var(--chalk-dim);
+  border-top:1px solid var(--line);padding-top:7px;margin-top:2px;letter-spacing:.02em}
+.nfl-status .nfl-clock{color:var(--chalk);font-weight:700;display:inline-flex;align-items:center}
+.nfl-game.in .nfl-clock{color:var(--charge)}
+.nfl-dot{width:7px;height:7px;border-radius:50%;background:var(--charge);display:inline-block;margin-right:5px;flex:none;animation:blink 1.3s ease-in-out infinite}
+.nfl-venue{flex-basis:100%;font-size:11px}
+.nfl-sit{font-size:12.5px;color:var(--chalk)}
+.nfl-sit .rz{color:var(--charge);font-weight:700}
+.nfl-last{font-size:12px;color:var(--chalk-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.nfl-mine{font-size:12px;color:var(--chalk-dim);line-height:1.4;display:flex;flex-wrap:wrap;gap:2px 12px}
+.nfl-mine b{color:var(--turf);font-weight:700}
+.nfl-mine .opp b{color:var(--charge)}
+.nfl-foot{font-size:11px;color:var(--chalk-dim);margin:14px 0 0}
+@media(max-width:560px){ .nfl-game{padding:10px 12px} .nfl-score{font-size:20px} }
 /* the bare number in the Players table's Bye column */
 .byenum{display:inline-block;min-width:22px;font-family:var(--f-mono);color:var(--chalk-dim)}
 .byenum.now{color:var(--charge);font-weight:800}
@@ -2326,7 +2362,7 @@ section.view[data-ghost]::before{
 section.view[data-ghost] > *{position:relative;z-index:1}
 :root[data-theme="dark"] section.view[data-ghost]::before{color:var(--turf-bright);opacity:.085}
 #view-draft{max-width:none}                    /* the 12x17 board needs every pixel */
-#matchupsView,#gcView,#tradesView{max-width:900px;margin-left:auto;margin-right:auto}   /* these read better narrower - and the board and Game Center are the same width, so switching tabs does not jump */
+#matchupsView,#gcView,#nflView,#tradesView{max-width:900px;margin-left:auto;margin-right:auto}   /* these read better narrower - and the board and Game Center are the same width, so switching tabs does not jump */
 .gc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;
   border-bottom:1px solid var(--line)}
 .gc-side{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
@@ -2849,12 +2885,14 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
   <div class="row musub" style="gap:8px;margin-bottom:16px">
     <button class="btn" data-sub="board" onclick="setMuTab('board')">Matchups</button>
     <button class="btn ghost" data-sub="gc" onclick="setMuTab('gc')">Game Center</button>
+    <button class="btn ghost" data-sub="nfl" onclick="setMuTab('nfl')">NFL Scores</button>
     <button class="btn ghost" data-sub="sched" onclick="setMuTab('sched')">Schedule</button>
     <button class="btn ghost" data-sub="po" onclick="setMuTab('po')">Playoffs</button>
   </div>
   </div><!--/viewhead-->
   <div id="matchupsView"></div>
   <div id="gcView" style="display:none"></div>
+  <div id="nflView" style="display:none"></div>
   <div id="schedView" style="display:none"></div>
   <div id="poView" style="display:none"></div>
 </section>
@@ -8482,6 +8520,7 @@ function updateGhost(){
   const v = window.currentView; if(!v) return;
   let label = GHOST_LABEL[v] || '';
   if(v==='matchups' && window.muTab==='gc') label = 'GAME CENTER';
+  if(v==='matchups' && window.muTab==='nfl') label = 'NFL SCORES';
   if(v==='players'){ if(window.plTab==='inj') label='INJURY REPORT'; else if(window.plTab==='week') label='WEEK STATS'; else if(window.plTab==='news') label='PLAYER NEWS'; else if(window.plTab==='pick') label='PICKUPS'; else if(window.plTab==='wv') label='WAIVERS'; }
   if(v==='teams' && window.teamsSub==='my') label = 'MY TEAM';
   if(v==='trades' && window.trTab==='moves') label = 'TRANSACTIONS';
@@ -11313,12 +11352,14 @@ function setMuTab(t){
   window.muTab = t;
   document.querySelectorAll('.musub button').forEach(b=>b.className='btn'+(b.dataset.sub===t?'':' ghost'));
   const board=document.getElementById('matchupsView'), gc=document.getElementById('gcView'),
-        sch=document.getElementById('schedView'), po=document.getElementById('poView');
+        sch=document.getElementById('schedView'), po=document.getElementById('poView'), nfl=document.getElementById('nflView');
   if(board) board.style.display = t==='board' ? 'block':'none';
   if(gc)    gc.style.display    = t==='gc'    ? 'block':'none';
+  if(nfl)   nfl.style.display   = t==='nfl'   ? 'block':'none';
   if(sch)   sch.style.display   = t==='sched' ? 'block':'none';
   if(po)    po.style.display    = t==='po'    ? 'block':'none';
   if(t==='gc') renderGameCenter();
+  if(t==='nfl'){ renderNflScores(); nflStart(); } else nflStop();   /* the scoreboard's own clock runs only while it is open */
   if(t==='sched') renderSchedule();
   if(t==='po') renderPlayoffs();
   updateGhost();
@@ -15455,7 +15496,7 @@ Bench players are not dropped, only reordered.`)) return;
    applies. Preseason and bye weeks lock nothing for the same reason - no kickoff, no lock.
    The commissioner can push through any locked move behind a confirm, because fixing a
    lineup for someone at the bar IS the commissioner's job. */
-let NFL_KICKS = { wk: 0, map: {}, games: {}, at: 0 };
+let NFL_KICKS = { wk: 0, map: {}, games: {}, list: [], at: 0 };
 const ESPN_TEAM_FIX = { WSH:'WAS' };   /* the one code ESPN and Sleeper disagree on */
 /* how much of a game is left, 0..1, off ESPN's period and clock: halftime is 0.5, overtime is
    nearly nothing, a game not yet kicked off is everything */
@@ -15479,13 +15520,13 @@ async function loadKickoffs(force){
   /* all preseason it is week 1's slate: the roster rows say when everybody plays, and nothing
      locks off it until currentNflWeek() itself says the week is on (see playerKickoff) */
   const wk = currentNflWeek() || projWeekNow();
-  if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, games: {}, at: Date.now() }; return; }
+  if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, games: {}, list: [], at: Date.now() }; return; }
   const ttl = slateActive() ? 3*60000 : 6*3600000;
   if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < ttl) return;
   try{
     const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${wk}&dates=2026`);
     const j = await r.json();
-    const map = {}, games = {};
+    const map = {}, games = {}, list = [];
     (j.events||[]).forEach(ev=>{
       const t = Date.parse(ev.date); if(!Number.isFinite(t)) return;
       const comp = (ev.competitions||[])[0]||{};
@@ -15502,14 +15543,171 @@ async function loadKickoffs(force){
         const other = cs.find((o,k)=>k!==i);
         map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home' };
       });
+      list.push(nflGameEntry(ev, comp, st, cs, t, state, period, clock, label, codeOf));   /* the scoreboard tab's card */
     });
     if(Object.keys(map).length){
-      const before = JSON.stringify(NFL_KICKS.games||{});
-      NFL_KICKS = { wk, map, games, at: Date.now() };
+      const before = JSON.stringify(NFL_KICKS.games||{}), scoresBefore = JSON.stringify(NFL_KICKS.list||[]);
+      NFL_KICKS = { wk, map, games, list, at: Date.now() };
       /* the My Team rows carry the slate, so a slate that moved redraws them - and only then */
       if(before !== JSON.stringify(games) && window.currentView==='teams'){ try{ renderTeams(); }catch(e){} }
+      /* and the scoreboard redraws when a score, clock or situation moved - not on every fetch */
+      if(scoresBefore !== JSON.stringify(list) && nflScoresOpen()){ try{ renderNflScores(); }catch(e){} }
     }
   }catch(e){}
+}
+/* ===================== NFL SCORES =====================
+   The week's NFL slate as a scoreboard, under Matchups beside Game Center: every game a card,
+   grouped by day - the score, the clock, who has the ball and the last play while it runs;
+   kickoff, TV and the line before it starts; the final after. It reads the same ESPN
+   scoreboard the lineup lock and the live win probability already read (NFL_KICKS), so it
+   costs nothing new until the tab is open. Then, while a game is on, the tab asks ESPN every
+   45 seconds instead of the pulse's three minutes, and stops the moment it is left or the
+   app goes to the background. Each card also names the starters of yours - and of this
+   week's opponent - who are in that game, which is the reason to watch a scoreboard here
+   rather than on ESPN. Read-only: nothing on it can touch a roster or a score. */
+const NFL_LIVE_MS = 45*1000;
+/* one entry of NFL_KICKS.list, built by loadKickoffs from one ESPN event. The competitors'
+   team ids, not codes, are what ESPN's `situation.possession` names, so both are kept. */
+function nflGameEntry(ev, comp, st, cs, kick, state, period, clock, label, codeOf){
+  const sit = comp.situation || {}, ty = st.type || {};
+  const side = c => {
+    const tm = (c && c.team) || {}, rec = (((c && c.records)||[])[0]||{}).summary;
+    return { id: String(tm.id||''), cid: String((c && c.id)||''), code: codeOf(c), name: String(tm.shortDisplayName || tm.name || tm.abbreviation || ''),
+             score: (c && c.score!=null && c.score!=='' && Number.isFinite(+c.score)) ? +c.score : null,
+             rec: rec ? String(rec) : '', win: !!(c && c.winner===true) };
+  };
+  const hm = cs.find(c=>String((c||{}).homeAway||'').toLowerCase()==='home') || cs[0] || {};
+  const aw = cs.find(c=>c!==hm) || {};
+  const tname = String(ty.name||'').toUpperCase();
+  const off = /POSTPONED|CANCEL|SUSPEND|DELAY/.test(tname);      /* not being played right now, whatever the clock says */
+  const detail = off ? String(ty.description || ty.shortDetail || 'Delayed')
+    : tname==='STATUS_HALFTIME' ? 'Halftime'
+    : tname==='STATUS_END_PERIOD' ? 'End Q' + (period||'')
+    : state==='post' ? 'Final' + (period>4 ? '/OT' : '')
+    : state==='in' ? label : '';
+  const odds = ((comp.odds||[])[0]) || {};
+  const tv = []; (comp.broadcasts||[]).forEach(b=>((b&&b.names)||[]).forEach(n=>{ if(n && !tv.includes(String(n))) tv.push(String(n)); }));
+  return { id: String(ev.id||''), kick, state, period, clock, detail, off, tv: tv.join('/'),
+           odds: state==='pre' ? String(odds.details||'') : '',
+           ou: state==='pre' && odds.overUnder!=null && Number.isFinite(+odds.overUnder) ? +odds.overUnder : null,
+           venue: String((comp.venue||{}).fullName||''), neutral: !!comp.neutralSite,
+           home: side(hm), away: side(aw),
+           poss: sit.possession!=null ? String(sit.possession) : '', down: String(sit.downDistanceText||''), rz: !!sit.isRedZone,
+           last: String(((sit.lastPlay||{}).text)||'').replace(/\s+/g,' ').trim() };
+}
+function nflScoresOpen(){ return window.currentView==='matchups' && window.muTab==='nfl'; }
+/* a game is on, or about to be - or ESPN still says "pre" for one that kicked off, which is
+   the same thing to a scoreboard: keep asking */
+function nflSlateLive(){
+  const now = Date.now();
+  return (NFL_KICKS.list||[]).some(g => g.state==='in' || (g.state==='pre' && !g.off && g.kick - now < 2*60000 && now - g.kick < 4*3600000));
+}
+let _nflTimer = null, _nflBusy = false;
+/* the tab's own beat. loadKickoffs redraws the tab itself when a score, clock or situation
+   moved, so a tick only has to fetch; a forced one (the Refresh button) also redraws so the
+   "Updated" line answers the tap. */
+async function nflTick(force){
+  if(!nflScoresOpen()){ nflStop(); return; }
+  if(document.hidden || _nflBusy) return;
+  _nflBusy = true;
+  try{ await loadKickoffs(force || nflSlateLive()); if(force && nflScoresOpen()) renderNflScores(); }
+  catch(e){} finally{ _nflBusy = false; }
+}
+function nflStart(){ if(!_nflTimer) _nflTimer = setInterval(()=>nflTick(false), NFL_LIVE_MS); nflTick(false); }
+function nflStop(){ if(_nflTimer){ clearInterval(_nflTimer); _nflTimer = null; } }
+async function nflRefresh(btn){
+  if(btn){ btn.disabled = true; btn.textContent = 'Refreshing…'; }
+  await nflTick(true);
+  if(nflScoresOpen()) renderNflScores();      /* a tick that found nothing new still puts the button back */
+}
+/* coming back to the app with the scoreboard open: catch up now, not in 45 seconds */
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && nflScoresOpen()) nflTick(false); });
+/* "P. Mahomes" on a card that has room for three names, not one; a defence is its city code */
+function nflShortName(p){
+  if(String(p.pos||'').toUpperCase()==='DEF') return String(p.nfl||p.name||'') + ' D/ST';
+  const parts = String(p.name||'').trim().split(/\s+/);
+  return parts.length>1 ? parts[0].charAt(0)+'. '+parts.slice(1).join(' ') : (parts[0]||'');
+}
+const nflDayKey = t => new Date(t).toLocaleDateString([], { weekday:'long', month:'short', day:'numeric' });
+/* Sleeper's 150px team logos, the ones the defence badges already use, so nothing new is cached */
+function nflLogoHTML(code){
+  return code ? `<img class="nfl-logo" src="https://sleepercdn.com/images/team_logos/nfl/${esc(String(code).toLowerCase())}.png" alt="" loading="lazy">`
+              : '<span class="nfl-logo"></span>';
+}
+function renderNflScores(){
+  const el = document.getElementById('nflView'); if(!el) return;
+  const list = (NFL_KICKS.list||[]).slice().sort((a,b)=>(a.kick-b.kick) || String(a.id).localeCompare(String(b.id)));
+  const wk = NFL_KICKS.wk;
+  if(!list.length){
+    const loading = !NFL_KICKS.at && (currentNflWeek() || projWeekNow()) >= 1;
+    el.innerHTML = `<div class="card"><h2>NFL scores</h2><p class="sub" style="margin:0">${loading
+      ? 'Loading this week’s slate…'
+      : 'No games on the board. The scoreboard lights up with week 1’s slate and follows the NFL week through the season.'}</p></div>`;
+    /* nothing to fetch here: the tab has its own tick (nflStart), and loadKickoffs redraws when the slate lands */
+    return;
+  }
+  /* the starters in each game: yours, and this week's opponent's */
+  const mine = myTeamIdx(), myTi = Number.isInteger(mine) ? mine : null;
+  const pairs = (S.season && S.season.schedule && S.season.schedule[String(currentNflWeek() || wk)]) || [];
+  let oppTi = null;
+  if(myTi!=null){ const g = pairs.find(p=>Array.isArray(p) && (p[0]===myTi || p[1]===myTi)); if(g) oppTi = g[0]===myTi ? g[1] : g[0]; }
+  const byTeam = ti => { const m = {}; if(ti==null) return m;
+    try{ starterPicks(ti).forEach(p=>{ const c = String(p.nfl||'').toUpperCase(); if(c) (m[c] = m[c]||[]).push(p); }); }catch(e){}
+    return m; };
+  const mineBy = byTeam(myTi), oppBy = byTeam(oppTi);
+  const teamRow = (s, g, tie) => {
+    const ball = g.state==='in' && !!g.poss && (g.poss===s.id || g.poss===s.cid);
+    const cls = 'nfl-team' + (g.state==='post' && !tie ? (s.win ? ' win' : ' lose') : '') + (ball ? ' ball' : '');
+    const score = g.state==='pre' || s.score==null ? '' : String(s.score);
+    return `<div class="${cls}">${nflLogoHTML(s.code)}
+      <span class="nfl-name"><span class="nfl-nm">${esc(s.name||s.code||'TBD')}</span>${s.rec ? `<small>${esc(s.rec)}</small>` : ''}</span>
+      <span class="nfl-right">${ball ? `<i class="nfl-ball${g.rz?' rz':''}" title="${g.rz?'Has the ball, in the red zone':'Has the ball'}"></i>` : ''}<b class="nfl-score">${score}</b></span>
+    </div>`;
+  };
+  const statusHTML = g => {
+    const tv = g.tv ? `<span class="nfl-tv">${esc(g.tv)}</span>` : '';
+    if(g.off) return `<span class="nfl-clock">${esc(g.detail)}</span>${tv}`;
+    if(g.state==='in') return `<span class="nfl-clock"><i class="nfl-dot"></i>${esc(g.detail||'Live')}</span>${tv}`;
+    if(g.state==='post') return `<span class="nfl-clock">${esc(g.detail||'Final')}</span>`;
+    const line = [g.odds, g.ou!=null ? 'O/U '+g.ou : ''].filter(Boolean).join(' · ');
+    return `<span class="nfl-clock">${esc(kickoffLabel(g.kick))}</span>${tv}${line ? `<span class="nfl-odds">${esc(line)}</span>` : ''}`;
+  };
+  const sitHTML = g => {
+    if(g.state!=='in' || g.off) return '';
+    const down = g.down ? `<div class="nfl-sit">${esc(g.down)}${g.rz ? ' <span class="rz">· red zone</span>' : ''}</div>` : '';
+    const last = g.last ? `<div class="nfl-last" title="${esc(g.last)}">${esc(g.last)}</div>` : '';
+    return down + last;
+  };
+  const mineHTML = g => {
+    if(myTi==null) return '';
+    const codes = [g.away.code, g.home.code].filter(Boolean);
+    const names = by => codes.flatMap(c => by[c]||[]).map(p=>esc(nflShortName(p))).join(', ');
+    const a = names(mineBy), b = oppTi!=null ? names(oppBy) : '';
+    if(!a && !b) return '';
+    return `<div class="nfl-mine">${a ? `<span><b>You:</b> ${a}</span>` : ''}${a && b ? ' ' : ''}${b ? `<span class="opp"><b>${esc(teamName(oppTi))}:</b> ${b}</span>` : ''}</div>`;
+  };
+  const cardHTML = g => {
+    const tie = g.state==='post' && g.home.score!=null && g.home.score===g.away.score;
+    return `<div class="nfl-game ${g.off ? 'off' : g.state}" data-id="${esc(g.id)}">
+      ${teamRow(g.away, g, tie)}${teamRow(g.home, g, tie)}
+      <div class="nfl-status">${statusHTML(g)}${g.neutral && g.venue ? `<span class="nfl-venue">${esc(g.venue)}</span>` : ''}</div>
+      ${sitHTML(g)}${mineHTML(g)}
+    </div>`;
+  };
+  const days = [];
+  list.forEach(g=>{ const k = nflDayKey(g.kick); let d = days.find(x=>x.k===k); if(!d){ d = { k, games:[] }; days.push(d); } d.games.push(g); });
+  const live = list.filter(g=>g.state==='in' && !g.off).length, done = list.filter(g=>g.state==='post').length;
+  const chip = live ? `<span class="nfl-chip live"><i class="nfl-dot"></i>${live} live</span>`
+    : done && done===list.length ? `<span class="nfl-chip">All final</span>`
+    : done ? `<span class="nfl-chip">${done} of ${list.length} final</span>` : '';
+  el.innerHTML = `<div class="card">
+    <div class="nfl-head">
+      <h2 style="margin:0">NFL scores <span class="nfl-wk">Week ${wk}</span></h2>
+      <div class="row" style="gap:8px;align-items:center">${chip}<button class="btn ghost gc-refresh" onclick="nflRefresh(this)">Refresh</button></div>
+    </div>
+    ${days.map(d=>`<div class="eyebrow nfl-day">${esc(d.k)}</div><div class="nfl-grid">${d.games.map(cardHTML).join('')}</div>`).join('')}
+    <p class="nfl-foot">Scores from ESPN. Refreshes every 45 seconds while a game is on. Updated ${esc(timeAgo(NFL_KICKS.at) || 'just now')}.</p>
+  </div>`;
 }
 /* ===================== LIVE WIN PROBABILITY =====================
    Before kickoff the number is the projections; after the last whistle it is the score. In
@@ -17691,7 +17889,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-12 · trending on the wire';
+const BUILD_STAMP = '2026-09-13 · NFL scores';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
