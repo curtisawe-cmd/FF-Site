@@ -793,12 +793,12 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 .sch-res .rec{color:var(--chalk-dim);font-size:10.5px;margin-left:7px}
 .sch-soon{color:var(--chalk-dim);font-size:11.5px;font-family:var(--f-mono)}
 /* the whole league, week by week */
-.sch-weeks{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:12px}
-.sch-wkbox{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--panel-2)}
+.sch-weeks{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(255px,100%),1fr));gap:12px}
+.sch-wkbox{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--panel-2);min-width:0}
 .sch-wkbox.now{border-color:var(--turf)}
 .sch-wkbox h3{margin:0 0 6px;font-family:var(--f-ui);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--chalk-dim)}
 .sch-wkbox.now h3{color:var(--turf-bright)}
-.sch-g{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px}
+.sch-g{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;font-size:12px;min-width:0}
 .sch-g.mine{color:var(--chalk);font-weight:700}
 .sch-g .pair{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sch-g .sc{font-family:var(--f-mono);font-size:11px;color:var(--chalk-dim);flex:0 0 auto}
@@ -903,7 +903,7 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
   .sch-row{grid-template-columns:40px 1fr auto;gap:7px}
   .sch-opp .nm{font-size:13px}
   .sch-res{font-size:11.5px}
-  .sch-weeks{grid-template-columns:1fr}
+  .sch-weeks{grid-template-columns:minmax(0,1fr)}   /* not 1fr: that floors at min-content, and one long matchup line then sets the width */
 }
 @media(max-width:560px){
   /* stacked on a phone: a nowrap label and prose cannot share 375px */
@@ -1000,7 +1000,7 @@ table.plplayers .pl-proj{text-align:right;font-family:var(--f-mono);font-weight:
 .roster-mini .rr b{color:var(--chalk);font-weight:500}
 
 /* settings */
-.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px 26px}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:2px 26px}
 .setrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0}
 .setrow label{color:var(--chalk-dim);font-size:14px}
 #view-settings{max-width:940px;margin-left:auto;margin-right:auto}
@@ -1043,7 +1043,7 @@ nav.tabs button{position:relative}
   transition:color .15s ease,border-color .15s ease,background .15s ease}
 .pickchip:hover{color:var(--charge);border-color:var(--charge);background:var(--panel-2)}
 .pickchip span{opacity:.65;font-size:11px}
-.teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:10px}
+.teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:10px}
 .teamcard{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .teamcard .num{font-family:var(--f-mono);font-size:12px;color:var(--turf-bright);min-width:18px;text-align:center}
 .teamcard input[type=text]{flex:1 1 120px;min-width:100px}
@@ -1065,7 +1065,7 @@ nav.tabs button{position:relative}
 .bgame .brow.win{color:var(--chalk);font-weight:700;background:var(--turf-wash);box-shadow:inset 3px 0 0 var(--turf)}
 .bgame .brow .bseed{color:var(--chalk-dim);font-family:var(--f-mono);font-size:11px;font-weight:400;margin-right:5px}
 .bgame .brow .bpts{font-family:var(--f-mono);font-weight:500}
-.consgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.consgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr));gap:10px}
 /* The projected bracket. Nothing has been played, so no row is a winner: a seeded team simply
    reads brighter than a slot still waiting on a result. */
 .po-proj .brow.seeded{color:var(--chalk);font-weight:600}
@@ -1158,7 +1158,7 @@ nav.tabs button{position:relative}
 .mu-tag.grudge{color:var(--turf);border:1px solid var(--turf)}
 @media(max-width:640px){ .mu-h2h{grid-column:1/-1;font-size:11px} }
 /* the Head to head card: rivalry chips, the fiercest list, and the run column */
-.rv-chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.rv-chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px;margin:0 0 12px}
 .rv-chip{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);min-width:0}
 .rv-chip b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rv-lbl{font-family:var(--f-ui);font-weight:700;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--chalk-dim)}
@@ -1211,7 +1211,7 @@ nav.tabs button{position:relative}
   color:var(--turf);opacity:.05;letter-spacing:.02em;z-index:0;
 }
 .managers-card > *{position:relative;z-index:1}
-.mgr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.mgr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(215px,100%),1fr));gap:10px}
 .mgr{
   display:flex;align-items:center;gap:10px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:var(--r-ctrl);padding:7px 8px 7px 9px;
@@ -1232,6 +1232,13 @@ nav.tabs button{position:relative}
 .team-card .team-head .sub{margin:0}
 /* this week's projection on every rival's row, the same column My Team carries */
 .at-proj{width:52px;text-align:right;white-space:nowrap;vertical-align:middle}
+/* All Teams on the narrowest phones: four columns and a thumbnail do not fit 320px, and the
+   name is what has to give - clipped like My Team's, rather than pushing the NFL team off the edge */
+@media(max-width:360px){
+  .team-card .pcell{gap:7px}
+  .team-card .pcell > .pface{display:none}
+  .team-card .pcell > span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
 .at-proj b{display:block;font-family:var(--f-mono);font-size:13px;line-height:1.1}
 .at-proj small{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--chalk-dim)}
 .statpill{
@@ -1329,7 +1336,7 @@ nav.tabs button{position:relative}
 .nfl-chip.live{color:var(--charge);border-color:var(--charge);background:var(--charge-wash)}
 .nfl-day{margin:16px 0 8px}
 .nfl-head + .nfl-day{margin-top:8px}
-.nfl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.nfl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(270px,100%),1fr));gap:10px}
 .nfl-game{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-ctrl);padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .nfl-game.in{border-color:var(--turf)}
 .nfl-game.off{opacity:.75}
@@ -2267,7 +2274,7 @@ table.standings col.c-ap{width:96px}
 .lk-sub{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:11px;color:var(--chalk-dim);margin-top:1px;line-height:1.35}
 .lk-sub b{font-family:var(--f-mono);font-weight:600;color:var(--chalk)}
 .lk-sub i{font-style:normal;opacity:.85}
-.lk-calls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0 0 12px}
+.lk-calls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px;margin:0 0 12px}
 .lk-call{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"label label" "mark name" "val val";align-items:center;column-gap:7px;row-gap:2px;
   padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);min-width:0}
 .lk-call > :first-child{grid-area:label}
@@ -2703,9 +2710,15 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
 .gc-bench-pair .gc-bench-left{padding:7px 9px;font-size:11px}
 .gc-bench-pair .gc-bench-left b{font-size:13px}
 .gc-bench-pair .gc-bench-left:first-child{border-right:1px solid var(--line)}
-.gc-dots{display:flex;justify-content:center;gap:6px;margin-top:4px}
-.gc-dot{width:7px;height:7px;border-radius:50%;background:var(--line);border:none;padding:0;cursor:pointer}
-.gc-dot.on{background:var(--turf)}
+/* The pager under the swipe deck. The arrows beside it are hidden below 900px, so on a phone
+   these dots are the only thing to aim at other than the swipe itself - and a 7px dot is not a
+   thing a thumb can hit. The dot stays 7px; the button around it is 23x28, drawn by a
+   pseudo-element so the target can grow without the dot growing with it. */
+.gc-dots{display:flex;justify-content:center;gap:2px;margin-top:0}
+.gc-dot{position:relative;width:23px;height:28px;padding:0;border:none;background:none;cursor:pointer}
+.gc-dot::before{content:'';position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:50%;
+  background:var(--line);transform:translate(-50%,-50%)}
+.gc-dot.on::before{background:var(--turf)}
 @media (max-width:560px){
   /* both starting lineups stay side by side on phones — everything in the row is compressed
      (smaller position chips, smaller thumbnails, tighter numbers) so two ~170px columns fit
