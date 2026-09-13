@@ -1582,6 +1582,34 @@ table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-di
   min-width:34px;text-align:right;flex:none}
 .pick:disabled{opacity:.4;cursor:not-allowed}
 .pmodal-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--chalk-dim);font-size:14px;margin-top:8px}
+/* one game's scoring, from a Game Center name */
+.gs-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:2px}
+.gs-who{min-width:0;flex:1}
+.gs-who .pmodal-name{padding-right:0}
+.gs-scorewrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-left:auto}
+.gs-score{font-family:var(--f-mono);font-weight:800;font-size:34px;line-height:1;color:var(--chalk);font-variant-numeric:tabular-nums}
+.gs-scorewrap small{font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--chalk-dim)}
+.gs-when{display:inline-flex;align-items:center;white-space:nowrap}
+/* the dot carries its own gap: a wrapped line drops the space and would read "·Final" */
+.gs-sep{padding-right:3px}
+.gs-when .pgame{white-space:nowrap}
+.gs-line{margin:12px 0 0;font-size:13px;color:var(--chalk-dim)}
+table.gs-tbl{margin-top:14px;font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+table.gs-tbl th,table.gs-tbl td{padding:5px 8px}
+table.gs-tbl th.n,table.gs-tbl td.n{text-align:right}
+table.gs-tbl td.p{font-weight:700;color:var(--chalk)}
+table.gs-tbl td.p.gs-neg{color:var(--charge)}
+table.gs-tbl tr.top td{font-weight:800;font-size:14px}
+.gs-foot{font-size:11.5px;color:var(--chalk-dim);margin:12px 0 0}
+.gs-foot a{color:var(--turf);font-weight:600}
+@media(max-width:560px){
+  .gs-score{font-size:28px}
+  .gs-top{gap:10px}
+  /* the whole line has to fit: the category wraps, the three numbers never do, and the
+     points column stays on screen instead of behind a sideways swipe */
+  table.gs-tbl{font-size:11.5px} table.gs-tbl th,table.gs-tbl td{padding:5px 4px}
+  table.gs-tbl th:first-child,table.gs-tbl td:first-child{white-space:normal}
+}
 .pcareer{display:flex;align-items:flex-end;gap:8px;height:190px;padding-top:12px}
 .pcareer .pbar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;gap:5px;min-width:0}
 .pcareer .pbar .bar{width:100%;max-width:48px;background:linear-gradient(180deg,var(--turf-bright),var(--turf));border-radius:6px 6px 0 0;transition:height .55s cubic-bezier(.2,.9,.2,1)}
@@ -11270,6 +11298,177 @@ function tickerWeek(){
 /* =====================================================
    Game Center — per-player scoring for each matchup
 ===================================================== */
+/* ---- one game's scoring, itemized ----
+   scoreWeekStats keeps a running total; this keeps the same arithmetic as rows, in the same
+   order, so a manager can see exactly where a number came from - 287 yards at 0.04 is 11.48,
+   two touchdowns are 12, the interception took two back. Anything that scored nothing under
+   this league's rules is left out: the table is about points, not about stats. The per-game
+   bonuses and the defence's points-allowed tier are rows too, since those are the lines people
+   argue about. Mirrors scoreWeekStats line for line - and renderGameScore checks the rows add
+   up to it, so a rule that drifts out of this list shows up as an "Other" row rather than a
+   table that quietly disagrees with the score above it. */
+function weekScoreBreakdown(st, pos){
+  if(!st) return [];
+  const g = k => +(st[k]||0), R = S.scoring||{}, v = k => +(R[k]||0), out = [];
+  /* keep: a row worth showing even when the rule pays nothing, because it explains the score */
+  const row = (label, stat, per, keep) => { if(keep || (stat!==0 && per!==0)) out.push({ label, stat, per, pts: stat*per }); };
+  if(pos==='DEF'){
+    row('Sack', g('sack'), v('DST sack'));
+    row('Interception', g('int'), v('DST interception'));
+    row('Fumble recovered', g('fum_rec'), v('DST fumble recovered'));
+    row('Fumble forced', g('ff'), v('DST fumble forced'));
+    row('Safety', g('safe'), v('DST safety'));
+    row('Defensive TD', g('def_td'), v('DST TD'));
+    row('Kick/punt return TD', g('def_st_td'), v('DST kick/punt return TD'));
+    row('2-pt return', g('def_2pt'), v('DST 2-pt return'));
+    /* no guard on pts_allow, because the scorer has none: a defence in a scoreless first
+       quarter has no pts_allow key at all (Sleeper writes the tier flag pts_allow_0 instead),
+       and is scored - correctly - as a shutout until somebody scores on it */
+    {
+      const pa = g('pts_allow');
+      const k = pa<=0 ? 'Points allowed 0' : pa<=6 ? 'Points allowed 1-6' : pa<=13 ? 'Points allowed 7-13'
+        : pa<=20 ? 'Points allowed 14-20' : pa<=27 ? 'Points allowed 21-27' : pa<=34 ? 'Points allowed 28-34' : 'Points allowed 35+';
+      row(`${k} (${pa} allowed)`, 1, v(k), true);
+    }
+    if(st.yds_allow!=null){
+      const ya = g('yds_allow');
+      const k = ya<100 ? 'Under 100 total yds allowed' : ya<200 ? '100-199 yds allowed' : ya>=500 ? '500+ yds allowed' : '';
+      if(k) row(`${k} (${ya} yds)`, 1, v(k));
+    }
+    return out;
+  }
+  row('Passing yards', g('pass_yd'), v('Passing yards (per yd)'));
+  row('Passing TD', g('pass_td'), v('Passing TD'));
+  row('Interception thrown', g('pass_int'), v('Interception thrown'));
+  row('Pick-six thrown', g('pass_int_td'), v('Pick-six thrown'));
+  row('Sacked', g('pass_sack'), v('Sacked'));
+  row('Completion', g('pass_cmp'), v('Completion'));
+  row('Incompletion', g('pass_att')-g('pass_cmp'), v('Incompletion'));
+  row('Rushing attempt', g('rush_att'), v('Rushing attempt'));
+  row('Rushing yards', g('rush_yd'), v('Rushing yards (per yd)'));
+  row('Rushing TD', g('rush_td'), v('Rushing TD'));
+  row('Rushing first down', g('rush_fd'), v('Rushing first down'));
+  row('Reception', g('rec'), v('Reception'));
+  row('Receiving yards', g('rec_yd'), v('Receiving yards (per yd)'));
+  row('Receiving TD', g('rec_td'), v('Receiving TD'));
+  row('Receiving first down', g('rec_fd'), v('Receiving first down'));
+  if(pos==='TE') row('TE premium', g('rec'), v('TE premium (per reception)'));
+  row('Kick/punt return TD', g('kr_td')+g('pr_td')+g('st_td'), v('Kick/punt return TD'));
+  row('Fumble recovered for TD', g('fum_rec_td'), v('Fumble recovered for TD'));
+  row('Fumble lost', g('fum_lost'), v('Fumble lost'));
+  row('2-pt conversion', g('pass_2pt')+g('rush_2pt')+g('rec_2pt'), v('2-pt conversion'));
+  row('PAT made', g('xpm'), v('PAT made'));
+  row('PAT missed', g('xpmiss'), v('PAT missed'));
+  row('FG 0-19', g('fgm_0_19'), v('FG 0-19'));
+  row('FG 20-29', g('fgm_20_29'), v('FG 20-29'));
+  row('FG 30-39', g('fgm_30_39'), v('FG 30-39'));
+  row('FG 40-49', g('fgm_40_49'), v('FG 40-49'));
+  row('FG 50+', g('fgm_50p'), v('FG 50+'));
+  row('FG missed 0-19', g('fgmiss_0_19'), v('FG missed 0-19'));
+  row('FG missed 20-29', g('fgmiss_20_29'), v('FG missed 20-29'));
+  /* the per-game bonuses: one line each, with the number that earned it */
+  const py = g('pass_yd'), ry = g('rush_yd'), cy = g('rec_yd');
+  if(py>=400) row(`400+ pass yds bonus (${py})`, 1, v('400+ pass yds bonus'));
+  else if(py>=300) row(`300-399 pass yds bonus (${py})`, 1, v('300-399 pass yds bonus'));
+  if(ry>=200) row(`200+ rush yds bonus (${ry})`, 1, v('200+ rush yds bonus'));
+  else if(ry>=100) row(`100-199 rush yds bonus (${ry})`, 1, v('100-199 rush yds bonus'));
+  if(cy>=200) row(`200+ rec yds bonus (${cy})`, 1, v('200+ rec yds bonus'));
+  if(g('pass_td_lng')>=50) row(`50+ yd pass TD bonus (${g('pass_td_lng')})`, 1, v('50+ yd pass TD bonus'));
+  if(g('rush_td_lng')>=50) row(`50+ yd rush TD bonus (${g('rush_td_lng')})`, 1, v('50+ yd rush TD bonus'));
+  if(g('rec_td_lng')>=50)  row(`50+ yd rec TD bonus (${g('rec_td_lng')})`, 1, v('50+ yd rec TD bonus'));
+  const lng = Math.max(g('pass_td_lng'), g('rush_td_lng'), g('rec_td_lng'));
+  if(lng>=40) row(`40+ yd TD bonus (${lng})`, 1, v('40+ yd TD bonus'));
+  return out;
+}
+/* ---- the popup behind a Game Center name ----
+   One game, and only that game: the week you are looking at, scored by this league's rules,
+   with the season and the career one link away rather than in the way. Opened from the week
+   being viewed (the week and season are passed in, not guessed), so an old week opens its own
+   file instead of today's. While a game is live the popup redraws with Game Center, which is
+   what makes watching a player's number climb inside it worth doing. */
+const GSCORE = { pid:'', wk:0, season:0, err:false };
+function gsOpen(){ const ov = document.getElementById('gsModal'); return !!ov && ov.style.display!=='none'; }
+function closeGameScore(){ const ov = document.getElementById('gsModal'); if(ov) ov.style.display='none'; }
+function openGameScore(pid, wk, season){
+  GSCORE.pid = String(pid); GSCORE.wk = +wk||0; GSCORE.season = +season||0; GSCORE.err = false;
+  let ov = document.getElementById('gsModal');
+  if(!ov){
+    ov = document.createElement('div'); ov.id='gsModal'; ov.className='pmodal-overlay';
+    ov.addEventListener('click', e=>{ if(e.target===ov) closeGameScore(); });
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeGameScore(); });
+    document.body.appendChild(ov);
+  }
+  ov.style.display='flex';
+  renderGameScore();
+  /* the week's stat file is normally already in hand (Game Center fetched it); an older week
+     opened from the season picker may not be */
+  const key = `${GSCORE.season}-${GSCORE.wk}`;
+  if(!WEEK_STATS[key]){
+    fetchWeekStats(GSCORE.season, GSCORE.wk).then(
+      ()=>{ if(gsOpen()) renderGameScore(); },
+      ()=>{ GSCORE.err = true; if(gsOpen()) renderGameScore(); });
+  }
+  /* and the fixture, for "vs CIN" on a week whose slate is not the live one */
+  if(!NFL_OPP[key]) loadOpponents(GSCORE.season, GSCORE.wk).then(m=>{ if(m && gsOpen()) renderGameScore(); }, ()=>{});
+}
+/* points to one decimal, except where a per-yard rule makes the second one real: 11.48 adds up
+   in the column, 11.5 does not */
+function gsPts(n){
+  const r = Math.round(n*100)/100;
+  return Math.abs(r*10 - Math.round(r*10)) < 1e-9 ? r.toFixed(1) : r.toFixed(2);
+}
+const gsCount = n => Number.isInteger(n) ? String(n) : String(Math.round(n*10)/10);
+function renderGameScore(){
+  const ov = document.getElementById('gsModal'); if(!ov || ov.style.display==='none') return;
+  const id = GSCORE.pid, wk = GSCORE.wk, season = GSCORE.season, key = `${season}-${wk}`;
+  const m = findPlayerMeta(id) || { name:'Player', pos:'', team:'' };
+  const pos = String(m.pos||'').toUpperCase(), nfl = String(m.nfl || m.team || '').toUpperCase();
+  const file = WEEK_STATS[key], st = (file && file.data) ? file.data[id] : null;
+  const pts = st ? (scoreWeekStats(st, pos)||0) : null;
+  const items = st ? weekScoreBreakdown(st, pos) : [];
+  /* the rows must add up to the number above them; a rule this list has not caught lands here */
+  if(st){
+    const sum = items.reduce((n,it)=>n+it.pts, 0);
+    if(Math.abs(sum - pts) >= 0.005) items.push({ label:'Other', stat:1, per:Math.round((pts-sum)*100)/100, pts: pts-sum });
+  }
+  /* the live slate only speaks for the week it loaded; an older week gets its fixture instead */
+  const onSlate = season===PROJ_SEASON && wk===(currentNflWeek() || projWeekNow()) && NFL_KICKS.wk===wk;
+  const g = onSlate ? gameOf(nfl) : null;
+  const opp = oppLabel(nfl, NFL_OPP[key]);
+  const sep = '<span class="gs-sep"> · </span>';
+  const where = g ? `<span class="gs-when">${sep}${gameLineHTML(nfl, true)}${ballTagHTML({ pos, nfl })}</span>`
+                  : (opp ? `<span class="gs-when">${sep}${esc(opp)}</span>` : '');
+  const state = g ? g.state : null;
+  const blank = GSCORE.err ? 'The NFL stat feed could not be reached, so there is nothing to show here yet.'
+    : !file ? 'Loading this week’s stats…'
+    : state==='pre' ? 'Yet to play. Nothing on the board until his game kicks off.'
+    : state==='in' ? 'Nothing on the board yet - his game is under way.'
+    : 'No stats this week. He did not play.';
+  const line = st ? statLine(st, pos) : '';
+  const tbl = items.length ? `<div style="overflow-x:auto"><table class="plain gs-tbl">
+      <tr><th>Category</th><th class="n">Stat</th><th class="n">× pts</th><th class="n">= Points</th></tr>
+      ${items.map(it=>`<tr><td>${esc(it.label)}</td><td class="n">${gsCount(it.stat)}</td><td class="n">${gsCount(it.per)}</td>
+        <td class="n p${it.pts<0?' gs-neg':''}">${it.pts>0?'+':''}${gsPts(it.pts)}</td></tr>`).join('')}
+      <tr class="top"><td><b>Total</b></td><td class="n"></td><td class="n"></td><td class="n p">${gsPts(pts)}</td></tr>
+    </table></div>`
+    : `<p class="gs-line" style="margin-top:14px">${st ? 'He played, but nothing he did scores under this league’s rules.' : esc(blank)}</p>`;
+  ov.innerHTML = `<div class="pmodal">
+    <button class="pmodal-x" onclick="closeGameScore()" aria-label="Close">✕</button>
+    <div class="eyebrow">Week ${wk} scoring${season!==PROJ_SEASON ? ' · '+season : ''}</div>
+    <div class="gs-top">${playerFace(m, 54)}
+      <div class="gs-who">
+        <div class="pmodal-name">${esc(m.name||'Player')}</div>
+        <div class="pmodal-meta"><span class="postag pos-${pos}" style="--pc:var(--${pos.toLowerCase()||'wr'})">${esc(pos||'?')}</span>
+          ${esc(nfl||'FA')}${where}</div>
+      </div>
+      <div class="gs-scorewrap"><b class="gs-score">${pts==null ? '—' : pts.toFixed(1)}</b><small>points</small></div>
+    </div>
+    ${line ? `<p class="gs-line">${esc(line)}</p>` : ''}
+    ${tbl}
+    <p class="gs-foot">This game only, scored by ${esc(S.leagueName||'the league')}’s rules.
+      <a href="#" onclick="closeGameScore();openPlayer('${esc(id)}');return false">Season and career →</a></p>
+  </div>`;
+}
 /* NFL.com-style stat line: only the categories that actually did something */
 function statLine(st, pos){
   if(!st) return '';
@@ -11585,7 +11784,7 @@ async function renderGameCenter(){
     const side = (p, s) => {
       if(!p) return `<span class="h2h-side ${s} empty">—</span>`;
       return `<span class="h2h-side ${s}">${playerFace(p,20)}<span class="h2h-txt">`
-        + `<span class="h2h-nm pstat" onclick="openPlayer('${p.playerId}')">${esc(shortName(p))}</span>`
+        + `<span class="h2h-nm pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(shortName(p))}</span>`
         + `<span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</span>`
         + `</span></span>`;
     };
@@ -11720,7 +11919,7 @@ async function renderGameCenter(){
         <td class="gc-slot">${slotTag(l[p.playerId]||p.pos, p.pos)}</td>
         <td><div class="row" style="gap:7px;align-items:flex-start;flex-wrap:nowrap">${playerFace(p,26)}
             <div style="min-width:0;flex:1">
-              <div class="gc-pl pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</div>
+              <div class="gc-pl pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(p.name)}</div>
               <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</div>
               ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">${esc(noLine(p))}</div>`)}
             </div></div></td>
@@ -11759,6 +11958,8 @@ async function renderGameCenter(){
       ${h2hBlock(g[0], g[1], A, B, bar)}
     </div></section>`;
   }).join('');
+  /* the popup reads the same file these cards just used, so it moves when they do */
+  try{ if(gsOpen()) renderGameScore(); }catch(e){}
   if(layout==='all'){
     el.innerHTML = head + notice + `<div class="gc-list">${cards}</div>` +
       (games.length > 1 ? `<div class="gc-jump" id="gcJump">
@@ -17918,7 +18119,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-13 · football on the field';
+const BUILD_STAMP = '2026-09-13 · how he scored it';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

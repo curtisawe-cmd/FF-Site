@@ -703,6 +703,31 @@ on the same rule inline.
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
 (`poSeedBracket`), the playoff picture and the playoff odds all read this one order.
 
+## One game's scoring (the popup behind a Game Center name)
+
+A name in Game Center opens `openGameScore(pid, wk, season)` - that game and only that game -
+instead of the career modal (`#gsModal`, `renderGameScore`; both layouts pass the week and season
+being viewed, so an old week opens its own file rather than today's). The season and career are one
+link away in the footer (`openPlayer`).
+
+`weekScoreBreakdown(st, pos)` is `scoreWeekStats` kept as rows instead of a running total, in the
+same order and with the same rules: the per-game bonuses are rows (with the yardage that earned
+them) and so is the defence's points-allowed tier. It deliberately does **not** guard on
+`pts_allow`, because the scorer does not either - a defence in a scoreless first quarter has no
+`pts_allow` key at all (Sleeper writes the tier flag `pts_allow_0` instead) and is scored as a
+shutout until somebody scores on it. `renderGameScore` adds the rows up and compares them against
+`scoreWeekStats`; a difference of 0.005 or more becomes an "Other" row, so a rule that ever drifts
+out of the list shows up instead of a table that quietly disagrees with the number above it.
+Checked against the live week-1 file: 396 rostered players and 12,234 stat-line/position
+combinations, every one tying out exactly.
+
+Points show a second decimal only where a per-yard rule makes it real (`gsPts`: 11.48 adds up in the
+column, 11.5 does not); a negative line is red; the header carries the player's game clock and the
+football when his side has the ball. No stat line reads off the clock - "yet to play" before
+kickoff, "nothing on the board yet" during, "did not play" after. The popup redraws with Game
+Center (the hook sits before the layout branch), so a live number climbs while it is open. On a
+phone the category wraps so the points column stays on screen instead of behind a sideways swipe.
+
 ## Game Center score style
 
 Settings > Look & Alarms > **Game Center scores** (`S.gcScore = {family,size,color,lead,proj}`,
