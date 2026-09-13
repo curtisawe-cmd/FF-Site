@@ -2623,14 +2623,22 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .fld-row{display:flex;align-items:center;gap:5px;height:13px;flex-direction:row-reverse}   /* markup is post-then-track, so row-reverse puts the post at the far end */
 .fld.r .fld-row{flex-direction:row}
 .fld-t{position:relative;flex:1 1 auto;min-width:0;height:4px;border-radius:3px;background:var(--line)}
-.fld-fill{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--line-strong)}
-.fld.mine .fld-fill{background:var(--turf)}
+/* --line-strong against --line is 1.28:1 - a difference you cannot see. The dim state is the
+   text-dim token instead, which separates from the track at better than 3:1 in both themes. */
+.fld-fill{position:absolute;top:0;bottom:0;border-radius:3px;background:var(--chalk-dim);opacity:.55}
+.fld.mine .fld-fill{background:var(--turf);opacity:1}
 .fld-rz{position:absolute;top:0;bottom:0;width:20%;border-radius:3px;background:var(--charge);opacity:.5}
+/* the ball can be ON the goal line, so the marker is placed in pixels, not percent: at 0 and at
+   100 it still sits inside the track instead of hanging off the end of it */
 .fld-mk{position:absolute;top:50%;width:13px;height:13px;object-fit:contain;border-radius:50%;
-  background:var(--panel);box-shadow:0 0 0 1px var(--line);transform:translate(-50%,-50%)}
-.fld.r .fld-mk{transform:translate(50%,-50%)}
+  background:var(--panel);box-shadow:0 0 0 1px var(--line);
+  left:calc(6.5px + (100% - 13px) * var(--p,50) / 100);transform:translate(-50%,-50%)}
+.fld.r .fld-mk{left:auto;right:calc(6.5px + (100% - 13px) * var(--p,50) / 100);transform:translate(50%,-50%)}
 .fld-post{flex:0 0 auto;display:flex;align-items:center;line-height:0;color:var(--gold)}
-.fld-cap{font-family:var(--f-mono);font-size:9px;line-height:1.3;color:var(--chalk-dim);
+/* min-height, so a caption that empties between plays does not shorten the row - Game Center
+   rewrites its whole markup every forty-five seconds and a row that changes height walks the
+   page under whoever is reading it */
+.fld-cap{font-family:var(--f-mono);font-size:9px;line-height:1.3;min-height:12px;color:var(--chalk-dim);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .fld.r .fld-cap{text-align:right}
 /* the phone's head-to-head rows: a field under each name, spanning that side's name and score */
@@ -11830,9 +11838,11 @@ async function renderGameCenter(){
       ${(()=>{ const da=detOf(a), db=detOf(b);
         /* one line each, under the name and its score rather than squeezed beside them */
         return (da||db) ? `<span class="h2h-det l">${da}</span><span class="h2h-det r">${db}</span>` : ''; })()}
-      ${(()=>{ if(!slateWeek) return '';
-        /* the two fields face each other, so both sides drive at the post in the middle */
-        const fa = a ? fieldBarHTML(a.nfl, false) : '', fb = b ? fieldBarHTML(b.nfl, true) : '';
+      ${(()=>{ if(!slateWeek || slot==='BN' || slot==='IR') return '';
+        /* the two fields face each other, so both sides drive at the post in the middle. Only
+           the starters get one: a bench row's field position is not a thing anybody is watching,
+           and half of every Game Center page is bench. */
+        const fa = a ? fieldBarHTML(a.nfl, false, a.pos) : '', fb = b ? fieldBarHTML(b.nfl, true, b.pos) : '';
         return (fa||fb) ? `<span class="h2h-fld l">${fa}</span><span class="h2h-fld r">${fb}</span>` : ''; })()}
     </div>`;
   };
@@ -11939,7 +11949,7 @@ async function renderGameCenter(){
   };
   const col = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
-    const rowsFor = list => list.map(p=>{
+    const rowsFor = (list, live) => list.map(p=>{
       /* with stats in hand a blank means "did not play"; with none at all it just means 0.0 */
       const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
       const line = statLine(st, p.pos);
@@ -11950,7 +11960,7 @@ async function renderGameCenter(){
               <div class="gc-pl pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(p.name)}</div>
               <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</div>
               ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">${esc(noLine(p))}</div>`)}
-              ${slateWeek ? fieldBarHTML(p.nfl) : ''}
+              ${(slateWeek && live) ? fieldBarHTML(p.nfl, false, p.pos) : ''}
             </div></div></td>
         ${showProj?`<td class="gc-proj">${projTxt(p)}</td>`:''}
         <td class="gc-pts">${pts==null?'—':pts.toFixed(1)}</td></tr>`;
@@ -11963,7 +11973,7 @@ async function renderGameCenter(){
     const { starters, bench, ir } = teamLists(ti);   /* shared with the head-to-head layout */
     return `<div class="gc-col">
       <div class="gc-band">Starters</div>
-      ${starters.length?`<table class="gc-tbl">${hrow}${rowsFor(starters)}</table>`:`<div class="gc-none">No starters set.</div>`}
+      ${starters.length?`<table class="gc-tbl">${hrow}${rowsFor(starters, true)}</table>`:`<div class="gc-none">No starters set.</div>`}
       ${bench.length?`<div class="gc-band">Bench</div><table class="gc-tbl">${hrow}${rowsFor(bench)}</table>`:''}
       ${benchLeftHTML(ti, stats, noStats)}
       ${ir.length?`<div class="gc-band">Reserve (IR)</div><table class="gc-tbl">${hrow}${rowsFor(ir)}</table>`:''}
@@ -15781,17 +15791,22 @@ async function loadKickoffs(force){
          It is only worth drawing when somebody actually has the ball and a down is posted:
          between a touchdown and the kickoff ESPN leaves possession blank and parks yardLine
          at 100, which would otherwise paint every roster row a phantom drive. */
-      const ddT = String(sit.downDistanceText||''), ylN = +sit.yardLine;
+      const ddT = String(sit.downDistanceText||'');
+      /* +null and +'' are both 0, which Number.isFinite would wave through as a ball sitting on
+         the home goal line. ESPN sends a number when it sends anything, so demand one. */
+      const ylN = (typeof sit.yardLine === 'number') ? sit.yardLine : NaN;
       /* "WSH 46" is ESPN's spelling; every other line in the app says WAS */
-      const spotTxt = String(sit.possessionText||'').replace(/^([A-Z]{2,4})/, m => ESPN_TEAM_FIX[m] || m);
-      const yl = (state==='in' && poss && ddT && Number.isFinite(ylN) && ylN>=0 && ylN<=100) ? ylN : null;
+      const spotTxt = String(sit.possessionText||'').replace(/^[A-Z]{2,4}/, m => ESPN_TEAM_FIX[m] || m);
+      /* a down on the board is what says the ball is somewhere real; who has it is asked
+         separately, because ESPN can post the spot a beat before it names the offence */
+      const yl = (state==='in' && ddT && Number.isFinite(ylN) && ylN>=0 && ylN<=100) ? ylN : null;
       const possCode = (yl!=null) ? (codeOf(cs.find(c=>hasBall(c)) || {}) || '') : '';
       cs.forEach((c,i)=>{
         const code = codeOf(c); if(!code) return;
         const other = cs.find((o,k)=>k!==i);
         map[code] = t; games[code] = { kick:t, state, remain, label, opp: other ? codeOf(other) : '', home: String(c.homeAway||'').toLowerCase()==='home',
                                        ball: hasBall(c), oppBall: !!other && hasBall(other), rz: !!sit.isRedZone,
-                                       yl, possCode, dd: String(sit.shortDownDistanceText||'') || ddT, spot: spotTxt };
+                                       yl, possCode, dd: String(sit.shortDownDistanceText||'') || ddT.replace(/\s+at\s+\S.*$/, ''), spot: spotTxt };
       });
       list.push(nflGameEntry(ev, comp, st, cs, t, state, period, clock, label, codeOf));   /* the scoreboard tab's card */
     });
@@ -15847,7 +15862,7 @@ function nflGameEntry(ev, comp, st, cs, kick, state, period, clock, label, codeO
            venue: String((comp.venue||{}).fullName||''), neutral: !!comp.neutralSite,
            home: side(hm), away: side(aw),
            poss: sit.possession!=null ? String(sit.possession) : '', down: String(sit.downDistanceText||''), rz: !!sit.isRedZone,
-           spot: String(sit.possessionText||'').replace(/^([A-Z]{2,4})/, m => ESPN_TEAM_FIX[m] || m),
+           spot: String(sit.possessionText||'').replace(/^[A-Z]{2,4}/, m => ESPN_TEAM_FIX[m] || m),
            last: String(((sit.lastPlay||{}).text)||'').replace(/\s+/g,' ').trim() };
 }
 function nflScoresOpen(){ return window.currentView==='matchups' && window.muTab==='nfl'; }
@@ -15899,15 +15914,25 @@ function ballTagHTML(p){
    that same number becomes how far HIS side has driven from its own goal line - so one field,
    oriented so the player's team always attacks toward the post.
 
-   Possession is not the same question as orientation. The bar always reads left-to-right as
-   his team's half then the opponent's; the marker is whoever actually has the ball, so a
-   defence shows the other team's logo creeping toward its own end zone. Nothing is drawn
-   between plays: after a touchdown ESPN blanks possession and parks the yard line at 100,
-   which would otherwise paint a phantom drive on every roster row. */
-function fieldSpot(nfl){
-  const g = gameOf(nfl); if(!g || g.state!=='in' || g.yl==null) return null;
-  const pos = g.home ? g.yl : 100 - g.yl;          /* 0 = his own goal line, 100 = the one he attacks */
-  return { pos, mine: !!g.ball, poss: g.possCode||'', rz: !!g.rz, dd: g.dd||'', spot: g.spot||'', opp: g.opp||'' };
+   Possession is not the same question as orientation. The bar always reads from his own goal
+   line to the one he attacks; the marker is whoever actually has the ball, so a defence shows
+   the other team's logo creeping toward its own end zone. "His side is on the field" follows
+   the same rule the football glyph uses: an offence player when his team has the ball, a
+   defence when the other team does.
+
+   The shell is drawn for the whole of a live game, even in the seconds ESPN posts no spot at
+   all - after a touchdown it blanks possession and parks the yard line at 100. Drawing the
+   drive then would be a lie; removing the whole bar would be worse, because Game Center
+   replaces its markup wholesale every forty-five seconds and a row that grows and shrinks
+   walks the page under whoever is reading it. So the track stays and the ball comes off. */
+function fieldSpot(nfl, pos){
+  const g = gameOf(nfl); if(!g || g.state!=='in') return null;
+  const def = String(pos||'').toUpperCase()==='DEF';
+  const known = g.yl!=null;
+  return { known,
+           pos: known ? (g.home ? g.yl : 100 - g.yl) : null,   /* 0 = his own goal line, 100 = the one he attacks */
+           mine: def ? !!g.oppBall : !!g.ball,                  /* is HIS unit the one on the field */
+           poss: g.possCode||'', rz: !!g.rz, dd: g.dd||'', spot: g.spot||'', opp: g.opp||'' };
 }
 /* The goal post, side on: two uprights, the crossbar, the stem. An inline SVG rather than an
    emoji, for the same reason the football is one - it is the same shape on every phone. */
@@ -15916,29 +15941,42 @@ function goalPostSVG(){
 }
 /* `flip` mirrors the whole thing for the right-hand player of a head-to-head row, so the two
    sides drive at the same post in the middle of the card - the shape every scoreboard uses. */
-function fieldBarHTML(nfl, flip){
-  const f = fieldSpot(nfl); if(!f) return '';
+function fieldBarHTML(nfl, flip, pos){
+  const f = fieldSpot(nfl, pos); if(!f) return '';
   const code = String(nfl||'').toUpperCase();
-  const pct = Math.max(0, Math.min(100, f.pos));
-  const mk = Math.max(2, Math.min(97, pct));      /* the ball can be on the goal line; the marker cannot hang off the track */
   const near = flip ? 'right' : 'left', far = flip ? 'left' : 'right';
-  /* the red-zone band sits at whichever end the team with the ball is attacking */
-  const rzEnd = f.mine ? far : near;
-  const yards = f.mine ? (100 - f.pos) : f.pos;
-  const who = f.mine ? `${esc(code)} has the ball` : (f.poss ? `${esc(f.poss)} has the ball` : 'The other side has the ball');
-  const title = `${who} on ${esc(f.spot||'the field')}${f.dd ? ', ' + esc(f.dd) : ''} — ${yards} yard${yards===1?'':'s'} from ${f.mine ? 'the end zone he is driving at' : 'his own end zone'}`;
-  const cap = [f.dd, f.spot ? 'at ' + f.spot : ''].filter(Boolean).join(' ');
-  return `<div class="fld${flip?' r':''}${f.mine?' mine':''}" title="${title}">
+  const cls = `fld${flip?' r':''}${f.mine?' mine':''}`;
+  if(!f.known)
+    return `<div class="${cls}" title="Between plays — no ball spot posted yet">
+      <div class="fld-row"><span class="fld-post">${goalPostSVG()}</span><span class="fld-t"></span></div>
+      <div class="fld-cap">Between plays</div></div>`;
+  const pct = Math.max(0, Math.min(100, f.pos));
+  /* Two different questions, and they come apart on a defence. `ours` is whether HIS NFL team
+     has the ball, which sets the direction of travel - the red-zone end, the yards that are
+     left, whose down the caption is quoting. `f.mine` is whether his FANTASY unit is the one
+     on the field, which is the opposite for a D/ST, and only colours the fill. */
+  const ours = !!f.poss && f.poss===code;
+  const rzEnd = ours ? far : near;
+  const yards = ours ? (100 - f.pos) : f.pos;
+  const title = f.poss
+    ? `${esc(f.poss)} ${ours?'has':'has'} the ball on ${esc(f.spot||'the field')}${f.dd ? ', ' + esc(f.dd) : ''} — ${yards} yard${yards===1?'':'s'} from ${ours ? 'the end zone his team is attacking' : esc(code)+'’s own end zone'}`
+    : `The ball is on ${esc(f.spot||'the field')}${f.dd ? ', ' + esc(f.dd) : ''}`;
+  /* whose down it is matters more than the exact spot when it is not his team's ball: the
+     marker already says where, and "3rd & 8" with nobody's name on it reads as his own */
+  const cap = !f.poss ? f.dd
+    : ours ? [f.dd, f.spot ? 'at ' + f.spot : ''].filter(Boolean).join(' ')
+    : `${f.poss} ball${f.dd ? ' · ' + f.dd : ''}`;
+  return `<div class="${cls}" title="${title}">
     <div class="fld-row">
       <span class="fld-post">${goalPostSVG()}</span>
       <span class="fld-t">
         <span class="fld-fill" style="${near}:0;width:${pct}%"></span>
         ${f.rz ? `<i class="fld-rz" style="${rzEnd}:0"></i>` : ''}
-        <img class="fld-mk" src="https://sleepercdn.com/images/team_logos/nfl/${esc(String(f.poss||code).toLowerCase())}.png"
-             style="${near}:${mk}%" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
+        ${f.poss ? `<img class="fld-mk" src="https://sleepercdn.com/images/team_logos/nfl/${esc(String(f.poss).toLowerCase())}.png"
+             style="--p:${pct}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">` : ''}
       </span>
     </div>
-    ${cap ? `<div class="fld-cap">${esc(cap)}</div>` : ''}
+    <div class="fld-cap">${esc(cap)}</div>
   </div>`;
 }
 /* "P. Mahomes" on a card that has room for three names, not one; a defence is its city code */
@@ -18208,7 +18246,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-13 · down the field';
+const BUILD_STAMP = '2026-09-13 · down the field, steadier';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

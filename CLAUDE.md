@@ -705,9 +705,11 @@ points-for. Any other tiebreak setting is plain wins then points-for. The bracke
 
 ## The field line (Game Center)
 
-Every live player row carries a field: his own goal line at one end, the post his team is attacking
-at the other, and a team-logo marker where the ball actually is. `fieldSpot(nfl)` then
-`fieldBarHTML(nfl, flip)`; the CSS is `.fld*` plus `.h2h-fld` for the phone.
+Every live STARTER row carries a field: his own goal line at one end, the post his team is attacking
+at the other, and a team-logo marker where the ball actually is. `fieldSpot(nfl, pos)` then
+`fieldBarHTML(nfl, flip, pos)`; the CSS is `.fld*` plus `.h2h-fld` for the phone. The bench and the
+reserve sit it out - half of every Game Center page is bench, and a bench player's field position is
+not a thing anybody is watching.
 
 The arithmetic. ESPN's `situation.yardLine` is the absolute spot **0-100 measured from the HOME
 goal line** - verified against the live feed ("GB 46" with Minnesota at home arrives as 54, "ARI 3"
@@ -716,17 +718,31 @@ home and its mirror when it is away: `pos = g.home ? g.yl : 100 - g.yl`, where 0
 line and 100 the end zone it attacks. One field, oriented per player - the same game shows a
 Chargers man at 97 and a Cardinal at 3.
 
-Possession is a separate question from orientation. The marker is whoever has the ball
-(`games[code].possCode`), so a defence watches the other team's logo come at its own end zone; the
-fill is turf when his own offence is out there and a dim line when it is not; the red band sits at
-whichever end the team in possession is attacking. The caption is ESPN's short down and distance
-plus the spot ("1st & 10 at ARI 16"), and the tooltip spells the whole thing out in a sentence.
+Three questions that come apart, and each drives something different:
 
-Nothing is drawn unless the game is live AND somebody has possession AND a down is posted:
-`loadKickoffs` sets `yl` to null otherwise, because between a touchdown and the next kickoff ESPN
-blanks possession and parks `yardLine` at 100, which would paint a phantom drive on every roster
-row. Both call sites are behind `slateWeek`, so an archive week never borrows today's slate. The
-bar moves on the 45-second tick the football already rides (`liveBallOpen`).
+- **Orientation** is his NFL team's, always: `pos`.
+- **`ours`** - does HIS team have the ball - sets the direction of travel: which end the red band
+  sits at, how many yards the tooltip counts, and whether the caption names the offence. His team's
+  ball reads "2nd & 7 at LV 38"; the other team's reads "LV ball · 2nd & 7", because a down with
+  nobody's name on it reads as his own.
+- **`mine`** - is his FANTASY unit on the field - only colours the fill, and follows the same rule
+  the football glyph uses (`ballTagHTML`): an offence player when his team has the ball, a **defence
+  when the other team does**. So a D/ST row lights up while it is being driven at, and the marker is
+  the opponent's logo coming toward its own end zone.
+
+The shell is drawn for the whole of a live game, including the seconds ESPN posts no spot at all -
+after a touchdown it blanks possession and parks `yardLine` at 100. Drawing the drive then would be
+a lie, and removing the bar would be worse: Game Center replaces its markup wholesale every
+forty-five seconds, and a row that grows and shrinks walks the page under whoever is reading it. So
+the track stays, the ball comes off, and the caption says "Between plays". `yl` is gated on a down
+being posted, not on possession, because ESPN sometimes has the spot a beat before it names the
+offence - then the fill is drawn with no marker. A blanked `yardLine` is rejected by type
+(`typeof sit.yardLine === 'number'`), since `+null` and `+''` are both 0, which is a real yard line.
+
+Both call sites are behind `slateWeek`, so an archive week never borrows today's slate. The bar moves
+on the 45-second tick the football already rides (`liveBallOpen`). The marker is positioned in
+pixels, not percent (`left:calc(6.5px + (100% - 13px) * var(--p) / 100)`), so a ball on the goal line
+still sits inside the track on a phone.
 
 `--gold` is otherwise reserved for trophies and champions; the goal post is the one exception,
 because a goal post is yellow in life and reads as one instantly at nine pixels.
