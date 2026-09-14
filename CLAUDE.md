@@ -838,8 +838,16 @@ because a goal post is yellow in life and reads as one instantly at nine pixels.
 
 A name in Game Center opens `openGameScore(pid, wk, season)` - that game and only that game -
 instead of the career modal (`#gsModal`, `renderGameScore`; both layouts pass the week and season
-being viewed, so an old week opens its own file rather than today's). The season and career are one
+being viewed, so an old week opens its own file rather than today's). A row on the Week stats page
+opens the same popup on the week that page is showing (`WK.week`). The season and career are one
 link away in the footer (`openPlayer`).
+
+The eyebrow is a week picker (`.gs-wksel`, `gsSetWeek`): week 1, week 2 and so on for the same
+player without leaving the popup. The weeks on offer are the ones that have been played - the same
+list the Week stats page uses (`wkStatWeeks`), or all of `REG_WEEKS` for a past season - plus
+whatever week the popup was opened on, so a future week from Game Center stays selectable.
+`gsEnsureWeek()` fetches the chosen week's stat file and fixture if they are not already in hand;
+it is the same tail `openGameScore` runs.
 
 `weekScoreBreakdown(st, pos)` is `scoreWeekStats` kept as rows instead of a running total, in the
 same order and with the same rules: the per-game bonuses are rows (with the yardage that earned

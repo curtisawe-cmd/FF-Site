@@ -1611,6 +1611,12 @@ table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-di
 .pick:disabled{opacity:.4;cursor:not-allowed}
 .pmodal-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--chalk-dim);font-size:14px;margin-top:8px}
 /* one game's scoring, from a Game Center name */
+/* the eyebrow with the week picker in it: the select wears the eyebrow's own type */
+.gs-eyebrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.gs-wksel{font-family:var(--f-mono);font-weight:600;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--turf);
+  background-color:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-chip);padding:5px 30px 5px 9px;min-height:32px;width:auto;cursor:pointer}
+  /* background-color, not background: the shorthand would wipe the chevron every select draws, and
+     the right padding is what keeps "WEEK 14" from running underneath it */
 .gs-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:2px}
 .gs-who{min-width:0;flex:1}
 .gs-who .pmodal-name{padding-right:0}
@@ -11587,16 +11593,32 @@ function openGameScore(pid, wk, season){
   }
   ov.style.display='flex';
   renderGameScore();
-  /* the week's stat file is normally already in hand (Game Center fetched it); an older week
-     opened from the season picker may not be */
+  gsEnsureWeek();
+}
+/* the week's stat file is normally already in hand (Game Center fetched it); an older week, or
+   one picked from the popup's own dropdown, may not be - and neither may its fixture */
+function gsEnsureWeek(){
   const key = `${GSCORE.season}-${GSCORE.wk}`;
   if(!WEEK_STATS[key]){
     fetchWeekStats(GSCORE.season, GSCORE.wk).then(
       ()=>{ if(gsOpen()) renderGameScore(); },
       ()=>{ GSCORE.err = true; if(gsOpen()) renderGameScore(); });
   }
-  /* and the fixture, for "vs CIN" on a week whose slate is not the live one */
   if(!NFL_OPP[key]) loadOpponents(GSCORE.season, GSCORE.wk).then(m=>{ if(m && gsOpen()) renderGameScore(); }, ()=>{});
+}
+/* the popup's own week picker: week 1, week 2, and so on for the same player, without going
+   back to the page behind it. The weeks on offer are the ones that have been played (the same
+   list the Week stats page uses); a future week the popup was opened on stays on the list. */
+function gsWeekOptions(wk, season){
+  const weeks = (season !== PROJ_SEASON) ? Array.from({length: REG_WEEKS}, (_,i)=>i+1) : wkStatWeeks();
+  if(!weeks.includes(wk)){ weeks.push(wk); weeks.sort((a,b)=>a-b); }
+  return weeks.map(w=>`<option value="${w}"${w===wk?' selected':''}>Week ${w}</option>`).join('');
+}
+function gsSetWeek(wk){
+  wk = +wk; if(!wk) return;
+  GSCORE.wk = wk; GSCORE.err = false;
+  renderGameScore();
+  gsEnsureWeek();
 }
 /* points to one decimal, except where a per-yard rule makes the second one real: 11.48 adds up
    in the column, 11.5 does not */
@@ -11630,6 +11652,7 @@ function renderGameScore(){
     : !file ? 'Loading this week’s stats…'
     : state==='pre' ? 'Yet to play. Nothing on the board until his game kicks off.'
     : state==='in' ? 'Nothing on the board yet - his game is under way.'
+    : (season===PROJ_SEASON && wk > (currentNflWeek()||0)) ? `Week ${wk} has not been played yet.`
     : 'No stats this week. He did not play.';
   const line = st ? statLine(st, pos) : '';
   const tbl = items.length ? `<div style="overflow-x:auto"><table class="plain gs-tbl">
@@ -11641,7 +11664,7 @@ function renderGameScore(){
     : `<p class="gs-line" style="margin-top:14px">${st ? 'He played, but nothing he did scores under this league’s rules.' : esc(blank)}</p>`;
   ov.innerHTML = `<div class="pmodal">
     <button class="pmodal-x" onclick="closeGameScore()" aria-label="Close">✕</button>
-    <div class="eyebrow">Week ${wk} scoring${season!==PROJ_SEASON ? ' · '+season : ''}</div>
+    <div class="eyebrow gs-eyebrow"><span>Scoring</span><select class="gs-wksel" aria-label="Week" onchange="gsSetWeek(this.value)">${gsWeekOptions(wk, season)}</select>${season!==PROJ_SEASON ? `<span>${season}</span>` : ''}</div>
     <div class="gs-top">${playerFace(m, 54)}
       <div class="gs-who">
         <div class="pmodal-name">${esc(m.name||'Player')}</div>
@@ -14299,7 +14322,7 @@ async function renderWeekStats(){
     <tr><th style="width:44px">Pos</th>${th('name','Player')}${th('pts','Pts',true)}${th('team','Team')}${numeric ? cols.map((c,i)=>th('c'+i, c[0], true)).join('') : '<th>Stat line</th>'}</tr>
     ${shown.map(r=>{
       const opp = (oppMap && r.team && r.team!=='FA') ? oppLabel(r.team, oppMap) : '';
-      return `<tr onclick="openPlayer('${r.id}')" title="View stats">
+      return `<tr onclick="openGameScore('${r.id}', WK.week, ${season})" title="How he scored this week">
         <td><span class="postag pos-${r.m.pos}" style="--pc:var(--${String(r.m.pos).toLowerCase()})">${r.m.pos}</span></td>
         <td><span class="pcell">${playerFace(r.m,32)}<span style="min-width:0"><b>${esc(r.name)}</b>${injById(r.id)}<div style="color:var(--chalk-dim);font-size:11px">${r.owner ? esc(r.owner) : 'Free agent'}</div></span></span></td>
         <td class="pl-proj" style="font-weight:700">${r.pts.toFixed(1)}</td>
@@ -18422,7 +18445,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · reply to that';
+const BUILD_STAMP = '2026-09-14 · week by week';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
