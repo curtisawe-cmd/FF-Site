@@ -703,6 +703,39 @@ on the same rule inline.
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
 (`poSeedBracket`), the playoff picture and the playoff odds all read this one order.
 
+## The phone is the primary layout
+
+Most of the league opens this on a phone, so the phone is not a fallback. Two widths are checked:
+**375px** (what most people have) and **320px** (the narrowest thing anyone will open it on). `html`
+and `body` are both `overflow-x:hidden`, which means anything wider than the viewport is **not
+scrolled to, it is cut off** - so an overflow here is lost content, not a scrollbar.
+
+Rules that came out of auditing every view at both widths:
+
+- **Never floor a grid track in pixels.** `repeat(auto-fill, minmax(270px,1fr))` promises a column
+  width the viewport cannot always keep; at 320px the track is wider than the card holding it and
+  the surplus is clipped. Write `minmax(min(270px,100%),1fr)` - the same intent on a wide screen,
+  and it collapses on a narrow one. Every auto-fill grid in the sheet uses this form.
+- **`1fr` is not `minmax(0,1fr)`.** A plain `1fr` track floors at min-content, so one unbreakable
+  line sets the whole grid's width. The file says this twice in comments and it caught the schedule
+  anyway.
+- **An ellipsis needs a width to bite on.** In an `auto` table layout the cell sizes to its content,
+  so `text-overflow:ellipsis` on the span inside does nothing. All Teams needed
+  `table-layout:fixed` before the name would clip.
+- **Tap targets.** WCAG 2.5.8 asks for 24x24 CSS px; 44x44 is the comfortable size. Where a big
+  target does not fit, grow the hit area without growing the visual: the Game Center pager is a
+  24x30 button drawing a 7px dot in a `::before`. A full 44px there would not fit ten matchups at
+  320px, which is what a 20-team league produces.
+- **A phone cannot hover.** Anything whose meaning lives only in a `title=` is invisible to most of
+  the league, and `:hover` is not an affordance. `@media (hover:none)` gives `.pstat` a dotted
+  underline so a tappable name looks like one.
+- **A sideways strip needs the house three**: `touch-action:pan-x`, `overscroll-behavior-x:contain`,
+  `overflow-y:hidden`. Without them a sideways drag becomes a page scroll or a browser back-swipe.
+  `markScrollStrips()` also fades the edge of a sub-tab strip that has tabs past it - adding a fifth
+  Matchups tab pushed Playoffs off-screen with nothing to say it was there.
+- **Real text has a floor.** 9px is a label size, not a reading size: the stat line, the projection
+  and the field caption are content and sit at 10.5px (10px below 360px).
+
 ## The field line (Game Center)
 
 Every live STARTER row carries a field: his own goal line at one end, the post his team is attacking
