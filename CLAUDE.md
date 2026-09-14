@@ -340,6 +340,26 @@ pushes like any message; `chatBodyHTML` draws everything from the mark on as a
 recap (written by `maybeWriteRecap` from `rcExtras`' `benchByName`, the lineups as they stood
 that Tuesday) and only fall back to `benchLeft` on today's lineups for weeks with no recap.
 
+## Replying in the chat
+
+Every message's meta line carries a `reply` link (dotted on touch, where nothing hovers). Tapping it
+sets `window.chatReply = {id, uid, n, m}` and shows the strip above the box (`#chatReplyBar`,
+`renderChatReplyBar`): who you are answering and the line you are answering. The x or Escape
+clears it; sending clears it too. `sendChat` copies it onto the message as `re`, online and in the
+signed-out localStorage mode alike.
+
+The reply carries a **snapshot**, not just an id: `m` is `chatExcerpt()` of the original - its
+words if it has any (140 characters), else "Photo", "Image" (a bare picture URL) or "📋 receipts".
+The chat is pruned at `CHAT_KEEP`, so by the time anyone reads a reply the original may be gone;
+the quote at the top of the bubble (`chatQuoteHTML`, `.chat-quote`) is drawn from the snapshot and
+never from a lookup. The author's name is re-resolved by uid so a rename carries through. Tapping
+the quote runs `chatJumpTo(id)`: every bubble has `data-mid`, the original scrolls into view and
+flashes (`.chat-flash`); if it has been pruned the toast says so.
+
+The push is addressed: when a single fresh message is a reply and the person it answers is among
+the targets, they get "`<who>` replied to you" and everyone else gets the usual "New chat from".
+The `$msgId` rule only checks `uid` on a new message, so `re` needs no rule change.
+
 ## Bench watch
 
 Live: `benchDetail(ti, stats)` wraps `benchLeft` with who sat (`top`) and who started instead

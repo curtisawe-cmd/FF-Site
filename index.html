@@ -2265,6 +2265,25 @@ body.has-ticker .installbar{bottom:calc(12px + 54px + var(--sa-b))}
 
 /* chat: emoji picker, attachments, inline images */
 .chat-ico{flex:0 0 auto;padding:6px 10px;font-size:16px;line-height:1;cursor:pointer}
+/* ---- replies ---- */
+.chat-reply{color:var(--chalk-dim);text-decoration:none}
+.chat-reply:hover{color:var(--turf);text-decoration:underline}
+@media (hover:none){ .chat-reply{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px} }
+/* the strip above the box: who you are answering and the line you are answering */
+.chat-replybar{display:flex;align-items:center;gap:8px;margin:6px 0 2px;padding:6px 6px 6px 10px;border-left:3px solid var(--turf);
+  border-radius:0 8px 8px 0;background:var(--panel-2);min-width:0}
+.chat-replybar .crb-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;font-size:12px}
+.chat-replybar .crb-who{font-weight:700;color:var(--turf);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-replybar .crb-x{color:var(--chalk-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the quote at the top of a reply bubble; the colours follow whose bubble it sits in */
+.chat-quote{display:block;margin:-2px 0 7px;padding:4px 9px;border-left:3px solid rgba(0,0,0,.28);border-radius:0 6px 6px 0;
+  background:rgba(0,0,0,.07);font-size:12px;line-height:1.35;white-space:normal;cursor:pointer;min-width:0}
+.chat-quote b{display:block;font-size:11px;letter-spacing:.02em}
+.chat-quote span{display:block;opacity:.85;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.chat-b.mine .chat-quote{border-left-color:rgba(255,255,255,.55);background:rgba(255,255,255,.16)}
+/* the original, when a quote is tapped */
+@keyframes chatflash{0%,60%{box-shadow:0 0 0 3px var(--turf)}100%{box-shadow:0 0 0 0 transparent}}
+.chat-b.chat-flash > div:nth-child(2){animation:chatflash 1.4s ease-out;border-radius:12px}
 .emoji-panel{display:flex;flex-wrap:wrap;gap:2px;max-height:172px;overflow-y:auto;
   padding:8px;margin-top:8px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2)}
 .emoji-panel button{background:none;border:none;font-size:21px;line-height:1;padding:4px 5px;border-radius:6px;cursor:pointer}
@@ -3083,6 +3102,8 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
     <!-- receipts: pick a manager (or type @name) and their record against you, their season,
          their luck and their bench crimes drop into the message as a card -->
     <div id="receiptsPanel" class="receipts-panel" style="display:none"></div>
+    <!-- what you are answering, while you type it -->
+    <div id="chatReplyBar" class="chat-replybar" style="display:none"></div>
     <div class="row" style="border-top:1px solid var(--line);padding-top:12px;gap:6px;align-items:flex-end">
       <!-- hidden by syncChatIdentity when signed in: you post under your manager name, so the box
            is dead weight — but it stays in the DOM because sendChat and renderChat read it -->
@@ -3090,7 +3111,7 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
       <textarea id="chatMsg" rows="1" placeholder="Say something regrettable…"
         style="flex:1;min-width:0;resize:none;overflow-y:hidden;max-height:120px;line-height:1.35"
         oninput="autoGrowChat(this);chatMentionCheck(this)"
-        onkeydown="if(chatMentionKey(event)) return; if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
+        onkeydown="if(chatMentionKey(event)) return; if(event.key==='Escape'&&window.chatReply){chatClearReply();return;} if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
         onpaste="chatPaste(event)"></textarea>
       <button class="btn ghost chat-ico" title="Receipts on a manager - their record against you, their season, their bench crimes. Or type @ and a name." onclick="toggleReceipts()">📋</button>
       <button class="btn ghost chat-ico" title="Emoji" onclick="toggleEmoji()">☺</button>
@@ -9894,7 +9915,13 @@ function notifyNewChat(){
       : (last.img && !String(last.m||'').trim() ? 'Sent a photo' : String(last.m||'').slice(0,120));
     /* keyed on the first message of the batch: the author's phone and desktop both batch the
        same fresh messages, and only one of them may announce them */
-    pushOnce('chat-'+(batch[0]._id||Date.now()), ()=>sendPush(`New chat from ${who}`, body, {uids:targets, mine:true}));
+    /* a reply is addressed: the person it answers is told so, and everyone else hears it as chat */
+    const reTo = (batch.length===1 && last.re && last.re.uid && targets.includes(last.re.uid)) ? last.re.uid : null;
+    pushOnce('chat-'+(batch[0]._id||Date.now()), ()=>{
+      if(reTo) sendPush(`${who} replied to you`, body, {uids:[reTo], mine:true});
+      const rest = reTo ? targets.filter(u=>u!==reTo) : targets;
+      if(rest.length) sendPush(`New chat from ${who}`, body, {uids:rest, mine:true});
+    });
   }, 4000);                                            /* let a flurry settle first */
 }
 function deleteChat(id){ if(!isAdmin()||!fbOk()||!id) return; try{ window.FB.dbRemove(chatPath()+'/'+id).catch(()=>{}); }catch(e){} }
@@ -10208,11 +10235,12 @@ async function sendChat(){
     const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
     const payload = { uid: window.fbUser.uid, n, m, t: Date.now() };
     if(att) payload.img = att.data;
-    try{ await window.FB.dbSet(chatPath()+'/'+key, payload); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach();
+    if(window.chatReply) payload.re = { ...window.chatReply };
+    try{ await window.FB.dbSet(chatPath()+'/'+key, payload); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach(); chatClearReply();
          const p=document.getElementById('emojiPanel'); if(p) p.style.display='none'; }
     catch(e){ toast(att? "Couldn't send that image \u2014 it may be too large." : "Couldn't send \u2014 make sure you're signed in."); }
   } else {
-    chatMsgs.push({n, m, t: Date.now(), img: att?att.data:undefined}); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach();
+    chatMsgs.push({n, m, t: Date.now(), img: att?att.data:undefined, re: window.chatReply ? { ...window.chatReply } : undefined}); msgEl.value=''; autoGrowChat(msgEl); chatClearAttach(); chatClearReply();
     try{ store.set('ffl_chat', JSON.stringify(chatMsgs.slice(-50))); }catch(e){}
     renderChat();
   }
@@ -10243,6 +10271,58 @@ function seenLine(ts, authorUid){
     : 'Seen by ' + names.slice(0,4).join(', ') + (names.length>4 ? ` +${names.length-4}` : ''));
   return `<div style="font-size:10.5px;color:var(--chalk-dim);margin:3px 6px 0;text-align:right;opacity:.85">${esc(txt)}</div>`;
 }
+/* ---- replying to a message ----
+   A reply carries a snapshot of what it answers - {id, uid, n, m} - not just the id, because the
+   chat is pruned at CHAT_KEEP and the original may be gone by the time anyone reads the reply.
+   The quote in the bubble comes from that snapshot; tapping it jumps to the original if it is
+   still on screen. The strip above the box shows what you are answering until you send or
+   dismiss it (the x, or Escape). */
+window.chatReply = null;                        /* {id, uid, n, m} while composing a reply */
+/* one line of a message, for the strip and the quote: words if it has them, otherwise what it is */
+function chatExcerpt(x, max){
+  max = max || 140;
+  const raw = String((x && x.m) || '');
+  const rc = raw.indexOf(RC_MARK);
+  const text = (rc >= 0 ? raw.slice(0, rc) : raw).replace(/\s+/g, ' ').trim();
+  if(text && /^https?:\/\/\S+$/i.test(text)) return 'Image';
+  if(text) return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  if(rc >= 0) return '📋 receipts';
+  if(x && x.img) return 'Photo';
+  return '';
+}
+function chatFindMsg(mid){
+  return chatMsgs.find((c, i) => (c._id || ('i' + i)) === mid) || null;
+}
+function chatReplyTo(mid){
+  const x = chatFindMsg(mid); if(!x) return;
+  window.chatReply = { id: x._id || mid, uid: x.uid || '', n: x.uid ? managerNameFor(x.uid, x.n || '') : (x.n || 'Manager'), m: chatExcerpt(x) };
+  renderChatReplyBar();
+  const box = document.getElementById('chatMsg'); if(box) box.focus();
+}
+function chatClearReply(){ window.chatReply = null; renderChatReplyBar(); }
+function renderChatReplyBar(){
+  const el = document.getElementById('chatReplyBar'); if(!el) return;
+  const r = window.chatReply;
+  if(!r){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = `<span class="crb-t"><span class="crb-who">Replying to ${esc(r.n)}</span><span class="crb-x">${esc(r.m || '')}</span></span>
+    <button class="btn ghost chat-ico" title="Cancel the reply (Esc)" aria-label="Cancel reply" onclick="chatClearReply()">✕</button>`;
+}
+/* the quote at the top of a reply bubble */
+function chatQuoteHTML(re){
+  if(!re || typeof re !== 'object') return '';
+  const who = re.uid ? managerNameFor(re.uid, re.n || '') : (re.n || 'Manager');
+  const jump = re.id ? ` onclick="chatJumpTo('${esc(String(re.id))}')" role="button" title="Jump to that message"` : '';
+  return `<div class="chat-quote"${jump}><b>${esc(who)}</b><span>${esc(re.m || '')}</span></div>`;
+}
+/* scroll the original into view and light it up for a moment; it may have been pruned */
+function chatJumpTo(mid){
+  const el = document.querySelector(`#chatList [data-mid="${CSS.escape(String(mid))}"]`);
+  if(!el){ toast('That message is gone now.'); return; }
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.remove('chat-flash'); void el.offsetWidth; el.classList.add('chat-flash');
+  setTimeout(()=>el.classList.remove('chat-flash'), 1400);
+}
 function renderChat(){
   const el = document.getElementById('chatList');
   if(!el) return;
@@ -10260,9 +10340,10 @@ function renderChat(){
     /* resolve by uid so a manager rename retitles their old messages too */
     const who = x.uid ? managerNameFor(x.uid, x.n) : (x.n || 'Manager');
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
-    return `<div style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
-      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when}${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
-      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:break-word">${chatBodyHTML(x)}</div>
+    const mid = x._id || ('i'+i);
+    return `<div class="chat-b${mine?' mine':''}" data-mid="${esc(mid)}" style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
+      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when} \u00B7 <a href="#" class="chat-reply" onclick="chatReplyTo('${esc(mid)}');return false">reply</a>${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
+      <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:break-word">${chatQuoteHTML(x.re)}${chatBodyHTML(x)}</div>
       ${((x._id||('i'+i))===lastMineId) ? seenLine(x.t, x.uid) : ''}
     </div>`;
   }).join('') : `<p style="color:var(--chalk-dim)">Nothing yet. Someone has to start it.</p>`;
@@ -18341,7 +18422,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · the page scrolls again';
+const BUILD_STAMP = '2026-09-14 · reply to that';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
