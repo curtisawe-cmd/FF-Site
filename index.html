@@ -17624,7 +17624,7 @@ function renderMyTeam(){
        THIS week goes red, because that is the one costing you points right now */
     const byeChip = byeTagHTML(p.playerId, p.nfl);
     return `<tr><td style="width:56px">${slotTag(slotLabel, p.pos)}</td>
-      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openPlayer('${p.playerId}')" title="View stats">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}<span class="mt-projinline"> \u00B7 <b>${projWkTxt(p)}</b> proj</span>${gameLineHTML(p.nfl)}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
+      <td><span class="pcell">${playerFace(p,30)}<span style="min-width:0"><span class="pstat" onclick="openGameScoreNow('${p.playerId}')" title="How he scored this week">${esc(p.name)}</span>${injById(p.playerId)}${lockChip}${keep?` <span class="inj q" title="Kept from last season \u2014 he stays on this roster all year">KEEPER</span>`:''}${cleared?` <span class="inj q" title="No longer carries an out designation \u2014 move them back to the bench">CLEARED</span>`:''}<div style="color:var(--chalk-dim);font-size:11px">${p.pos} \u00B7 ${p.nfl||''}<span class="mt-projinline"> \u00B7 <b>${projWkTxt(p)}</b> proj</span>${gameLineHTML(p.nfl)}</div></span></span><div class="mt-chips">${byeChip}${blockChipHTML(mi, p.playerId)}</div></td>
       <td class="mt-proj" title="Projected this week under this league's rules"><b>${projWkTxt(p)}</b><small>proj</small></td>
       <td class="mt-bye">${byeChip}</td>
       <td class="mt-block">${blockChipHTML(mi, p.playerId)}</td>
@@ -18452,7 +18452,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · the wire, week by week';
+const BUILD_STAMP = '2026-09-14 · my team, week by week';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

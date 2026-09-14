@@ -840,9 +840,10 @@ A name in Game Center opens `openGameScore(pid, wk, season)` - that game and onl
 instead of the career modal (`#gsModal`, `renderGameScore`; both layouts pass the week and season
 being viewed, so an old week opens its own file rather than today's). A row on the Week stats page
 opens the same popup on the week that page is showing (`WK.week`); a name on the Waivers tab - the
-wire rows and the Trending card - opens it through `openGameScoreNow(pid)`, on the week being played
-(which stays the week just finished until Thursday, the question a claim asks). The season and
-career are one link away in the footer (`openPlayer`).
+wire rows and the Trending card - and on My Team's roster opens it through `openGameScoreNow(pid)`,
+on the week being played (which stays the week just finished until Thursday, the question a claim
+or a lineup asks). All Teams and the main Players list still open the season/career page. The
+season and career are one link away in the popup's footer (`openPlayer`).
 
 The eyebrow is a week picker (`.gs-wksel`, `gsSetWeek`): week 1, week 2 and so on for the same
 player without leaving the popup. The weeks on offer are the ones that have been played - the same
