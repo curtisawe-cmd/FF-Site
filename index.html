@@ -2389,8 +2389,9 @@ table.inj-tbl tr:last-child td{border-bottom:none}
    Game Center — one swipeable panel per matchup
 ===================================================== */
 .gc-wrap{position:relative}
-.gc-scroll{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:smooth;
-  touch-action:pan-x;overscroll-behavior-x:contain;   /* the same three the nav strips carry: a sideways drag here must not become a page scroll, or a back-swipe */
+.gc-scroll{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
+  overscroll-behavior-x:contain;   /* no back-swipe off the first matchup. NOT touch-action:pan-x: this deck is the whole card, and
+                                      pan-x here means a finger on it can never scroll the page - the nav strips are 44px, this is not */
   padding:2px 2px 8px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
 .gc-card{flex:0 0 100%;scroll-snap-align:center;min-width:0}
 /* "All matchups" — every game stacked, no scrolling needed */
@@ -18340,7 +18341,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · built for a thumb';
+const BUILD_STAMP = '2026-09-14 · the page scrolls again';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

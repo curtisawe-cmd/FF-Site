@@ -729,10 +729,16 @@ Rules that came out of auditing every view at both widths:
 - **A phone cannot hover.** Anything whose meaning lives only in a `title=` is invisible to most of
   the league, and `:hover` is not an affordance. `@media (hover:none)` gives `.pstat` a dotted
   underline so a tappable name looks like one.
-- **A sideways strip needs the house three**: `touch-action:pan-x`, `overscroll-behavior-x:contain`,
+- **A short sideways strip needs the house three**: `touch-action:pan-x`, `overscroll-behavior-x:contain`,
   `overflow-y:hidden`. Without them a sideways drag becomes a page scroll or a browser back-swipe.
   `markScrollStrips()` also fades the edge of a sub-tab strip that has tabs past it - adding a fifth
   Matchups tab pushed Playoffs off-screen with nothing to say it was there.
+- **But never `touch-action:pan-x` on anything tall.** The Game Center swipe deck (`.gc-scroll`) is
+  the whole matchup card; with pan-x on it a finger starting anywhere on the card could only move
+  sideways, and on a phone that is the entire screen - Game Center could not be scrolled at all.
+  It shipped that way for a night. The deck keeps `overscroll-behavior-x:contain` (no back-swipe
+  off the first matchup) and leaves `touch-action` alone; the browser tells a sideways drag from a
+  vertical one by itself. The same goes for the week-stats table wrapper.
 - **Real text has a floor.** 9px is a label size, not a reading size: the stat line, the projection
   and the field caption are content and sit at 10.5px (10px below 360px).
 
