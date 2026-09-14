@@ -11581,6 +11581,13 @@ function weekScoreBreakdown(st, pos){
    what makes watching a player's number climb inside it worth doing. */
 const GSCORE = { pid:'', wk:0, season:0, err:false };
 function gsOpen(){ const ov = document.getElementById('gsModal'); return !!ov && ov.style.display!=='none'; }
+/* the wire and the trending card ask one question of a name - how did he do this week - so they
+   open the popup on the week being played (which stays the week just finished until Thursday) */
+function openGameScoreNow(pid){
+  const wk = (typeof currentNflWeek==='function' && currentNflWeek()) || (typeof projWeekNow==='function' && projWeekNow()) || 1;
+  const season = +((S.season && S.season.year)) || curDraftYear();
+  openGameScore(pid, wk, season);
+}
 function closeGameScore(){ const ov = document.getElementById('gsModal'); if(ov) ov.style.display='none'; }
 function openGameScore(pid, wk, season){
   GSCORE.pid = String(pid); GSCORE.wk = +wk||0; GSCORE.season = +season||0; GSCORE.err = false;
@@ -14173,7 +14180,7 @@ function trendingCardHTML(){
       + ` · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(p)} proj</b>`;
     return `<div class="wv-item"><div class="faRow">${playerFace(p,32)}
       <span class="postag pos-${p.pos}" style="--pc:var(--${String(p.pos||'').toLowerCase()})">${esc(p.pos)}</span>
-      <span class="faName pstat" onclick="openPlayer('${id}')" title="View stats">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(id, true)}${byeTagHTML(id, p.team)}</span>
+      <span class="faName pstat" onclick="openGameScoreNow('${id}')" title="How he scored this week">${esc(p.name)}${injBadge(p.inj,p.injBody)}${trendChipHTML(id, true)}${byeTagHTML(id, p.team)}</span>
       <span class="pmeta">${meta}</span>
       <button class="pick" onclick="addFromPlayers('${id}', event)">${wv?'Claim':'Add'}</button>
     </div></div>`;
@@ -17378,7 +17385,7 @@ function renderWaivers(){
         const from = Number.isInteger(w.from) ? `dropped by ${esc(teamName(w.from))}` : (w.lock ? 'game started' : 'dropped');
         return `<div class="wv-item"><div class="faRow">${waiverFace(w)}
           <span class="postag pos-${w.pos}" style="--pc:var(--${String(w.pos||'').toLowerCase()})">${esc(w.pos||'')}</span>
-          <span class="faName pstat" onclick="openPlayer('${w.pid}')" title="View stats">${esc(w.name)}${trendChipHTML(w.pid)}${byeTagHTML(w.pid, w.nfl)}</span>
+          <span class="faName pstat" onclick="openGameScoreNow('${w.pid}')" title="How he scored this week">${esc(w.name)}${trendChipHTML(w.pid)}${byeTagHTML(w.pid, w.nfl)}</span>
           <span class="pmeta">${esc(w.nfl||'')}${gameLineHTML(w.nfl)} · ${from} · <b class="pl-projmeta" title="Projected points a week under this league's rules">${projWkTxt(w)} proj</b></span>
           <span class="statpill" title="Clears to free agency in ${esc(waiverClearLabel(w.until))}">${esc(waiverClearLabel(w.until))}</span>
           ${mineIn
@@ -18445,7 +18452,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · week by week';
+const BUILD_STAMP = '2026-09-14 · the wire, week by week';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
