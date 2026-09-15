@@ -872,21 +872,24 @@ phone the category wraps so the points column stays on screen instead of behind 
 
 ## When the week ends
 
-Three clocks, all in the device's local time, all off `NFL_2026_WEEK1` (Thursday Sep 10):
+Two clocks, both in the device's local time, both off `NFL_2026_WEEK1` (Thursday Sep 10):
 
 | When | What | Where |
 | --- | --- | --- |
-| **Tuesday 4:00 AM** | The week is over. Results count (`weekIsOver` → `resultScore`, standings, recaps). Lineups **unlock** - `playerKickoff` returns null once `weekIsOver(currentNflWeek())`. The live score post stops (`maybeAutoScore`), so the week's totals are frozen with the lineups that played. | `weekOverAt(wk)` = week start + 5 days, 04:00 |
-| **Wednesday 4:00 AM** | Game-locked free agents clear the wire and become plain adds. | `weekClearAt(wk)` = `weekOverAt` + 24h |
-| **Thursday** | `currentNflWeek()` rolls over; the new slate loads (`loadKickoffs`), and kickoff-by-kickoff locking starts again as games begin. | `NFL_2026_WEEK1` + 7 days × (wk−1) |
+| **Tuesday 4:00 AM** | The week is over and **the next one starts**. Results count (`weekIsOver` → `resultScore`, standings, recaps). `currentNflWeek()` rolls over: the new slate loads (`loadKickoffs`), Matchups and Game Center open on it (`muWeekDefault`), lineups unlock (`playerKickoff` reads the new slate, all of it still to kick off), and the live score post stops for the finished week (`maybeAutoScore` → `weekIsOver`), so its totals are frozen with the lineups that played. | `weekOverAt(wk)` = week start + 5 days, 04:00; `currentNflWeek` = 1 + whole weeks since `weekOverAt(1) − 7d` |
+| **Wednesday 4:00 AM** | Game-locked free agents clear the wire and become plain adds. That is one day *into* the next week, so `gameLockFor` keeps last week's kickoffs in `NFL_KICKS_PREV` (`loadPrevKicks`, fetched once while the window is open) and holds anyone whose team played. | `weekClearAt(wk)` = `weekOverAt` + 24h |
 
-The lineup lock used to hold until Thursday, which on Tuesday read as "why is everyone still
-locked, it's week 2". It is the Tuesday clock now. The reason it can be: the live post
-(`postLiveScores`, the record `resultScore` reads when there is no official score) stops at the same
-instant, so a Tuesday lineup move, claim or trade cannot recompute a finished week from a roster
-that never played it. `autoScoreWeek` (the commissioner's official score) still recomputes from the
-current lineup - run it before Tuesday's moves if the official number matters, or trust the frozen
-live post, which is what everything reads anyway.
+Thursday is nothing special any more: it is the first kickoff of the week that started on Tuesday.
+The one thing that still keys on it is **which week has been played**: `weekGamesBegun(wk)` /
+`lastBegunWeek()` (Thursday of that week) drive the Week stats page's list (`wkStatWeeks`) and the
+week the wire and My Team open the scoring popup on (`openGameScoreNow`) - on a Tuesday those want
+last week, the one with numbers in it, not the one that has not kicked off.
+
+Before this, the week rolled over on Thursday and lineups stayed locked until then, which on a
+Tuesday read as "why is everyone still locked, it's week 2". `autoScoreWeek` (the commissioner's
+official score) still recomputes from the current lineup when it is run - run it before Tuesday's
+moves if the official number matters, or trust the frozen live post, which is what everything
+reads anyway.
 
 ## Game Center score style
 

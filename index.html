@@ -11465,12 +11465,22 @@ function liveStamp(wk){ const w=liveScoresMap&&liveScoresMap[wk]; return w? (+w.
 ===================================================== */
 /* which NFL week we're in by date; 0 = outside the regular season */
 function currentNflWeek(){
-  /* the season is on from the opener, not from the grid Thursday - otherwise the app would call
-     itself out of season for the twenty-eight hours the first game is actually being played */
+  /* The season is on from the opener, not from the grid Thursday - otherwise the app would call
+     itself out of season for the twenty-eight hours the first game is actually being played.
+     After that a week runs from 4 AM Tuesday to 4 AM Tuesday (weekOverAt): the moment one is
+     in the books the app is on the next one - its slate, its lineups, its waivers - rather than
+     sitting on a finished week until the calendar reaches Thursday. */
   if(Date.now() < NFL_2026_KICKOFF.getTime()) return 0;
-  const ms = Date.now() - NFL_2026_WEEK1.getTime();
+  const ms = Date.now() - (weekOverAt(1) - 7*86400000);
   const w = ms < 0 ? 1 : Math.floor(ms/(7*86400000)) + 1;
   return (w>=1 && w<=REG_WEEKS) ? w : 0;
+}
+/* the latest week whose games have actually started - the one a stats page or a "how did he do"
+   tap wants by default. On a Tuesday that is last week; from the Thursday kickoff it is this one. */
+function weekGamesBegun(wk){ return Date.now() >= NFL_2026_WEEK1.getTime() + (+wk-1)*7*86400000; }
+function lastBegunWeek(){
+  const cur = currentNflWeek(); if(!cur) return 0;
+  return weekGamesBegun(cur) ? cur : Math.max(1, cur-1);
 }
 function weekHasScores(w){
   const any = obj => obj && Object.keys(obj).some(k=>Array.isArray(obj[k]) && obj[k].some(v=>v!=null && v!==''));
@@ -11478,6 +11488,8 @@ function weekHasScores(w){
       || any((liveScoresMap && liveScoresMap[w]) || null);
 }
 /* the week the ticker should show: this week if it's scoring, else the latest week that did */
+/* the week Matchups and Game Center open on: this one, unless the manager has picked another */
+function muWeekDefault(){ return window.muWeek || (window.muWeek = (currentNflWeek() || 1)); }
 function tickerWeek(){
   if(!S.season || !S.season.schedule) return 0;
   const cur = currentNflWeek();
@@ -11584,7 +11596,7 @@ function gsOpen(){ const ov = document.getElementById('gsModal'); return !!ov &&
 /* the wire and the trending card ask one question of a name - how did he do this week - so they
    open the popup on the week being played (which stays the week just finished until Thursday) */
 function openGameScoreNow(pid){
-  const wk = (typeof currentNflWeek==='function' && currentNflWeek()) || (typeof projWeekNow==='function' && projWeekNow()) || 1;
+  const wk = (typeof lastBegunWeek==='function' && lastBegunWeek()) || (typeof projWeekNow==='function' && projWeekNow()) || 1;
   const season = +((S.season && S.season.year)) || curDraftYear();
   openGameScore(pid, wk, season);
 }
@@ -11875,7 +11887,7 @@ function gcWaitForProj(){
 }
 /* force a fresh pull even if the cache is still warm */
 async function refreshGameCenter(){
-  const wk=+(window.muWeek||1), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
+  const wk=+muWeekDefault(), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
   try{ await fetchWeekStats(season, wk, true); }catch(e){}
   /* the projections too: a Sunday-morning "refresh now" is usually about who got ruled out */
   if(season===PROJ_SEASON){ try{ await loadWeekProj(wk, true); }catch(e){} }
@@ -11884,7 +11896,7 @@ async function refreshGameCenter(){
 async function renderGameCenter(){
   const el=document.getElementById('gcView'); if(!el) return;
   if(!S.season || !S.season.schedule){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No schedule yet.</p></div>`; return; }
-  const wk = +(window.muWeek||1);
+  const wk = +muWeekDefault();
   const season = +(window.gcSeason || (S.season&&S.season.year) || 2026);
   /* Phones swipe, full stop. The stacked "all matchups" list is a desktop shape - on a phone it
      is one endless scroll with a jump pad bolted on, while a swipe with snap points is what the
@@ -14222,7 +14234,7 @@ function wkStatCols(pos){ return pos==='DEF' ? WK_DEF_COLS : statCols(pos); }
 /* the weeks with a stat file to show: everything up to the week being played; after the
    regular season, all of it; before the opener, week 1 (which says "not published yet") */
 function wkStatWeeks(){
-  const now = (typeof currentNflWeek==='function') ? currentNflWeek() : 0;
+  const now = (typeof lastBegunWeek==='function') ? lastBegunWeek() : 0;
   const last = now ? now : (Date.now() > NFL_2026_KICKOFF.getTime() ? REG_WEEKS : 1);
   return Array.from({length: Math.max(1, Math.min(REG_WEEKS, last))}, (_,i)=>i+1);
 }
@@ -14458,7 +14470,7 @@ function renderMatchups(){
     </div>`;
     return;
   }
-  const wk = String(window.muWeek || (window.muWeek = 1));
+  const wk = String(muWeekDefault());
   const games = S.season.schedule[wk]||[];
   const edit = !!window.muEdit;
   /* the selected week's projection file, fetched on first look and redrawn when it lands */
@@ -15932,6 +15944,25 @@ Bench players are not dropped, only reordered.`)) return;
    The commissioner can push through any locked move behind a confirm, because fixing a
    lineup for someone at the bar IS the commissioner's job. */
 let NFL_KICKS = { wk: 0, map: {}, games: {}, list: [], at: 0 };
+/* Last week's kickoffs, kept for the day after the week ends: the free-agent game lock runs to
+   4 AM Wednesday (weekClearAt), and since the week itself rolls over at 4 AM Tuesday that last
+   day belongs to the next week's slate. Loaded once, only while that window is open. */
+let NFL_KICKS_PREV = { wk: 0, map: {} };
+async function loadPrevKicks(wk){
+  if(!(wk > 1) || Date.now() >= weekClearAt(wk-1) || NFL_KICKS_PREV.wk === wk-1) return;
+  NFL_KICKS_PREV = { wk: wk-1, map: {} };                  /* claim the slot so a burst of calls fetches once */
+  try{
+    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${wk-1}&dates=2026`);
+    const j = await r.json(); const map = {};
+    (j.events||[]).forEach(ev=>{
+      const t = Date.parse(ev.date); if(!Number.isFinite(t)) return;
+      (((ev.competitions||[])[0]||{}).competitors||[]).forEach(c=>{
+        const ab = String((c.team||{}).abbreviation||'').toUpperCase(); if(ab) map[ESPN_TEAM_FIX[ab]||ab] = t; });
+    });
+    if(Object.keys(map).length) NFL_KICKS_PREV = { wk: wk-1, map };
+    else NFL_KICKS_PREV = { wk: 0, map: {} };
+  }catch(e){ NFL_KICKS_PREV = { wk: 0, map: {} }; }
+}
 const ESPN_TEAM_FIX = { WSH:'WAS' };   /* the one code ESPN and Sleeper disagree on */
 /* how much of a game is left, 0..1, off ESPN's period and clock: halftime is 0.5, overtime is
    nearly nothing, a game not yet kicked off is everything */
@@ -15956,6 +15987,7 @@ async function loadKickoffs(force){
      locks off it until currentNflWeek() itself says the week is on (see playerKickoff) */
   const wk = currentNflWeek() || projWeekNow();
   if(wk < 1){ NFL_KICKS = { wk: 0, map: {}, games: {}, list: [], at: Date.now() }; return; }
+  try{ loadPrevKicks(wk); }catch(e){}                       /* the day after a week ends, its kickoffs still lock the wire */
   const ttl = slateActive() ? 3*60000 : 6*3600000;
   if(!force && NFL_KICKS.wk === wk && Date.now() - NFL_KICKS.at < ttl) return;
   try{
@@ -17013,9 +17045,16 @@ function weekClearAt(wk){ return weekOverAt(wk) + 24*3600000; }
    nothing locks - fails open, like the lineup lock, for the same reason. */
 function gameLockFor(p){
   const wk=(typeof currentNflWeek==='function') ? currentNflWeek() : 0;
-  if(!wk || !NFL_KICKS || NFL_KICKS.wk!==wk) return null;
+  if(!wk) return null;
   const tm=String((p && (p.team||p.nfl))||'').toUpperCase(); if(!tm) return null;
-  const k=NFL_KICKS.map[tm], now=Date.now(), until=weekClearAt(wk);
+  const now=Date.now();
+  /* last week's game still holds him until 4 AM Wednesday, one day into this week */
+  if(wk > 1 && now < weekClearAt(wk-1) && NFL_KICKS_PREV.wk === wk-1){
+    const pk = NFL_KICKS_PREV.map[tm];
+    if(Number.isFinite(pk) && now >= pk) return { at:pk, until: weekClearAt(wk-1) };
+  }
+  if(!NFL_KICKS || NFL_KICKS.wk!==wk) return null;
+  const k=NFL_KICKS.map[tm], until=weekClearAt(wk);
   return (Number.isFinite(k) && now>=k && now<until) ? { at:k, until } : null;
 }
 /* Player lists ask "is he on waivers?" once per row, hundreds of times per render, so the
@@ -18460,7 +18499,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · the week ends Tuesday';
+const BUILD_STAMP = '2026-09-15 · and the next one starts Tuesday';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
