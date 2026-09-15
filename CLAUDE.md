@@ -643,13 +643,23 @@ a **won claim drops you to the back only until the next reset**. "Continuous rol
 resets; FAAB keeps its order as a rolling tiebreak (Sleeper's behaviour). Nothing resets once
 `currentNflWeek()` is 0, i.e. the playoffs.
 
-How it is stored: `S.waiverResetWk` is the week the saved `S.waiverOrder` belongs to. `waiverOrder()`
-treats a saved list stamped with an older week as stale and returns the fresh seed instead, so every
-device shows the reset the moment the week rolls over without waiting for a write. The
+Which leagues reset: `waiverResets()` is "waivers on, not FAAB, and the rule does not say rolling
+or continuous". The rule is a label the commissioner can retype (this league's reads "Shittiest
+record picks first"), so it tests for the two things that mean *not this* rather than for a fixed
+phrase a rewrite would silently switch off.
+
+How it is stored: `S.waiverResetWk` is the week the saved `S.waiverOrder` belongs to, and
+`S.waiverResetOk` marks that the reset was made with results in hand. `waiverOrderStale()` is: a new
+week has started, **the previous week's results are in** (`weekHasResults(wk-1)`), and the saved
+list is either older than this week or unmarked. `waiverOrder()` returns the fresh seed while stale,
+so every device shows the reset the moment the week rolls over without waiting for a write. The
+results clause is load-bearing: a device opening at 4:01 on Tuesday may not have the live scores
+yet, and a reset run then would seed from twelve 0-0 teams and lock that in for the week. The
 commissioner's device - the only one that settles claims (`maybeProcessWaivers` is admin-only) -
-writes the reset down first (`maybeResetWaiverOrder`, called at the top of processing), so claims
-are settled against, and `moveToBackOfWaiverOrder` moves people within, this week's list. The manual
-reseed button stamps the week too.
+writes the reset down first (`maybeResetWaiverOrder`, at the top of processing), so claims are
+settled against, and `moveToBackOfWaiverOrder` moves people within, this week's list. The manual
+reseed button stamps and marks too. The priority card says which state it is in: "Reset for week
+N" or "resets once week N-1's results are in".
 
 Sources checked: ESPN (weekly reset to inverse standings, ties to fewest points, a successful
 claim moves you to the bottom), Yahoo (reset after each game week by reverse standings, stops in

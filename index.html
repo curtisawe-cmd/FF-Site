@@ -17008,10 +17008,23 @@ function seedWaiverOrder(){
    reset is a week stamp: an order saved under an older week is stale, and stale reads as the
    fresh seed on EVERY device the moment the week rolls over (4 AM Tuesday) - the commissioner's
    device, which is the one that settles claims, writes it down when it next runs. */
-function waiverResets(){ return /resets to inverse standings/i.test(String((S.rules||{})['Waivers']||'')); }
+function waiverResets(){
+  /* the rule is a label the commissioner can retype ("Shittiest record picks first"), so the
+     test is for the two things that mean NOT this - rolling, and an auction - rather than for
+     one fixed phrase that a rewrite would silently switch off */
+  const rule = String((S.rules||{})['Waivers']||'');
+  return waiversOn() && !faabOn() && !/rolling|continuous/i.test(rule);
+}
+/* Stale means: a new week has started, its predecessor's results are in, and the saved order is
+   not this week's. The results clause matters: on a device that opens at 4:01 on Tuesday the
+   live scores may not have arrived yet, and a reset run then would seed from twelve 0-0 teams
+   and stamp the week - locking a meaningless order in until the following Tuesday. Waiting
+   costs nothing; the wire does not settle a claim before Wednesday. waiverResetOk is the mark
+   of a reset made with results in hand; a stamp without it is redone once they are. */
 function waiverOrderStale(){
   const wk = (typeof currentNflWeek==='function') ? currentNflWeek() : 0;
-  return waiverResets() && wk >= 2 && (+S.waiverResetWk||0) < wk;
+  if(!waiverResets() || wk < 2 || !weekHasResults(wk-1)) return false;
+  return (+S.waiverResetWk||0) < wk || !S.waiverResetOk;
 }
 function waiverOrder(){
   const n=(S.teams||[]).length;
@@ -17025,7 +17038,8 @@ function waiverOrder(){
 function waiverPriority(ti){ const k=waiverOrder().indexOf(ti); return k<0 ? null : k+1; }
 function moveToBackOfWaiverOrder(ti){
   S.waiverOrder = waiverOrder().filter(i=>i!==ti).concat([ti]);
-  if(waiverResets()) S.waiverResetWk = currentNflWeek();  /* this list belongs to this week */
+  const wk = currentNflWeek();
+  if(waiverResets() && wk >= 2 && weekHasResults(wk-1)){ S.waiverResetWk = wk; S.waiverResetOk = true; }  /* this list belongs to this week */
   saveState();
 }
 /* the commissioner's device writes the week's reset down, so the list every device is already
@@ -17033,7 +17047,7 @@ function moveToBackOfWaiverOrder(ti){
    within it rather than within last week's leftovers */
 function maybeResetWaiverOrder(){
   if(!isAdmin() || !fbOk() || !window.fbUser || !waiverOrderStale()) return;
-  S.waiverOrder = seedWaiverOrder(); S.waiverResetWk = currentNflWeek();
+  S.waiverOrder = seedWaiverOrder(); S.waiverResetWk = currentNflWeek(); S.waiverResetOk = true;
   saveState();
   if(window.currentView==='players' && window.plTab==='wv'){ try{ renderWaivers(); }catch(e){} }
 }
@@ -17576,6 +17590,10 @@ function renderWaivers(){
     <div class="card">
       <h2>Waiver priority${faabOn()?'' :you}</h2>
       <div class="wv-order wv-grid">${orderHTML}</div>
+      ${(()=>{ if(!waiverResets()) return '';
+        const wk = currentNflWeek(); if(!(wk>=2)) return '';
+        if(waiverOrderStale() || (+S.waiverResetWk===wk && S.waiverResetOk)) return `<p class="sub" style="margin:8px 0 0;font-size:11.5px">Reset for week ${wk}: the standings after week ${wk-1}, worst record first.</p>`;
+        return `<p class="sub" style="margin:8px 0 0;font-size:11.5px">Week ${wk}: resets from the standings once week ${wk-1}'s results are in.</p>`; })()}
       <p class="sub" data-note="wv-priority" style="margin:10px 0 0">${faabOn()
         ? 'Under FAAB this order only breaks a tied bid. Win a claim and you still drop to the back, so tied bids do not keep falling the same way. Dropped players sit here {waitTime} before anyone can add them outright.'
         : waiverResets()
@@ -18356,7 +18374,7 @@ function resetWaiverOrder(){
   const seeded=seedWaiverOrder();
   const preview=seeded.map((i,k)=>`${k+1}. ${teamName(i)}`).join('\n');
   if(!confirm(`Reseed waiver priority from the standings, worst record first?\n\n${preview}`)) return;
-  S.waiverOrder=seeded; S.waiverResetWk=(typeof currentNflWeek==='function') ? currentNflWeek() : 0; saveState();
+  S.waiverOrder=seeded; S.waiverResetWk=(typeof currentNflWeek==='function') ? currentNflWeek() : 0; S.waiverResetOk=true; saveState();
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
   toast('Waiver priority reseeded');
 }
@@ -18535,7 +18553,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · worst record picks first, every Tuesday';
+const BUILD_STAMP = '2026-09-15 · reset once the results are in';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
