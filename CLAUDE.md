@@ -589,6 +589,12 @@ fetches and repaints once per set of numbers (`_trendPainted`), so a repaint can
 
 ## Week stats (Players > Week stats)
 
+
+A free agent's row carries the same pill the wire and the Trending card use - **Claim** while
+`onWaivers(id)` (dropped, or game-locked until Wednesday), **Add** once he is clear - wired to
+`addFromPlayers(id, event)`, which routes the two and stops the click reaching the row, so the
+scoring popup does not open on top of a claim. A rostered player's row names the owner instead.
+`.wk-pick` is the pill sized for the sub-line under the name, taller on a phone.
 `renderWeekStats()` (sub-tab key `week`, container `#wkView`, `setPlTab`): every player with a line in
 `fetchWeekStats(season, wk)` - the same Sleeper file the matchups are scored from - with `scoreWeekStats`
 points beside it. All state lives in the `WK` object (week, pos, q, fa, all, sort, oppTried), never on

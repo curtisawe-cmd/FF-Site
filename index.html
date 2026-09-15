@@ -1426,6 +1426,13 @@ nav.tabs button{position:relative}
 /* the week stats table: numbers never wrap, the stat line in words does, the name cell keeps its width */
 table.wkstats th,table.wkstats td{white-space:nowrap}
 table.wkstats .pcell{min-width:150px}
+/* the Claim / Add pill on a free agent's row, the same pill the wire uses, sized for the sub-line
+   under the name; a phone gets a taller one to hit */
+.wk-pick{font-family:var(--f-ui);font-weight:700;font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  background:var(--turf);color:var(--on-turf);border:none;border-radius:var(--r-chip);padding:2px 9px;line-height:1.4;
+  margin-left:6px;vertical-align:middle;cursor:pointer;transition:background .12s ease}
+.wk-pick:hover{background:var(--turf-deep)}
+@media(max-width:640px){ .wk-pick{min-height:30px;padding:4px 11px;font-size:12px} }
 table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-dim);font-size:12.5px}
 /* a phone: Pos, the name (which may wrap) and Pts fit the screen; the stat columns swipe */
 @media(max-width:640px){
@@ -14356,7 +14363,7 @@ async function renderWeekStats(){
       const opp = (oppMap && r.team && r.team!=='FA') ? oppLabel(r.team, oppMap) : '';
       return `<tr onclick="openGameScore('${r.id}', WK.week, ${season})" title="How he scored this week">
         <td><span class="postag pos-${r.m.pos}" style="--pc:var(--${String(r.m.pos).toLowerCase()})">${r.m.pos}</span></td>
-        <td><span class="pcell">${playerFace(r.m,32)}<span style="min-width:0"><b>${esc(r.name)}</b>${injById(r.id)}<div style="color:var(--chalk-dim);font-size:11px">${r.owner ? esc(r.owner) : 'Free agent'}</div></span></span></td>
+        <td><span class="pcell">${playerFace(r.m,32)}<span style="min-width:0"><b>${esc(r.name)}</b>${injById(r.id)}<div style="color:var(--chalk-dim);font-size:11px">${r.owner ? esc(r.owner) : `Free agent <button class="pick wk-pick" onclick="addFromPlayers('${r.id}', event)">${onWaivers(r.id) ? 'Claim' : 'Add'}</button>`}</div></span></span></td>
         <td class="pl-proj" style="font-weight:700">${r.pts.toFixed(1)}</td>
         <td style="font-family:var(--f-mono)">${esc(r.team)}${opp?` <span style="color:var(--chalk-dim)">${esc(opp)}</span>`:''}</td>
         ${numeric ? cols.map(c=>`<td style="text-align:right;font-family:var(--f-mono)">${cell(r.st, c)}</td>`).join('') : `<td class="wk-line">${esc(statLine(r.st, r.m.pos))||'—'}</td>`}
@@ -18553,7 +18560,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · FAAB ties reset too';
+const BUILD_STAMP = '2026-09-15 · add him from the week stats';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
