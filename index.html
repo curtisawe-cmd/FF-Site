@@ -1531,6 +1531,16 @@ table.wkstats td.wk-line{white-space:normal;min-width:220px;color:var(--chalk-di
   .wv-item .faRow .pick,
   .wv-item .faRow > .btn,
   .wv-item .faRow .wv-move{grid-area:btn;justify-self:end}
+  /* A claim of yours has two controls, the reorder arrows and Withdraw, and both were pinned to
+     the "btn" cell above - drawn on top of each other. Its own template: rank, name and the
+     clock on the first line, the drop line under them, then the arrows at the left and
+     Withdraw at the right of a third line, each in a cell of its own. */
+  .wv-item .faRow.wv-mine{
+    grid-template-columns:auto minmax(0,1fr) auto;
+    grid-template-areas:"pos name pill" "meta meta meta" "move move btn";
+  }
+  .wv-item .faRow.wv-mine .wv-move{grid-area:move;justify-self:start}
+  .wv-item .faRow.wv-mine > .btn{grid-area:btn;justify-self:end}
   /* Claim and Withdraw are the point of the page, so they get a real tap target rather than the
      11px-padded chip they inherit from the desktop table. */
   .wv-item .faRow .pick,
@@ -18499,7 +18509,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · and the next one starts Tuesday';
+const BUILD_STAMP = '2026-09-15 · arrows off the button';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
