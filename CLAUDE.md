@@ -633,6 +633,28 @@ for me this week?**
   `#wvView` so `#pickView` shares them). Re-rendered by `setPlTab('pick')`, the one-minute
   pulse, `maybeRefreshWeekProj` and the projections-arrived callback in `showView('players')`.
 
+## Waiver priority resets every Tuesday
+
+The league rule reads "1 day, resets to inverse standings", and the app now does what ESPN, Yahoo
+and Sleeper all mean by it: when a week is in the books (4 AM Tuesday, `weekOverAt`) the order goes
+back to **worst record first**, a tie going to the **lower points-for** (`seedWaiverOrder` is
+`seasonStandings()` read backwards, and the standings break ties by head-to-head then points), and
+a **won claim drops you to the back only until the next reset**. "Continuous rolling waivers" never
+resets; FAAB keeps its order as a rolling tiebreak (Sleeper's behaviour). Nothing resets once
+`currentNflWeek()` is 0, i.e. the playoffs.
+
+How it is stored: `S.waiverResetWk` is the week the saved `S.waiverOrder` belongs to. `waiverOrder()`
+treats a saved list stamped with an older week as stale and returns the fresh seed instead, so every
+device shows the reset the moment the week rolls over without waiting for a write. The
+commissioner's device - the only one that settles claims (`maybeProcessWaivers` is admin-only) -
+writes the reset down first (`maybeResetWaiverOrder`, called at the top of processing), so claims
+are settled against, and `moveToBackOfWaiverOrder` moves people within, this week's list. The manual
+reseed button stamps the week too.
+
+Sources checked: ESPN (weekly reset to inverse standings, ties to fewest points, a successful
+claim moves you to the bottom), Yahoo (reset after each game week by reverse standings, stops in
+the playoffs), Sleeper (reverse-standings mode resets weekly; FAAB ties break by rolling priority).
+
 ## Waivers: the game lock
 
 `waiverWire()` is the one list every waiver question reads (`onWaivers`, `wireEntry`, the Add/Claim
