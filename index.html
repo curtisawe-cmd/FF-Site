@@ -12273,9 +12273,9 @@ async function postLiveScores(wk, season){
   games.forEach((g,m)=>{ payload[m] = [ teamWeekDetail(g[0],stats).total, teamWeekDetail(g[1],stats).total ]; });
   /* The projections the week is being played under ride with the score (see projOf). This
      device's while the week is still being played; once it is over (Tuesday) the pair from
-     the last post is what carries forward - the live post keeps running until Thursday, and a
-     waiver claim or trade processed on Tuesday would otherwise rewrite a finished week's
-     projection from a lineup that never played. The node is a full replace, so leaving the
+     the last post is what carries forward - maybeAutoScore stops posting at 4 AM Tuesday for
+     the same reason, so a waiver claim, a trade or a lineup move on Tuesday cannot rewrite a
+     finished week from a roster that never played it. The node is a full replace, so leaving the
      pair out would erase what somebody else recorded; a pair from another season is not
      carried, since the node outlives the schedule that made it. Never waits on the network
      for this: the score post must go out whether or not Sleeper answers in time. */
@@ -12492,6 +12492,9 @@ let autoScoreBusy = false;
 async function maybeAutoScore(){
   if(S.autoScoreOff || autoScoreBusy || !window.fbUser || !S.season || !S.season.schedule) return;
   const wk = currentNflWeek(); if(!wk) return;                       /* offseason: nothing to do */
+  /* the last post before 4 AM Tuesday is the record: lineups unlock then, and a re-post
+     afterwards would score a finished week from a roster that never played it */
+  if(weekIsOver(wk)) return;
   if(Date.now() - liveStamp(wk) < AUTOSCORE_EVERY_MS) return;        /* someone refreshed it recently */
   autoScoreBusy = true;
   try{ await postLiveScores(wk, S.season.year); }
@@ -16487,6 +16490,11 @@ function oppLabel(nfl, map){
 }
 function playerKickoff(pid){
   if(NFL_KICKS.wk < 1 || NFL_KICKS.wk !== currentNflWeek()) return null;
+  /* The lock exists to stop a lineup being changed while its week is still being played. The
+     week is over at 4 AM Tuesday (weekOverAt), the results are in, and from then on a move
+     is next week's business - so nothing stays locked until Thursday just because the
+     calendar has not rolled over yet. */
+  if(weekIsOver(currentNflWeek())) return null;
   const p = POOL_MAP.get(pid) || (POOL||[]).find(x=>x.id===pid)
          || (realDraft().picks||[]).find(x=>x.playerId===pid && !x.cut);
   const tm = p && (p.team || p.nfl);
@@ -16679,7 +16687,7 @@ function lockGuard(pid, what){
   const p = POOL_MAP.get(pid) || (realDraft().picks||[]).find(x=>x.playerId===pid) || {};
   const nm = p.name || 'That player';
   if(isAdmin()) return confirm(`${nm} is locked — his game has started.\n\nCommissioner override: ${what} anyway?`);
-  toast(`${nm} is locked — his game has started. Lineups unlock next week.`);
+  toast(`${nm} is locked — his game has started. Lineups unlock Tuesday at 4 AM, once the week is in the books.`);
   return false;
 }
 /* Dropping is not moving. A bench player whose game has already been played is scoring for
@@ -18452,7 +18460,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-14 · my team, week by week';
+const BUILD_STAMP = '2026-09-15 · the week ends Tuesday';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

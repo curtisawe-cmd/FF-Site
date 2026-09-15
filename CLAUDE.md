@@ -870,6 +870,24 @@ kickoff, "nothing on the board yet" during, "did not play" after. The popup redr
 Center (the hook sits before the layout branch), so a live number climbs while it is open. On a
 phone the category wraps so the points column stays on screen instead of behind a sideways swipe.
 
+## When the week ends
+
+Three clocks, all in the device's local time, all off `NFL_2026_WEEK1` (Thursday Sep 10):
+
+| When | What | Where |
+| --- | --- | --- |
+| **Tuesday 4:00 AM** | The week is over. Results count (`weekIsOver` → `resultScore`, standings, recaps). Lineups **unlock** - `playerKickoff` returns null once `weekIsOver(currentNflWeek())`. The live score post stops (`maybeAutoScore`), so the week's totals are frozen with the lineups that played. | `weekOverAt(wk)` = week start + 5 days, 04:00 |
+| **Wednesday 4:00 AM** | Game-locked free agents clear the wire and become plain adds. | `weekClearAt(wk)` = `weekOverAt` + 24h |
+| **Thursday** | `currentNflWeek()` rolls over; the new slate loads (`loadKickoffs`), and kickoff-by-kickoff locking starts again as games begin. | `NFL_2026_WEEK1` + 7 days × (wk−1) |
+
+The lineup lock used to hold until Thursday, which on Tuesday read as "why is everyone still
+locked, it's week 2". It is the Tuesday clock now. The reason it can be: the live post
+(`postLiveScores`, the record `resultScore` reads when there is no official score) stops at the same
+instant, so a Tuesday lineup move, claim or trade cannot recompute a finished week from a roster
+that never played it. `autoScoreWeek` (the commissioner's official score) still recomputes from the
+current lineup - run it before Tuesday's moves if the official number matters, or trust the frozen
+live post, which is what everything reads anyway.
+
 ## Game Center score style
 
 Settings > Look & Alarms > **Game Center scores** (`S.gcScore = {family,size,color,lead,proj}`,
