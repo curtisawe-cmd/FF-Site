@@ -640,7 +640,8 @@ and Sleeper all mean by it: when a week is in the books (4 AM Tuesday, `weekOver
 back to **worst record first**, a tie going to the **lower points-for** (`seedWaiverOrder` is
 `seasonStandings()` read backwards, and the standings break ties by head-to-head then points), and
 a **won claim drops you to the back only until the next reset**. "Continuous rolling waivers" never
-resets; FAAB keeps its order as a rolling tiebreak (Sleeper's behaviour). Nothing resets once
+resets; under FAAB the highest bid wins and the order only breaks a tie, but that tiebreak order
+resets the same way (ESPN's behaviour). Nothing resets once
 `currentNflWeek()` is 0, i.e. the playoffs.
 
 Which leagues reset: `waiverResets()` is "waivers on, not FAAB, and the rule does not say rolling

@@ -17013,7 +17013,7 @@ function waiverResets(){
      test is for the two things that mean NOT this - rolling, and an auction - rather than for
      one fixed phrase that a rewrite would silently switch off */
   const rule = String((S.rules||{})['Waivers']||'');
-  return waiversOn() && !faabOn() && !/rolling|continuous/i.test(rule);
+  return waiversOn() && !/rolling|continuous/i.test(rule);   /* FAAB too: its tiebreak order resets the same way */
 }
 /* Stale means: a new week has started, its predecessor's results are in, and the saved order is
    not this week's. The results clause matters: on a device that opens at 4:01 on Tuesday the
@@ -17595,7 +17595,7 @@ function renderWaivers(){
         if(waiverOrderStale() || (+S.waiverResetWk===wk && S.waiverResetOk)) return `<p class="sub" style="margin:8px 0 0;font-size:11.5px">Reset for week ${wk}: the standings after week ${wk-1}, worst record first.</p>`;
         return `<p class="sub" style="margin:8px 0 0;font-size:11.5px">Week ${wk}: resets from the standings once week ${wk-1}'s results are in.</p>`; })()}
       <p class="sub" data-note="wv-priority" style="margin:10px 0 0">${faabOn()
-        ? 'Under FAAB this order only breaks a tied bid. Win a claim and you still drop to the back, so tied bids do not keep falling the same way. Dropped players sit here {waitTime} before anyone can add them outright.'
+        ? 'Under FAAB the highest bid wins; this order only breaks a tied bid, and it resets when the week ends (Tuesday, 4 AM) to worst record first. Win a claim and you still drop to the back until then. Dropped players sit here {waitTime} before anyone can add them outright.'
         : waiverResets()
         ? 'Worst record picks first, reset when the week ends (Tuesday, 4 AM) with the lower score breaking a tie. Win a claim and you drop to the back until the next reset. Dropped players sit here {waitTime} before anyone can add them outright.'
         : 'Worst record picks first. Win a claim and you drop to the back. Dropped players sit here {waitTime} before anyone can add them outright.'}</p>
@@ -18553,7 +18553,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · reset once the results are in';
+const BUILD_STAMP = '2026-09-15 · FAAB ties reset too';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
