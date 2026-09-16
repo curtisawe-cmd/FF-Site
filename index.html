@@ -2665,6 +2665,25 @@ section.view[data-ghost] > *{position:relative;z-index:1}
 .gc-gs.post{opacity:.65}
 .gc-meta .gc-gs::before{content:' · ';opacity:.6}
 .h2h-meta .gc-gs{display:block}
+/* live injury news on a Game Center row: what ESPN posted about his game, as it was posted */
+.gc-inj{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-ui);font-weight:700;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;
+  padding:0 7px;height:18px;line-height:1;border-radius:5px;border:1px solid var(--line);background:var(--panel-2);color:var(--chalk);
+  white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;box-sizing:border-box}
+.gc-inj::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.gc-inj.out,.gc-inj.inactive{color:var(--charge);border-color:var(--charge)}
+.gc-inj.q{color:var(--gold);border-color:var(--gold)}
+.gc-inj.back,.gc-inj.ok{color:var(--turf);border-color:var(--turf)}
+.gc-meta .gc-inj{margin-left:6px}
+.h2h-inj{display:flex;min-width:0;margin-top:1px}
+.h2h-inj.l{grid-column:1/3}
+.h2h-inj.r{grid-column:4/6;justify-content:flex-end}
+/* the same line in the scoring popup, in full */
+.gs-inj{margin:12px 0 0;font-size:13px;line-height:1.45;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2)}
+.gs-inj b{text-transform:uppercase;letter-spacing:.04em;font-size:11.5px;margin-right:2px}
+.gs-inj.out b,.gs-inj.inactive b{color:var(--charge)}
+.gs-inj.q b{color:var(--gold)}
+.gs-inj.back b,.gs-inj.ok b{color:var(--turf)}
+.gs-inj-t{color:var(--chalk-dim);font-size:11px;white-space:nowrap}
 /* the desktop copy hides on phones, where the head-to-head block carries its own */
 @media(max-width:720px){ .wp-desk{display:none} }
 /* on the matchups list the bar spans the whole row, under both teams */
@@ -5801,27 +5820,106 @@ function renderNews(){
       <span class="sub" style="margin:0;font-size:12px">updated ${timeAgo(NEWS.at)} · refreshes every 30 min · <a href="#" class="poolrefresh" onclick="fetchNews(true).then(()=>renderNews());return false">refresh now</a></span>
     </div>${rows||'<p class="sub" style="margin:8px 0 0">Nothing in the feed right now.</p>'}</div>`;
 }
-async function fetchEspnInjuries(force){
-  if(!force && ESPN_INJ.map && Date.now()-ESPN_INJ.at < ESPN_TTL_MS) return ESPN_INJ.map;
-  try{
-    const r = await fetch(ESPN_INJ_URL);
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j = await r.json();
-    const map = {};
-    (j.injuries||[]).forEach(t=>(t.injuries||[]).forEach(i=>{
-      const nm = i && i.athlete && i.athlete.displayName; if(!nm) return;
-      const k = normName(nm); if(!k) return;
-      map[k] = { status:i.status||'', short:i.shortComment||'', long:i.longComment||'', date:i.date||'' };
-    }));
-    ESPN_INJ = { at:Date.now(), map };
-    return map;
-  }catch(e){
-    return ESPN_INJ.map;            /* keep whatever we had; null means "just show Sleeper data" */
-  }
+async function fetchEspnInjuries(force, maxAge){
+  /* maxAge is the caller's idea of fresh: Game Center passes INJ_LIVE_MS while a game is on,
+     everything else takes the twenty-minute default. One fetch in flight at a time, whoever
+     asked - the file is 350 KB on the wire and nine megabytes parsed. */
+  const ttl = Number.isFinite(maxAge) ? maxAge : ESPN_TTL_MS;
+  if(!force && ESPN_INJ.map && Date.now()-ESPN_INJ.at < ttl) return ESPN_INJ.map;
+  if(ESPN_INJ.p) return ESPN_INJ.p;
+  ESPN_INJ.p = (async ()=>{
+    try{
+      const r = await fetch(ESPN_INJ_URL);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      const map = {};
+      (j.injuries||[]).forEach(t=>(t.injuries||[]).forEach(i=>{
+        const nm = i && i.athlete && i.athlete.displayName; if(!nm) return;
+        const k = normName(nm); if(!k) return;
+        map[k] = { status:i.status||'', short:i.shortComment||'', long:i.longComment||'', date:i.date||'',
+                   where:(i.details && i.details.type) || '' };     /* the body part: Knee, Hamstring, Concussion */
+      }));
+      ESPN_INJ = { at:Date.now(), map, p:null };
+      return map;
+    }catch(e){
+      ESPN_INJ.p = null;
+      return ESPN_INJ.map;            /* keep whatever we had; null means "just show Sleeper data" */
+    }
+  })();
+  return ESPN_INJ.p;
 }
 function espnFor(p){
   const m = ESPN_INJ.map; if(!m || !p) return null;
   return m[normName(p.name)] || null;
+}
+/* ---- Live injury news, for Game Center ----
+   The same feed carries the in-game news the moment RotoWire posts it: "ruled out for the rest
+   of Sunday's game", "questionable to return", "has returned to Sunday's game", and before
+   kickoff the inactives. The status field is no use for any of it - a man carted off in the
+   second quarter is listed "Questionable", which is next week's designation. The signal is a
+   line stamped on his game day, read for what it says. Checked against the week-1 feed (800
+   lines): every game-day line the patterns catch is what it claims to be, and the post-game
+   recaps ("rushed 21 times for 83 yards") match nothing.
+   Game day runs from two hours before his kickoff (the inactives land ninety minutes out) to
+   five hours after it; the before-kickoff words - inactive, active - only count before it. */
+const INJ_LIVE_MS = 3*60000;                       /* the feed's beat while a game is on and the board is open */
+const INJ_DAY_LEAD_MS = 2*3600000, INJ_DAY_TAIL_MS = 5*3600000;
+function injNewsClass(txt, pre){
+  const t = String(txt||''); if(!t) return null;
+  if(/ruled out for the (rest|remainder)|will not return|won't return|is out for the (rest|remainder)|not return to (sunday|monday|thursday|saturday|friday|the) |downgraded to out|did not return|didn't finish|did not finish|unable to (finish|return)/i.test(t)) return 'out';
+  if(/has returned to|returned to (sunday|monday|thursday|saturday|friday|the) |cleared to return|back in the game|re-?entered (sunday|monday|thursday|saturday|friday|the) /i.test(t) && !/practice/i.test(t)) return 'back';
+  if(/questionable to return|doubtful to return|being evaluated|is being looked at|(went|headed|walked|taken) to the (locker room|medical tent|blue tent|sideline tent|injury tent)|left (sunday|monday|thursday|saturday|friday|the) .*game|exited (sunday|monday|thursday|saturday|friday|the) .*game|carted|concussion protocol|limped off|in the (blue |medical |injury )?tent/i.test(t)) return 'q';
+  if(pre){
+    if(/is inactive|inactive for|will not play|won't play|ruled out for (sunday|monday|thursday|saturday|friday)'s|(is|has been ruled) out for (sunday|monday|thursday|saturday|friday)'s/i.test(t)) return 'inactive';
+    if(/is active for|will play (sunday|monday|thursday|saturday|friday|in|against|vs)|expected to play|good to go|will start|is expected to start|cleared to play/i.test(t)) return 'ok';
+  }
+  return null;
+}
+/* what the feed says about a player's game, for the board: null when it says nothing */
+function injNewsFor(p){
+  if(!p || p.pos==='DEF') return null;
+  const g = gameOf(p.nfl); if(!g || !g.kick) return null;
+  const e = espnFor(p); if(!e || !e.date) return null;
+  const at = Date.parse(e.date); if(!Number.isFinite(at)) return null;
+  if(at < g.kick - INJ_DAY_LEAD_MS || at > g.kick + INJ_DAY_TAIL_MS) return null;
+  const pre = at < g.kick;
+  const note = e.short || e.long || '';
+  const cls = injNewsClass(note, pre); if(!cls) return null;
+  /* the body part: the feed's field, else the "(calf)" the line itself opens with */
+  let where = String(e.where||'');
+  if(!where || /not specified|undisclosed/i.test(where)){ const mm = note.match(/^\S+(?: \S+)? \(([a-z ,/-]{3,24})\)/i); where = mm ? mm[1] : ''; }
+  where = where.toLowerCase();
+  const word = { out:'Out', back:'Back in the game', q:'Hurt', inactive:'Inactive', ok:'Active' }[cls];
+  const tag = (cls==='out' || cls==='q') && where ? `${word} · ${where}` : word;
+  return { cls, pre, at, tag, note };
+}
+function injNewsTagHTML(p){
+  const nw = injNewsFor(p); if(!nw) return '';
+  return `<span class="gc-inj ${nw.cls}" title="${esc(nw.note)} (${timeAgo(nw.at)})">${esc(nw.tag)}</span>`;
+}
+/* Game Center's beat: while a game is on and the board is open the feed is asked every three
+   minutes, and a fresh file redraws the board once (the redraw finds it fresh and stops). Off
+   the slate nothing here runs; the Players tab keeps its twenty-minute copy. */
+function gcInjRefresh(){
+  const seen = ESPN_INJ.at;
+  fetchEspnInjuries(false, INJ_LIVE_MS).then(m=>{
+    if(!m || ESPN_INJ.at===seen) return;
+    if(window.currentView==='matchups' && window.muTab==='gc'){ try{ gcInjToasts(); }catch(e){} renderGameCenter(); }
+  });
+}
+/* a fresh line about one of your own starters, said once while the board is open - and only a
+   line that just landed, not the page's first look at a two-hour-old one */
+const GC_INJ_SAID = new Set();
+function gcInjToasts(){
+  const ti = myTeamIdx(); if(!Number.isInteger(ti)) return;
+  const l = ensureLineup(ti);
+  teamRoster(ti).forEach(p=>{
+    if(l[p.playerId]==='BN' || l[p.playerId]==='IR') return;
+    const nw = injNewsFor(p); if(!nw || nw.cls==='ok') return;
+    const k = p.playerId+'|'+nw.at; if(GC_INJ_SAID.has(k)) return; GC_INJ_SAID.add(k);
+    if(Date.now()-nw.at > 20*60000) return;
+    toast(`${p.name}: ${nw.tag}`);
+  });
 }
 /* nothing about an injury is stored — status, diagnosis and news are all read live,
    so a player who's cleared simply stops appearing. one-time cleanup of the old notes. */
@@ -11691,6 +11789,14 @@ function renderGameScore(){
     : (season===PROJ_SEASON && wk > (currentNflWeek()||0)) ? `Week ${wk} has not been played yet.`
     : 'No stats this week. He did not play.';
   const line = st ? statLine(st, pos) : '';
+  /* the injury word: on the week being played the line ESPN posted about his game; otherwise the
+     designation Sleeper carries, with ESPN's note on it when there is one */
+  const injL = (()=>{ const pp = { name:m.name, pos, nfl, playerId:id };
+    const nw = onSlate ? injNewsFor(pp) : null;
+    if(nw) return `<p class="gs-inj ${nw.cls}"><b>${esc(nw.tag)}</b> ${esc(nw.note)} <span class="gs-inj-t">${timeAgo(nw.at)}</span></p>`;
+    const meta = POOL_MAP.get(id); if(!(meta && meta.inj)) return '';
+    const e = espnFor(pp);
+    return `<p class="gs-inj ${/^(Out|IR|PUP|Sus|Suspended|NA|DNR|COV)$/.test(String(meta.inj))?'out':'q'}"><b>${esc(meta.inj)}${meta.injBody?' · '+esc(meta.injBody):''}</b> ${e && e.short ? esc(e.short) : ''}</p>`; })();
   const tbl = items.length ? `<div style="overflow-x:auto"><table class="plain gs-tbl">
       <tr><th>Category</th><th class="n">Stat</th><th class="n">× pts</th><th class="n">= Points</th></tr>
       ${items.map(it=>`<tr><td>${esc(it.label)}</td><td class="n">${gsCount(it.stat)}</td><td class="n">${gsCount(it.per)}</td>
@@ -11709,7 +11815,7 @@ function renderGameScore(){
       </div>
       <div class="gs-scorewrap"><b class="gs-score">${pts==null ? '—' : pts.toFixed(1)}</b><small>points</small></div>
     </div>
-    ${line ? `<p class="gs-line">${esc(line)}</p>` : ''}
+    ${injL}${line ? `<p class="gs-line">${esc(line)}</p>` : ''}
     ${tbl}
     <p class="gs-foot">This game only, scored by ${esc(S.leagueName||'the league')}’s rules.
       <a href="#" onclick="closeGameScore();openPlayer('${esc(id)}');return false">Season and career →</a></p>
@@ -11907,7 +12013,7 @@ async function refreshGameCenter(){
   const wk=+muWeekDefault(), season=+(window.gcSeason||(S.season&&S.season.year)||2026);
   try{ await fetchWeekStats(season, wk, true); }catch(e){}
   /* the projections too: a Sunday-morning "refresh now" is usually about who got ruled out */
-  if(season===PROJ_SEASON){ try{ await loadWeekProj(wk, true); }catch(e){} }
+  if(season===PROJ_SEASON){ try{ await loadWeekProj(wk, true); }catch(e){} try{ await fetchEspnInjuries(true); }catch(e){} }
   renderGameCenter();
 }
 async function renderGameCenter(){
@@ -11915,6 +12021,9 @@ async function renderGameCenter(){
   if(!S.season || !S.season.schedule){ el.innerHTML=`<div class="card"><p class="sub" style="margin:0">No schedule yet.</p></div>`; return; }
   const wk = +muWeekDefault();
   const season = +(window.gcSeason || (S.season&&S.season.year) || 2026);
+  /* the injury feed rides the board while a game is on: three minutes, and a fresh file redraws
+     once. Off the slate it is the ordinary twenty-minute copy the Players tab keeps. */
+  if(season===PROJ_SEASON && wk===(currentNflWeek()||projWeekNow()) && slateActive()) gcInjRefresh();
   /* Phones swipe, full stop. The stacked "all matchups" list is a desktop shape - on a phone it
      is one endless scroll with a jump pad bolted on, while a swipe with snap points is what the
      hardware is for. The choice is not offered at this width, so the toggle is not rendered
@@ -12032,7 +12141,7 @@ async function renderGameCenter(){
       /* the whole block is the target - the name alone is a fifteen-pixel line, and on a phone
          the face and the position line are the same thought as the name */
       return `<span class="h2h-side ${s} pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${playerFace(p,20)}<span class="h2h-txt">`
-        + `<span class="h2h-nm">${esc(shortName(p))}</span>`
+        + `<span class="h2h-nm">${esc(shortName(p))}${injBadgeFor(p)}</span>`
         + `<span class="h2h-meta">${esc(p.pos)}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</span>`
         + `</span></span>`;
     };
@@ -12054,6 +12163,10 @@ async function renderGameCenter(){
       ${(()=>{ const da=detOf(a), db=detOf(b);
         /* one line each, under the name and its score rather than squeezed beside them */
         return (da||db) ? `<span class="h2h-det l">${da}</span><span class="h2h-det r">${db}</span>` : ''; })()}
+      ${(()=>{ const ia = injTag(a), ib = injTag(b);
+        /* the injury pill gets the stat line's room - name and score together, about 140px a
+           side - because in the 75px meta column "Out · hamstring" was "Out · ha..." */
+        return (ia||ib) ? `<span class="h2h-inj l">${ia}</span><span class="h2h-inj r">${ib}</span>` : ''; })()}
       ${(()=>{ if(!slateWeek || slot==='BN' || slot==='IR') return '';
         /* the two fields face each other, so both sides drive at the post in the middle. Only
            the starters get one: a bench row's field position is not a thing anybody is watching,
@@ -12122,6 +12235,13 @@ async function renderGameCenter(){
     const g = gameOf(p.nfl); if(!g) return '';
     return `<span class="gc-gs ${g.state}">${esc(g.label)}${ballTagHTML(p)}</span>`;   /* the separator is CSS: inline on desktop, its own line on a phone */
   };
+  /* the injury words: the designation Sleeper carries (Q, D, OUT) by the name, and on the week
+     being played the line ESPN just posted about his game as a pill under it - "Out · knee",
+     "Hurt · hamstring", "Back in the game", "Inactive" before kickoff. The game's own word
+     outranks last week's designation, so a man ruled out in the second quarter is not also "Q". */
+  const injTag = p => (slateWeek && p) ? injNewsTagHTML(p) : '';
+  const injBadgeFor = p => { if(!p) return ''; const nw = slateWeek ? injNewsFor(p) : null;
+    return (nw && !nw.pre) ? '' : injById(p.playerId); };
   /* what an empty stat line means depends on the clock: before kickoff nobody has played */
   const noLine = p => { const g = slateWeek && p ? gameOf(p.nfl) : null;
     return g && g.state==='pre' ? 'yet to play' : g && g.state==='in' ? 'nothing yet' : 'did not play'; };
@@ -12173,8 +12293,8 @@ async function renderGameCenter(){
         <td class="gc-slot">${slotTag(l[p.playerId]||p.pos, p.pos)}</td>
         <td><div class="row" style="gap:7px;align-items:flex-start;flex-wrap:nowrap">${playerFace(p,26)}
             <div style="min-width:0;flex:1">
-              <div class="gc-pl pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(p.name)}</div>
-              <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}</div>
+              <div class="gc-pl pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(p.name)}${injBadgeFor(p)}</div>
+              <div class="gc-meta">${p.pos}${p.nfl?' · '+esc(p.nfl):''}${oppOf(p)}${gameTag(p)}${injTag(p)}</div>
               ${line?`<div class="gc-stat">${esc(line)}</div>`:((st||noStats)?'':`<div class="gc-stat">${esc(noLine(p))}</div>`)}
               ${(slateWeek && live) ? fieldBarHTML(p.nfl, false, p.pos) : ''}
             </div></div></td>
@@ -18560,7 +18680,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-15 · add him from the week stats';
+const BUILD_STAMP = '2026-09-16 · injury news, live in Game Center';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

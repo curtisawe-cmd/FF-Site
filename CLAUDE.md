@@ -253,7 +253,7 @@ All read-only, all unauthenticated, all cached with a TTL. No API keys.
 | `api.sleeper.app/v1/stats/nfl/regular/{yr}` | season + weekly stats | `STATS_TTL_MS` 3m (in-progress week only) |
 | `api.sleeper.app/v1/projections/nfl/regular/2026` | season projections (draft value, player card bar) | - |
 | `api.sleeper.app/v1/projections/nfl/regular/2026/{wk}` | weekly projections (everything that says "proj") | `PROJ_TTL_MS` 20m (this week and later; played weeks final) |
-| `site.api.espn.com/.../football/nfl/injuries` | injury report | `ESPN_TTL_MS` 20m |
+| `site.api.espn.com/.../football/nfl/injuries` | injury report | `ESPN_TTL_MS` 20m; `INJ_LIVE_MS` 3m from Game Center while a game is on |
 | `sleepercdn.com/content/nfl/players/thumb/{id}.jpg` | player faces | browser |
 | `sleepercdn.com/images/team_logos/nfl/{tm}.png` | DEF logos | browser |
 
@@ -872,6 +872,42 @@ The rule ESPN follows is `yardLine<50 ? home+' '+yardLine : yardLine>50 ? away+'
 
 `--gold` is otherwise reserved for trophies and champions; the goal post is the one exception,
 because a goal post is yellow in life and reads as one instantly at nine pixels.
+
+## Live injury news (Game Center)
+
+ESPN's injury feed - the same one the Players tab reads - carries the in-game news the moment
+RotoWire posts it: "ruled out for the rest of Sunday's game", "questionable to return", "has
+returned to Sunday's game", and ninety minutes before kickoff the inactives. Each line is stamped
+to the minute. The `status` field is **no use** for any of it: a man carted off in the second
+quarter is listed "Questionable", which is next week's designation. The signal is a line stamped
+on his game day, read for what it says.
+
+`injNewsClass(text, pre)` sorts a line into `out`, `back`, `q` (hurt, being looked at), and before
+kickoff only `inactive` or `ok`; anything else - and every post-game recap, "rushed 21 times for 83
+yards" - is null. Checked against a live 800-line feed: every game-day line it catches is what it
+claims to be. `injNewsFor(p)` applies it to a rostered player: the line has to fall between two
+hours before his kickoff (`gameOf(p.nfl).kick`) and five hours after, "pre" means before the
+kickoff, and the body part comes from the feed's `details.type` (now kept on the map as `where`)
+or the "(calf)" the line opens with. It returns `{cls, pre, at, tag, note}`; the tag is the word
+on the pill - "Out · knee", "Hurt · hamstring", "Back in the game", "Inactive", "Active".
+
+Where it shows. Both Game Center layouts print the pill (`.gc-inj`, `injNewsTagHTML`) under the
+player's game clock: inline in the desktop column, and on the phone in a grid row of its own
+(`.h2h-inj`) spanning the name and the score - the 75px meta column turned "Out · hamstring" into
+"Out · ha...". The designation badge Sleeper carries (Q, D, OUT: `injById`) sits by the name in
+both layouts too, and the game's own word outranks it: a man ruled out in the second quarter is
+not also "Q". The scoring popup prints the same line in full with when it landed (`.gs-inj`),
+and off the slate falls back to the designation with ESPN's note on it.
+
+How it refreshes. `renderGameCenter` calls `gcInjRefresh()` when the week on screen is the slate
+and `slateActive()`; that asks `fetchEspnInjuries(false, INJ_LIVE_MS)` - three minutes - and a
+fresh file redraws the board once (the redraw finds it fresh and stops). Game Center already
+redraws on the minute pulse, so the pills are never more than about three minutes behind the
+feed. The file is 350 KB on the wire and nine megabytes parsed, which is why the beat is three
+minutes and not one, why nothing polls unless the board is open on a live slate, and why the
+fetch is deduplicated (`ESPN_INJ.p`) - the Players tab keeps its twenty-minute copy. The Refresh
+button pulls it too. `gcInjToasts()` says a fresh line about one of your own starters once, as a
+toast, and only a line under twenty minutes old - not the page's first look at an old one.
 
 ## One game's scoring (the popup behind a Game Center name)
 
