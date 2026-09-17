@@ -562,3 +562,162 @@ export async function runLineupWatch(store) {
   try { await store.setJSON(key, pass.next); } catch {}
   return { sent, week, teams: pass.sends.length, told: pass.sends.map(s => ({ team: s.team, issues: s.issues.map(i => i.text) })) };
 }
+
+/* ============================================================
+   INJURY ALERTS - "your guy just went to the tent."
+
+   ESPN's injury feed carries the in-game lines the moment RotoWire posts them: ruled out for
+   the rest of the game, questionable to return, back in the game, and ninety minutes before
+   kickoff the inactives. Each line is stamped to the minute. The status field says nothing
+   about any of it - a man carted off in the second quarter is listed Questionable, which is
+   next week's designation - so the line is read for what it says. injNewsClass and injNewsOf
+   are a PORT of injNewsClass / injNewsFor in index.html: keep the two in step, so the pill on
+   the Game Center board and the push on the phone agree about the same line.
+
+   WHEN. Only while it can matter: any game on the scoreboard in progress, inside two hours
+   before a kickoff (the inactives), or within five hours after one; each starter's own window
+   is applied afterwards in injNewsOf. The board (ESPN's scoreboard) is one small fetch every
+   run; the injury file - nine megabytes parsed - is only pulled when a game is near, with a
+   timeout so a slow ESPN cannot hold the whole run. The week is the snapshot's live week, or
+   before the opener the week the lineups are set for, so Thursday night's inactives are caught.
+
+   WHO. The manager starting him, once per line. Marks in inj_{season}_{week} are keyed by
+   manager and player and hold the stamp of the last line sent, so the same line never goes
+   twice and a later line ("has returned") does. A line is marked when OneSignal takes it, so a
+   send that fails is tried again next run - until the line is older than INJ_STALE_MS, when it
+   is marked unsent: the watcher was down or just deployed, and by now the manager has heard.
+   "Active" is only news for a man who carried a designation into the day.
+   ============================================================ */
+const INJ_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries';
+const INJ_LEAD_MS = 2 * 3600e3, INJ_TAIL_MS = 5 * 3600e3, INJ_STALE_MS = 45 * 60000;
+
+/* the app's normName, so "Tyrone Tracy Jr." on the feed meets "Tyrone Tracy" in the snapshot */
+export function normName(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[.'’\-]/g, '')
+    .replace(/\b(jr|sr|ii|iii|iv|v)\b/g, '')
+    .replace(/[^a-z ]/g, '')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/* Pure. What a line says: out, back, q (hurt, being looked at), and before kickoff only
+   inactive or ok. Anything else - every post-game recap - is null. */
+export function injNewsClass(txt, pre) {
+  const t = String(txt || ''); if (!t) return null;
+  if (/ruled out for the (rest|remainder)|will not return|won't return|is out for the (rest|remainder)|not return to (sunday|monday|thursday|saturday|friday|the) |downgraded to out|did not return|didn't finish|did not finish|unable to (finish|return)/i.test(t)) return 'out';
+  if (/has returned to|returned to (sunday|monday|thursday|saturday|friday|the) |cleared to return|back in the game|re-?entered (sunday|monday|thursday|saturday|friday|the) /i.test(t) && !/practice/i.test(t)) return 'back';
+  if (/questionable to return|doubtful to return|being evaluated|is being looked at|(went|headed|walked|taken) to the (locker room|medical tent|blue tent|sideline tent|injury tent)|left (sunday|monday|thursday|saturday|friday|the) .*game|exited (sunday|monday|thursday|saturday|friday|the) .*game|carted|concussion protocol|limped off|in the (blue |medical |injury )?tent/i.test(t)) return 'q';
+  if (pre) {
+    if (/is inactive|inactive for|will not play|won't play|ruled out for (sunday|monday|thursday|saturday|friday)'s|(is|has been ruled) out for (sunday|monday|thursday|saturday|friday)'s/i.test(t)) return 'inactive';
+    if (/is active for|will play (sunday|monday|thursday|saturday|friday|in|against|vs)|expected to play|good to go|will start|is expected to start|cleared to play/i.test(t)) return 'ok';
+  }
+  return null;
+}
+
+/* the feed, reduced to what the pass reads, keyed by normalised name */
+export function injuryMap(feed) {
+  const map = {};
+  ((feed || {}).injuries || []).forEach(t => (t.injuries || []).forEach(i => {
+    const nm = i && i.athlete && i.athlete.displayName; if (!nm) return;
+    const k = normName(nm); if (!k) return;
+    map[k] = { status: i.status || '', short: i.shortComment || '', long: i.longComment || '', date: i.date || '',
+               where: (i.details && i.details.type) || '' };
+  }));
+  return map;
+}
+
+/* Pure. What the feed says about one starter's game, or null. `e` is his feed entry, `g` his
+   team's board entry {kick, state}. */
+export function injNewsOf(pl, e, g) {
+  if (!pl || pl.pos === 'DEF' || !g || !Number.isFinite(g.kick)) return null;
+  if (!e || !e.date) return null;
+  const at = Date.parse(e.date); if (!Number.isFinite(at)) return null;
+  if (at < g.kick - INJ_LEAD_MS || at > g.kick + INJ_TAIL_MS) return null;
+  const pre = at < g.kick;
+  const note = e.short || e.long || '';
+  const cls = injNewsClass(note, pre); if (!cls) return null;
+  /* the body part: the feed's field, else the "(calf)" the line itself opens with */
+  let where = String(e.where || '');
+  if (!where || /not specified|undisclosed/i.test(where)) { const m = note.match(/^\S+(?: \S+)? \(([a-z ,/-]{3,24})\)/i); where = m ? m[1] : ''; }
+  return { cls, pre, at, where: where.toLowerCase(), note };
+}
+
+/* the words: a title that fits a lock screen (OneSignal keeps 60 characters), the line itself
+   without the reporter's byline, and what it means for the lineup - which depends on the clock:
+   before kickoff he can still be swapped, after it the zero is locked in. The body is kept under
+   the 180 characters OneSignal keeps, cut at a word, so the clause always survives. */
+export function injuryText(pl, n) {
+  const name = pl.name || 'Your starter';
+  const w = n.where ? ` (${n.where})` : '';
+  let line = String(n.note || '').trim()
+    .replace(/,\s+[A-Z][^,]{2,50}\s+(?:of|for)\s+[^,]{3,80}\s+reports?\.?\s*$/, '.')   /* ", Adam Schefter of ESPN reports." */
+    .replace(/,\s+per\s+[^,]{3,80}\.?\s*$/i, '.');                                        /* ", per the NFL's transaction log." */
+  if (line && !/[.!?…]$/.test(line)) line += '.';
+  const title = { out: `${name} is out${w}`, q: `${name} is hurt${w}`, back: `${name} is back in the game`,
+                  inactive: `${name} is inactive`, ok: `${name} is active` }[n.cls];
+  const tail = (n.cls === 'out' || n.cls === 'inactive') ? (n.pre ? ' Swap him or eat the zero.' : " That's a zero from here.")
+             : n.cls === 'q' ? ' Watch this one.' : n.cls === 'back' ? ' Breathe.' : '';
+  const room = 180 - tail.length;
+  if (line.length > room) line = line.slice(0, room - 1).replace(/\s+\S*$/, '') + '…';
+  return { title: String(title || name).slice(0, 60), body: (line + tail).trim() };
+}
+
+/* Pure. Who hears what, and the marks to keep. A stale line is marked here; a line that goes
+   out is marked by the runner once OneSignal takes it, so a send that fails is tried again on
+   the next run until the line goes stale. */
+export function injuryPass(snapshot, map, games, marks, now) {
+  const next = JSON.parse(JSON.stringify(marks || {}));
+  const sends = [];
+  (snapshot.teams || []).forEach(team => {
+    if (!team.uid) return;
+    (team.players || []).forEach(pl => {
+      const g = (games || {})[String(pl.nfl || '').toUpperCase()];
+      const n = injNewsOf(pl, (map || {})[normName(pl.name)], g);
+      if (!n) return;
+      if (n.cls === 'ok' && !pl.inj) return;               /* "active" is only news after a designation */
+      const key = `${team.uid}:${pl.id}`;
+      if ((+next[key] || 0) >= n.at) return;             /* this line, or a later one, already sent */
+      if (now - n.at > INJ_STALE_MS) { next[key] = n.at; return; }   /* old news when first seen: marked, not sent */
+      const msg = injuryText(pl, n);
+      sends.push({ uid: team.uid, team: team.name || '', player: pl.name || '', cls: n.cls, key, at: n.at, title: msg.title, body: msg.body });
+    });
+  });
+  return { next, sends };
+}
+
+export async function runInjuryWatch(store) {
+  if (!store) return { skipped: 'no blob store' };
+  let snap;
+  try { snap = await store.get('snapshot', { type: 'json' }); } catch { return { skipped: 'store read failed' }; }
+  if (!snap) return { skipped: 'no snapshot yet - open the league app once' };
+  if (!snap.injury) return { skipped: 'injury alerts are switched off in the league settings' };
+  /* the live week - or, before the opener kicks off (currentNflWeek() is 0 until it does), the
+     week the lineups are set for, so Thursday night's inactives are not missed */
+  const week = +snap.week || +snap.lineupWeek || 0;
+  if (!week || !snap.season) return { skipped: 'no week to check' };
+  if (snap.at && Date.now() - snap.at > 14 * 864e5) return { skipped: 'snapshot too old' };
+  let games;
+  try { games = await weekBoard(snap.season, week); } catch (e) { return { skipped: String(e.message || e) }; }
+  const now = Date.now();
+  const near = Object.values(games).some(g => g.state === 'in' || (now >= g.kick - INJ_LEAD_MS && now <= g.kick + INJ_TAIL_MS));
+  if (!near) return { skipped: 'no game near', week };
+  let map;
+  try {
+    const r = await fetch(INJ_URL, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return { skipped: 'espn injuries ' + r.status };
+    map = injuryMap(await r.json());
+  } catch (e) { return { skipped: 'espn injuries unreachable: ' + String(e && e.name || e) }; }
+  if (!Object.keys(map).length) return { skipped: 'empty injury file' };
+  const key = `inj_${snap.season}_${week}`;
+  let marks = {};
+  try { marks = (await store.get(key, { type: 'json' })) || {}; } catch {}
+  const pass = injuryPass(snap, map, games, marks, now);
+  let sent = 0;
+  for (const s of pass.sends) {
+    let ok = false;
+    try { ok = await pushOne(s.uid, s.title, s.body, snap.url); } catch {}
+    if (ok) { sent++; pass.next[s.key] = Math.max(+pass.next[s.key] || 0, s.at); }   /* taken: this line is done */
+  }
+  try { await store.setJSON(key, pass.next); } catch {}
+  return { sent, week, lines: Object.keys(map).length, told: pass.sends.map(s => ({ team: s.team, player: s.player, title: s.title })) };
+}

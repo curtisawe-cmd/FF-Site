@@ -41,7 +41,7 @@ view highlights the Teams tab (`showView` navV); `goSub(k)` routes every sub-tab
 | `netlify.toml` | yes | Netlify config: publish `.`, no build, SPA fallback, functions dir, no-cache headers on the page and `sw.js`. This is what serves the site. |
 | `netlify/functions/push.mjs` | yes | Push endpoint at `/.netlify/functions/push`. Sends, takes the score snapshot, runs the watcher on demand. Holds no key itself - the OneSignal key is a Netlify env var. |
 | `netlify/functions/score-watch.mjs` | yes | Scheduled watcher. Cron lives in the file, so it deploys with the repo. Fires score alerts with every app in the league shut. |
-| `netlify/functions/lib/score.mjs` | yes | Weekly scoring + the alert rule, shared by both functions. A PORT of `scoreWeekStats`; a harness runs 4000 random stat lines through both and fails on any drift. |
+| `netlify/functions/lib/score.mjs` | yes | Weekly scoring + the alert rule, shared by both functions. A PORT of `scoreWeekStats`; a harness runs 4000 random stat lines through both and fails on any drift. Also a port of the Game Center's injury-news reader (`injNewsClass` / `injNewsOf`), checked by importing the module in the preview browser (`.claude/serve.js` serves `.mjs`) and running both copies over the live feed. |
 | `package.json` | yes | Exists only so Netlify installs `@netlify/blobs` for the functions. The site itself still has no build step. |
 | `README.md` | yes | Repo readme. |
 | `.claude-plugin/marketplace.json` | yes | Unrelated. This repo doubles as a Claude Code plugin marketplace. |
@@ -126,15 +126,17 @@ gated on team identity must re-render when the claim arrives.
 
 ## Push notifications
 
-Seven triggers only, and nothing else should be added without asking: **new chat message**
+Eight triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
 accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
 watcher), **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
 slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below)
 **swing alerts** (a matchup's live odds move 25 points in 20 minutes while a game is on,
-both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts below) and the
+both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts below), the
 **bench crime push** (Monday 9am to the week's worst offender, ten points or more, from the
-scheduled watcher - added 2026-09-07, see Bench watch below).
+scheduled watcher - added 2026-09-07, see Bench watch below) and **injury alerts** (a manager's
+own starter ruled out, hurt, back in the game, or a surprise inactive, the moment ESPN reports
+it, from the scheduled watcher - added 2026-09-16, see Injury alerts below).
 
 The chain has five links and every one of them broke at least once on 2026-08-01. In order:
 
@@ -213,6 +215,37 @@ an hour of readings per matchup in `sw_{season}_{week}` and fires when the readi
 winning this now" to the other, at most once per matchup per 30 minutes, never before kickoff
 (`pre`) or after the last whistle (`over`). Setting `S.swingAlerts` (default on); the
 Cloudflare copy does not have it.
+
+### Injury alerts
+
+`runInjuryWatch` in `netlify/functions/lib/score.mjs`, on the same two-minute cron and on demand
+with `POST {injuryNow:true}` (Settings > "Check injuries now"). It is the push twin of the Game
+Center's live injury news (see that section): `injNewsClass` and `injNewsOf` are a **port** of
+`injNewsClass` / `injNewsFor` in index.html, and the two must stay in step so the pill on the
+board and the push on the phone read the same line the same way. The snapshot carries `injury`
+(the setting) and already carried each starter's `name`, which is what ESPN's feed is matched on
+(`normName`, also ported).
+
+- **When:** it fetches ESPN's scoreboard (`weekBoard`, live) every run - one small fetch - and
+  pulls the injury file (nine megabytes parsed, 350 KB on the wire, six-second timeout) only
+  when some game on the scoreboard is in progress, inside two hours before a kickoff, or within
+  five hours after one; each starter's own window is applied afterwards in `injNewsOf`. Any
+  other minute of the week it returns before fetching the file. The week is `snap.week`, or
+  before the opener (when `currentNflWeek()` is still 0) `snap.lineupWeek`, the same fallback
+  the lineup watch uses, so Thursday night's inactives are caught.
+- **Who:** the manager starting him, once per line. Marks in `inj_{season}_{week}` are keyed
+  `uid:playerId` and hold the stamp of the last line sent, so the same line never goes twice
+  and a later one ("has returned") does. A line is marked once OneSignal takes it, so a failed
+  send is tried again next run; a line older than 45 minutes when first seen is marked unsent
+  (the watcher was down or just deployed). "Active" only goes to a manager whose starter carried
+  a designation (`pl.inj`) into the day.
+- **What it says** (`injuryText`): "Jahmyr Gibbs is hurt (knee)" / "is out (hamstring)" / "is
+  back in the game" / "is inactive" / "is active", then ESPN's line with the reporter's byline
+  stripped and a full stop made sure of, then one blunt clause by the clock: before kickoff
+  (out or inactive) "Swap him or eat the zero.", after it (out) "That's a zero from here.",
+  "Watch this one." for hurt, "Breathe." for back. The body is cut at a word to fit OneSignal's
+  180 characters with the clause intact.
+- Setting `S.injuryAlerts` (default on). The Cloudflare copy does not have it.
 
 ## PWA and mobile
 
@@ -885,7 +918,8 @@ on his game day, read for what it says.
 `injNewsClass(text, pre)` sorts a line into `out`, `back`, `q` (hurt, being looked at), and before
 kickoff only `inactive` or `ok`; anything else - and every post-game recap, "rushed 21 times for 83
 yards" - is null. Checked against a live 800-line feed: every game-day line it catches is what it
-claims to be. `injNewsFor(p)` applies it to a rostered player: the line has to fall between two
+claims to be. The relay carries a port of it (`injNewsClass` / `injNewsOf` in `score.mjs`) for the
+push alerts - see Injury alerts under Push notifications - and the two must stay in step. `injNewsFor(p)` applies it to a rostered player: the line has to fall between two
 hours before his kickoff (`gameOf(p.nfl).kick`) and five hours after, "pre" means before the
 kickoff, and the body part comes from the feed's `details.type` (now kept on the map as `where`)
 or the "(calf)" the line opens with. It returns `{cls, pre, at, tag, note}`; the tag is the word
