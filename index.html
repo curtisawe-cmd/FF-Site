@@ -6414,9 +6414,38 @@ function starterPicks(ti){
 /* per-player scores for one team in a week, from fetched stats */
 /* Scores are shown to one decimal, so round each player there FIRST and total the rounded
    values — otherwise the team total wouldn't equal the column of player scores above it. */
-function teamWeekDetail(ti, stats){
+/* A week's result is a set of LINEUPS, not a pair of numbers. Nothing recorded them, so a
+   trade, a waiver claim or a lineup move afterwards re-read a finished week off today's
+   roster: a starter traded away on Tuesday took his points with him, and the board, the recap
+   and the shame report all drifted away from the standings. `lineupSnapshot` is what gets
+   recorded beside each live score; `playedStarters` reads it back. */
+function lineupSnapshot(ti){
+  const lu = ensureLineup(ti), out = {};
+  teamRoster(ti).forEach(p=>{ const s = lu[p.playerId];
+    if(s && s!=='BN' && s!=='IR') out[String(p.playerId)] = s; });
+  return out;
+}
+function playedStarters(wk, ti){
+  const w = (typeof liveScoresMap!=='undefined' && liveScoresMap) ? liveScoresMap[wk] : null;
+  const s = w && w.starters && w.starters[ti];
+  return (s && typeof s==='object' && Object.keys(s).length) ? s : null;
+}
+function teamWeekDetail(ti, stats, played){
   const r1 = n => Math.round(n*10)/10;
-  const rows = starterPicks(ti).map(p=>{
+  /* `played` is a recorded {playerId: slot} map. Given one the week is scored exactly as it
+     was played, whatever has happened to those players since - traded, dropped, benched.
+     Without one it reads the lineup as it stands, which is right for the week being played and
+     is all a week from before this was recorded has. */
+  let list;
+  if(played && typeof played==='object' && Object.keys(played).length){
+    const all = (realDraft().picks) || [];
+    list = Object.keys(played).map(id=>{
+      const p = all.find(x=>String(x.playerId)===id && !x.cut)
+             || all.find(x=>String(x.playerId)===id) || findPlayerMeta(id);
+      return p ? { playerId:id, name:p.name||'', pos:p.pos||'', nfl:p.nfl||p.team||'' } : null;
+    }).filter(Boolean);
+  } else list = starterPicks(ti);
+  const rows = list.map(p=>{
     const st = stats[p.playerId];
     return { playerId:p.playerId, name:p.name, pos:p.pos, nfl:p.nfl, st,
              pts: st ? r1(scoreWeekStats(st, p.pos)||0) : null };
@@ -12373,7 +12402,10 @@ async function renderGameCenter(){
     </div>`;
   };
   const cards = games.map((g,m)=>{
-    const A=teamWeekDetail(g[0],stats), B=teamWeekDetail(g[1],stats);
+    /* a finished week's header is the lineups that played it; by then today's roster is a
+       different thing entirely */
+    const A=teamWeekDetail(g[0],stats, finalWeek ? playedStarters(wk, g[0]) : null),
+          B=teamWeekDetail(g[1],stats, finalWeek ? playedStarters(wk, g[1]) : null);
     const tA=S.teams[g[0]], tB=S.teams[g[1]];
     const aWin=A.total>B.total, bWin=B.total>A.total;
     const pp = projPair(g[0], g[1]);
@@ -12446,7 +12478,10 @@ async function autoScoreWeek(wk, statSeason, silent){
     let scored = 0, missing = 0;
     S.season.scores[wk] = S.season.scores[wk] || {};
     games.forEach((g,m)=>{
-      const A = teamWeekDetail(g[0], stats), B = teamWeekDetail(g[1], stats);
+      /* a finished week is scored from the lineups it was played with, never today's */
+      const rec = weekIsOver(wk);
+      const A = teamWeekDetail(g[0], stats, rec ? playedStarters(wk, g[0]) : null),
+            B = teamWeekDetail(g[1], stats, rec ? playedStarters(wk, g[1]) : null);
       missing += A.rows.filter(r=>r.pts===null).length + B.rows.filter(r=>r.pts===null).length;
       S.season.scores[wk][m] = [A.total, B.total];
       scored++;
@@ -12487,7 +12522,22 @@ async function postLiveScores(wk, season){
   const stats = await fetchWeekStats(+season || +S.season.year || 2026, wk);
   if(!stats || !Object.keys(stats).length) return false;
   const payload = { at: Date.now(), by: window.fbUser.uid, season: +season || +S.season.year || 2026 };
-  games.forEach((g,m)=>{ payload[m] = [ teamWeekDetail(g[0],stats).total, teamWeekDetail(g[1],stats).total ]; });
+  /* Who played, recorded with the score. Once the week is over the starters already on
+     record are both what it is scored from and what is carried forward, so a post made after
+     the roll - by a device in another time zone, or by the catch-up pass in maybeAutoScore -
+     can correct the numbers without ever re-reading the week off today's roster. */
+  const prevNode = (typeof liveScoresMap!=='undefined' && liveScoresMap) ? liveScoresMap[wk] : null;
+  const kept = (weekIsOver(wk) && prevNode && prevNode.starters && +prevNode.season === +payload.season)
+    ? prevNode.starters : null;
+  const played = {};
+  games.forEach((g,m)=>{
+    const la = kept ? kept[g[0]] : null, lb = kept ? kept[g[1]] : null;
+    const A = teamWeekDetail(g[0], stats, la), B = teamWeekDetail(g[1], stats, lb);
+    payload[m] = [A.total, B.total];
+    played[g[0]] = la || lineupSnapshot(g[0]);
+    played[g[1]] = lb || lineupSnapshot(g[1]);
+  });
+  payload.starters = played;
   /* The projections the week is being played under ride with the score (see projOf). This
      device's while the week is still being played; once it is over (Tuesday) the pair from
      the last post is what carries forward - maybeAutoScore stops posting at 4 AM Tuesday for
@@ -12711,13 +12761,24 @@ let autoScoreBusy = false;
 async function maybeAutoScore(){
   if(S.autoScoreOff || autoScoreBusy || !window.fbUser || !S.season || !S.season.schedule) return;
   const wk = currentNflWeek(); if(!wk) return;                       /* offseason: nothing to do */
-  /* the last post before 4 AM Tuesday is the record: lineups unlock then, and a re-post
-     afterwards would score a finished week from a roster that never played it */
-  if(weekIsOver(wk)) return;
-  if(Date.now() - liveStamp(wk) < AUTOSCORE_EVERY_MS) return;        /* someone refreshed it recently */
+  /* The week being played, and - for six hours after the Tuesday roll - the one that just
+     ended. Sleeper's file settles well after Monday night, and nothing ever re-posted a week
+     once the clock moved on: whatever the last open app happened to see, a third quarter
+     included, stood as the result for ever. The catch-up pass is safe now because
+     postLiveScores scores a finished week from the starters recorded with it, so it corrects
+     the numbers without touching who played. */
+  const weeks = [];
+  if(!weekIsOver(wk)) weeks.push(wk);
+  const prevWk = wk - 1;
+  if(prevWk >= 1 && Date.now() < weekOverAt(prevWk) + 6*3600000) weeks.push(prevWk);
+  if(!weeks.length) return;
   autoScoreBusy = true;
-  try{ await postLiveScores(wk, S.season.year); }
-  catch(e){}
+  try{
+    for(const w of weeks){
+      if(Date.now() - liveStamp(w) < AUTOSCORE_EVERY_MS) continue;   /* someone refreshed it recently */
+      await postLiveScores(w, S.season.year);
+    }
+  }catch(e){}
   finally{ autoScoreBusy = false; }
 }
 function dismissTicker(){ window.tickerHidden = true; renderTicker(); }
@@ -13805,7 +13866,7 @@ async function rcExtras(wk){
           X.benchByName[nameOf(i)] = { left: b.left, missed };
           if(!worst || b.left > worst.left) worst = { ti:i, name:nameOf(i), left:b.left, missed, wouldHaveWon: margins[i]!=null && b.left > margins[i] };
         }
-        const det = teamWeekDetail(i, stats);
+        const det = teamWeekDetail(i, stats, playedStarters(wk, i));   /* the week as played */
         det.rows.forEach(r=>{ if(r.pts!=null && (!best || r.pts > best.pts)) best = { player:r.name, pts:r.pts, team:nameOf(i) }; });
       });
       if(worst && worst.left >= 10) X.bench = worst;
@@ -15230,6 +15291,10 @@ function executeTrade(){
   if(!T.pa.size && !T.pb.size && !raS.length && !rbS.length){ toast("Select at least one player or draft pick."); return; }
   const py = +T.pickYear || curDraftYear();
   const blocked = tradeCapBlocked(T.a,T.b,raS,rbS,py); if(blocked){ toast(blocked); return; }
+  /* the override path gets the same warning, as a confirm rather than a refusal */
+  const midGame = [...T.pa, ...T.pb].map(String).find(pid=>playerLocked(pid));
+  if(midGame){ const mp=(realDraft().picks||[]).find(x=>String(x.playerId)===midGame);
+    if(!confirm(`${(mp&&mp.name)||'A player'} is mid-game — his points move to the other team with him.\n\nCommissioner override: execute anyway?`)) return; }
   const d = realDraft();
   const nmA=S.teams[T.a].name, nmB=S.teams[T.b].name;
   const aPrev=d.picks.filter(p=>p.teamIndex===T.a && !p.cut && T.pa.has(p.playerId)).map(p=>p.name).concat(raS.map(r=>`${py} R${r} pick`));
@@ -15434,6 +15499,16 @@ function finalizeOffer(id, silent){
     return;
   }
   if(!isAdmin()) return;                                  /* only the commissioner can write rosters */
+  /* A player whose game has kicked off is still scoring for the team that started him. Moving
+     him now takes those points off that team's board for a week being played, and the team
+     receiving him cannot start him either. So the deal waits: the pulse retries every minute
+     and the lock lifts when the week does. */
+  const midGame = [...(o.pa||[]), ...(o.pb||[])].map(String).find(pid=>playerLocked(pid));
+  if(midGame){
+    if(!silent){ const mp=(realDraft().picks||[]).find(x=>String(x.playerId)===midGame);
+      toast(`Waiting — ${(mp&&mp.name)||'a player'} is mid-game. This processes once his game is done.`); }
+    return;
+  }
   const blocked = offerStale(o) || tradeCapBlocked(o.a,o.b,o.ra||[],o.rb||[],o.py);
   if(blocked){
     /* Neither reason fixes itself by waiting, and leaving the offer 'accepted' asked every admin
@@ -16241,6 +16316,12 @@ async function optimizeLineup(ti){
   if(!statsLoaded){ toast('Loading projections…'); await loadCareerStats(); }
   const best = bestLineup(ti);
   if(!best.haveProj){ toast('No projections available for this roster yet.'); return; }
+  /* A locked player keeps the slot he kicked off in. Without this the button did precisely what
+     setSlot refuses to do by hand - bench a one o'clock dud and promote somebody from the late
+     window after the fact - and his points came off the board with him. */
+  const lu0 = S.lineups[ti] || {};
+  const frozen = Object.keys(best.plan).filter(pid=>lu0[pid]!=='IR' && lu0[pid]!==best.plan[pid] && playerLocked(pid));
+  if(frozen.length && !lockGuard(frozen[0], frozen.length===1 ? 'move him' : `move ${frozen.length} locked players`)){ renderTeams(); return; }
   const now = projectedTotal(ti);
   const gain = Math.round((best.total - now)*10)/10;
   if(gain <= 0.05){ toast(`Already the best lineup — ${best.total.toFixed(1)} projected.`); return; }
@@ -17589,6 +17670,9 @@ function maybeProcessWaivers(){
     const w = wireEntry(c.pid);
     const due = Math.max(+c.clearsAt||0, (w && +w.until) || 0);
     if(now < due) return;                                        /* still on the clock */
+    /* the drop he named is mid-game and still scoring for him: settling now would take those
+       points off a week being played. It waits, and the lock lifts when the week does. */
+    if(c.dropPid && playerLocked(String(c.dropPid))) return;
     if(!byPid.has(c.pid)) byPid.set(c.pid, []);
     byPid.get(c.pid).push(c);
   });
@@ -18918,7 +19002,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-19 · unscore a week';
+const BUILD_STAMP = '2026-09-19 · a week remembers who played it';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

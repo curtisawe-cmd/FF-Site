@@ -841,6 +841,27 @@ Thu-Mon from `NFL_2026_WEEK1 = Sep 10 2026`. Fantasy pairings are league-vs-leag
 round-robin (`genSchedule`); the NFL schedule only drives week structure and labels.
 Matchups auto-generate at boot if `!S.season`.
 
+**A week remembers who played it.** Every live post carries `starters: {ti: {playerId: slot}}`
+(`lineupSnapshot`), and `teamWeekDetail(ti, stats, played)` takes that map back
+(`playedStarters(wk, ti)`). A result is a set of lineups, not a pair of numbers: without the
+record, a trade, a waiver claim or a lineup move afterwards re-read a finished week off today's
+roster, and a starter traded away on the Tuesday took his points with him. Everything that scores
+a finished week now passes the record - `postLiveScores` (which also carries the recorded
+starters forward rather than re-recording, so a post made after the roll can correct the numbers
+without touching who played), `autoScoreWeek`, the Game Center headers and the recap's extras.
+A week from before this existed has no record and falls back to the current lineup, as before.
+
+**The week that just ended keeps being scored for six hours.** `maybeAutoScore` posts the live
+week and, until `weekOverAt(prev) + 6h`, the one before it. Nothing re-posted a week once the
+clock moved on, so whatever the last open app happened to see - a Monday-night third quarter
+included - stood as the result for ever. Safe only because of the starters record above.
+
+**Three paths used to move a locked player mid-slate**, and his points came off the board with
+him: Best lineup rewrote every slot (`optimizeLineup` now runs `playerLocked` over the plan and
+stops at `lockGuard`), a waiver claim cut the man it named (`maybeProcessWaivers` leaves such a
+claim pending - the lock lifts when the week does), and a trade moved him (`finalizeOffer` waits
+and retries on the pulse; `executeTrade`, already an override, asks).
+
 **A live score is not a result.** `resultScore(wk,m)` is an official score, or a live one only once
 `weekIsOver(wk)` (Tuesday 4am); `weekHasResults(w)` likewise. `seasonStandings`, `allPlayRows`, `h2hAll`
 (live season), the shame report, the Toilet Bowl and the team schedule read those, so nobody is 1-0
