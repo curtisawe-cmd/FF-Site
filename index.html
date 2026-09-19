@@ -15396,7 +15396,11 @@ function finalizeOffer(id, silent){
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
   if(Date.now() < reviewEndsAt(o)) return;
   if(vetoCount(id) >= vetoNeeded()){
-    window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'vetoed', closedAt:Date.now()}).catch(()=>{});
+    /* closedBy picks one device to announce it: maybeFinalizeTrades runs on EVERY signed-in
+       phone, so all of them write this, and the last write settles who speaks */
+    window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'vetoed', closedAt:Date.now(),
+      vetoes: vetoCount(id),            /* the count that killed it, before anyone withdraws a vote */
+      closedBy:(window.fbUser&&window.fbUser.uid)||''}).catch(()=>{});
     if(!silent) toast('Trade vetoed by the league');
     return;
   }
@@ -15410,7 +15414,8 @@ function finalizeOffer(id, silent){
     return;
   }
   applyTradeParts(o.a,o.b,o.pa,o.pb,o.ra,o.rb,o.py, id);
-  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'executed', executedAt:Date.now()}).catch(()=>{});
+  window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'executed', executedAt:Date.now(),
+    executedBy:(window.fbUser&&window.fbUser.uid)||''}).catch(()=>{});
   if(!silent) toast('Trade processed \uD83E\uDD1D');
   refreshDraftUI();
 }
@@ -15469,6 +15474,9 @@ function updateTradeBadge(){
 }
 let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
 const supersededSeen = new Set();            /* only tell you once that your offer was voided */
+/* A trade's ENDING is announced once too. Both are terminal, so unlike acceptedOfferIds these
+   are never forgotten - a deal cannot go through or be voted down twice. */
+const executedSeen = new Set(), vetoedSeen = new Set();
 /* Exactly-once across devices. The ownership gate picks the right PERSON to send a push, but
    that person can have the app open on a phone and a desktop at once — both passed the gate and
    both sent, which is how every alert arrived twice. First device to claim the mark in an atomic
@@ -15490,7 +15498,10 @@ function noticeNewOffers(){
   const nowAccepted = ids.filter(id=>(offersMap[id]||{}).status==='accepted');
   if(seenOfferIds === null){                                          /* first load: no catch-up spam */
     seenOfferIds = new Set(ids); acceptedOfferIds = new Set(nowAccepted);
-    ids.forEach(id=>{ if((offersMap[id]||{}).status==='superseded') supersededSeen.add(id); });
+    ids.forEach(id=>{ const st=(offersMap[id]||{}).status;
+      if(st==='superseded') supersededSeen.add(id);
+      if(st==='executed') executedSeen.add(id);
+      if(st==='vetoed') vetoedSeen.add(id); });
     updateTradeBadge(); return;
   }
   const mine = myTeamIndex();
@@ -15520,6 +15531,35 @@ function noticeNewOffers(){
     const mineToSend = o.acceptedBy ? !!(window.fbUser && o.acceptedBy===window.fbUser.uid) : isAdmin();
     if(mineToSend) pushOnce('accepted-'+id, ()=>sendPush('Trade accepted', `${o.aName} ⇄ ${o.bName} — ` + (reviewMsOf(o)===0
       ? 'processing now.' : `${tradeReviewLabel(reviewMsOf(o))} league review starts now.`), {mine:true}));
+  });
+  /* The deal actually landed. This is the message the league was never sent: they heard two
+     days earlier that a trade had been agreed, and then nothing - not that it went through,
+     not who moved. The players have already changed hands by now, but the picks still carry
+     their names, so tradePartsText still reads correctly. */
+  ids.filter(id=>(offersMap[id]||{}).status==='executed').forEach(id=>{
+    if(executedSeen.has(id)) return;
+    executedSeen.add(id);
+    const o = offersMap[id]; if(!o || !window.fbUser) return;
+    /* the device that applied it speaks; an older offer with no stamp falls back to a
+       commissioner rather than going silent */
+    const mineToSend = o.executedBy ? o.executedBy===window.fbUser.uid : isAdmin();
+    if(!mineToSend) return;
+    const t = tradePartsText(o);
+    const half = (nm, gave) => `${nm} sent ${gave.length ? gave.join(', ') : 'nothing'}`;
+    pushOnce('executed-'+id, ()=>sendPush('Trade went through',
+      `${half(o.aName, t.aGave)}. ${half(o.bName, t.bGave)}.`, {mine:true}));
+  });
+  /* and the league voting one down is a result as well - the two managers in it were told
+     nothing at all, on a deal they had both already agreed to */
+  ids.filter(id=>(offersMap[id]||{}).status==='vetoed').forEach(id=>{
+    if(vetoedSeen.has(id)) return;
+    vetoedSeen.add(id);
+    const o = offersMap[id]; if(!o || !window.fbUser) return;
+    const mineToSend = o.closedBy ? o.closedBy===window.fbUser.uid : isAdmin();
+    if(!mineToSend) return;
+    const v = Number.isFinite(+o.vetoes) ? +o.vetoes : vetoCount(id);
+    pushOnce('vetoed-'+id, ()=>sendPush('Trade vetoed',
+      `${o.aName} ⇄ ${o.bName} is dead. ${v} veto${v===1?'':'es'}, ${vetoNeeded()} needed.`, {mine:true}));
   });
   /* your offer got voided because someone else landed one of those players first */
   ids.forEach(id=>{
@@ -18849,7 +18889,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-19 · the trade block tells you';
+const BUILD_STAMP = '2026-09-19 · a trade says how it ended';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

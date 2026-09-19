@@ -126,7 +126,7 @@ gated on team identity must re-render when the claim arrives.
 
 ## Push notifications
 
-Eight triggers only, and nothing else should be added without asking: **new chat message**
+Ten triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
 accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
 watcher), **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
@@ -136,7 +136,19 @@ both managers, from the scheduled watcher - added 2026-09-07, see Swing alerts b
 **bench crime push** (Monday 9am to the week's worst offender, ten points or more, from the
 scheduled watcher - added 2026-09-07, see Bench watch below) and **injury alerts** (a manager's
 own starter ruled out, hurt, back in the game, or a surprise inactive, the moment ESPN reports
-it, from the scheduled watcher - added 2026-09-16, see Injury alerts below).
+it, from the scheduled watcher - added 2026-09-16, see Injury alerts below), **trade went
+through** and **trade vetoed** (everyone, added 2026-09-19).
+
+The last two close a hole: the league heard that a deal had been agreed and then never heard how
+it ended - not that it landed two days later, not who moved, and not that six managers had voted
+it down. Both ride the same transition watcher in `noticeNewOffers` as the acceptance, with a
+`Set` per status so an ending is announced once and a first load never replays a season of closed
+trades. `finalizeOffer` stamps `executedBy` / `closedBy` so exactly one device speaks (falling
+back to a commissioner for offers closed before the stamps existed), `pushOnce` is the second
+guard for a person with two devices, and the veto count is written onto the offer as `vetoes` at
+the moment it is killed, so a manager withdrawing a vote afterwards cannot rewrite the message.
+The executed body names what each side sent, read from `tradePartsText`, which still resolves
+after the players have changed hands because a pick keeps its name.
 
 The chain has five links and every one of them broke at least once on 2026-08-01. In order:
 
