@@ -672,6 +672,26 @@ for me this week?**
   `#wvView` so `#pickView` shares them). Re-rendered by `setPlTab('pick')`, the one-minute
   pulse, `maybeRefreshWeekProj` and the projections-arrived callback in `showView('players')`.
 
+### Settling a contest
+
+`maybeProcessWaivers` **walks down** each player's sorted claims until one can actually be filled, and
+settles the ones it passes over as `failed` with the reason. A claim that cannot be awarded - priced
+out under FAAB, or a roster that filled up on a claim the same manager ranked higher - used to stand
+at the front, fail, and send the player to nobody while everyone behind it was told it had lost. It
+also returns early until `poolReady`: a claim is awarded out of the player feed, and settling before
+it has loaded failed every claim and cleared the player to nobody.
+
+`awardClaim` works out the room **before** it cuts anything, and counts an IR man as not taking a
+spot. Cutting first and checking after meant a named drop could be executed and the claim still fail:
+a real player off the roster, no drop logged, nothing to undo, and the cut pushed league-wide by the
+next save. It looks the player up with `findPlayerMeta` (pool, players file, then the pick itself),
+because the wire deliberately carries game-locked free agents who are not in the pool feed.
+
+**FAAB budgets are read fresh** each time round the walk (`faabLeft(ti)`) and nothing is subtracted on
+top. `logMove` mirrors a win into the transaction log synchronously, so `faabSpent` already counts what
+was spent earlier in the same pass; the old running total charged every bid twice, and a manager with
+$100 who won a $60 claim was told he had -$20 for his next one.
+
 ## Waiver priority resets every Tuesday
 
 The league rule reads "1 day, resets to inverse standings", and the app now does what ESPN, Yahoo
@@ -713,7 +733,11 @@ holds **every free agent whose NFL game this week has kicked off** (`gameLockFor
 must be this week's slate, kickoff behind us, and now before `weekClearAt(wk)` = `weekOverAt(wk)` + 24h,
 i.e. Wednesday 4am local). Such an entry has `from:null, lock:true`; a dropped player whose game has
 started keeps the later `until`. Claims on locked players settle at that clear time through the
-existing `maybeProcessWaivers`. The "Game started" card lists them ten at a time (`WV_LOCK_SHOW`) with a Show all button and the
+existing `maybeProcessWaivers`, and **the wire is what says when**, not the `clearsAt` stamped on the
+claim when it was filed: a free agent whose game kicks off between two claims would otherwise settle
+at the earlier claim's Monday time, alone, and go to whoever filed first instead of whoever is first
+in line. `maybeProcessWaivers` takes `max(clearsAt, wireEntry(pid).until)`; the stamp is only what the
+card shows. The "Game started" card lists them ten at a time (`WV_LOCK_SHOW`) with a Show all button and the
 position chips; the On waivers card above it lists dropped players only. Fails open like the lineup lock: no scoreboard,
 no lock; and `currentNflWeek()` is 0 in the playoffs, so nothing locks in weeks 15-17.
 
@@ -733,6 +757,18 @@ nodes because a parent `.write` rule cannot cascade over per-user votes.
   sending account *and* on whoever claimed either team, so it holds when a commissioner
   builds a trade on someone's behalf. Ineligible votes already in the database are ignored
   rather than trusted.
+- **An offer is re-checked against the rosters before it moves anything**, at accept and again at
+  finalize (`offerStale(o)` - does each side still hold every player named, and still own every pick).
+  A two-day review window is long enough for a player to be dropped, cut by a waiver settlement, or
+  traded on, and applying what was left handed one side something for nothing. A deal that no longer
+  stands is written `status:'void'` with a `closedReason` and leaves the board. `tradeCapBlocked` at
+  review end does the same, instead of leaving the offer `accepted` for every admin device to retry
+  every minute for ever while both teams stayed frozen behind it.
+- **A veto is a team's vote, not an account's** (`uidHasTeam`): registration is open, so counting every
+  signed-in uid let one manager veto a deal from a second and a third address.
+- `applyTradeParts` ends with `pushTeamData` for **both** teams. Without it the teamData listener put
+  the old lineup back and `ensureLineup` seeded the arriving player into whatever starting slot was
+  open - on a Sunday, a game already under way.
 - Accepting one offer voids competing offers for the same asset. `offerAssets()` keys
   players and picks, `offersConflict()` intersects two offers, and `conflictingLiveOffer()`
   finds an already-accepted deal that claims one of them.

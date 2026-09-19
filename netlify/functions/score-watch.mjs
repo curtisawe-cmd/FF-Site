@@ -19,7 +19,10 @@ import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch, runInjuryW
 export default async () => {
   let store = null;
   try { store = getStore('bbl'); } catch { /* reported by runScoreWatch */ }
-  const result = await runScoreWatch(store);
+  /* every watcher is wrapped: an error in one of them used to abort the invocation and take
+     the other four down with it for that run, with only a stack trace in the log */
+  let result;
+  try { result = await runScoreWatch(store); } catch (e) { result = { error: String(e && e.message || e) }; }
   /* the lineup check rides the same beat: it is free outside a kickoff window, and the window
      is when it matters */
   let lineup;

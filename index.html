@@ -5366,11 +5366,16 @@ function applySettings(){
 function discardSettings(){ if(window._setSnap){ store.set('ffl_state', window._setSnap); S=loadState(); } window.settingsDirty=false; updateApplyBar();
   try{ applyTypography(); }catch(e){}     /* the staged look was already painted; put the league's back */
   try{ renderSettings(); renderHome(); }catch(e){} }
-function pushDraftRemote(){
-  if(applyingRemote || !fbOk() || !isAdmin() || draftMode!=='real') return;
+/* The payload is captured when the push is SCHEDULED, not when the timer fires: the debounce
+   used to serialise whatever D happened to be 300ms later, so saving the real board and then
+   opening the Mock Draft wrote the mock board over the league's. */
+function pushRealDraft(d){
+  if(applyingRemote || !fbOk() || !isAdmin()) return;
+  const payload = JSON.stringify(d);
   clearTimeout(_pushDT);
-  _pushDT = setTimeout(()=>{ try{ window.FB.dbSet(`league/${LEAGUE_ID}/draft`, JSON.stringify(D)).catch(()=>{}); }catch(e){} }, 300);
+  _pushDT = setTimeout(()=>{ try{ window.FB.dbSet(`league/${LEAGUE_ID}/draft`, payload).catch(()=>{}); }catch(e){} }, 300);
 }
+function pushDraftRemote(){ if(draftMode!=='real') return; pushRealDraft(D); }
 function reRenderLive(){
   try{
     applyTeamTheme(myTeamTheme());
@@ -5393,7 +5398,14 @@ function startLeagueSync(){
     applyingRemote = false;
   });
   window.FB.dbOn(`league/${LEAGUE_ID}/draft`, (remote)=>{
-    if(remote==null || draftMode!=='real') return;
+    if(remote==null) return;
+    if(draftMode!=='real'){
+      /* The mock board is a sandbox, but the real one must not go stale behind it: mirror every
+         snapshot into the real board's local copy so switching back loads what the league has,
+         not what this device last saw before it started practising. */
+      try{ store.set('ffl_draft', (typeof remote==='string')?remote:JSON.stringify(remote)); }catch(e){}
+      return;
+    }
     applyingRemote = true;
     let healed = 0;
     const picksBefore = (D.picks||[]).filter(p=>+p.pickIndex>=0).length;
@@ -6096,7 +6108,7 @@ async function loadCareerStats(){
     (await Promise.all(jobs)).forEach(kv=>{ if(kv) STAT_CACHE[kv[0]]=kv[1]; });
     RANK_CACHE={};                       /* ranks are derived from the cache they just replaced */
     statsLoaded=true;
-  }catch(e){}
+  }catch(e){ window._careerFailAt = Date.now(); }   /* so the next redraw does not retry at once */
   statsLoading=false;
 }
 /* ===================== WEEKLY PROJECTIONS =====================
@@ -8348,7 +8360,7 @@ function renderTxLedger(){
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.adds}</td>
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono)">${r.drops}</td>
         <td style="padding:5px 8px;text-align:right;font-family:var(--f-mono);font-weight:700;color:var(--turf)">${money(r.owed)}</td>
-        ${isAdmin()?`<td style="padding:5px 4px;text-align:right"><button class="btn ghost" style="padding:2px 10px;font-size:12px" title="Mark ${esc(r.team)}'s dues paid — their count restarts from now" onclick="settleTeamDues('${esc(r.team).replace(/'/g,'&#39;')}')">Paid</button></td>`:''}
+        ${isAdmin()?`<td style="padding:5px 4px;text-align:right"><button class="btn ghost" style="padding:2px 10px;font-size:12px" title="Mark ${esc(r.team)}'s dues paid — their count restarts from now" data-team="${esc(r.team)}" onclick="settleTeamDues(this.dataset.team)">Paid</button></td>`:''}
       </tr>`).join('')}
     </table></div>
   </div>`;
@@ -10303,11 +10315,11 @@ function chatBodyHTML(x){
   const rc = raw.indexOf(RC_MARK);
   if(rc >= 0){
     const before = raw.slice(0, rc).trim(), card = raw.slice(rc);
-    return (before ? `<div>${esc(before)}</div>` : '') + `<div class="chat-receipt">${esc(card)}</div>` + (x.img ? `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">` : '');
+    return (before ? `<div>${esc(before)}</div>` : '') + `<div class="chat-receipt">${esc(card)}</div>` + (x.img ? `<img class="chat-img" src="${chatImgSrc(x.img)}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">` : '');
   }
   if(raw && !(looksImg)) html += `<div>${esc(raw)}</div>`;
   if(looksImg) html += `<img class="chat-img" src="${esc(urlOnly[0])}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')" onerror="this.replaceWith(Object.assign(document.createElement('div'),{textContent:this.src}))">`;
-  if(x.img) html += `<img class="chat-img" src="${x.img}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">`;
+  if(x.img) html += `<img class="chat-img" src="${chatImgSrc(x.img)}" alt="" loading="lazy" onclick="window.open(this.src,'_blank')">`;
   return html || `<div>${esc(raw)}</div>`;
 }
 /* signed in: you post as your league manager name, not whatever you type. Runs again when
@@ -10354,6 +10366,9 @@ async function sendChat(){
   const att = window.chatAttach;
   if(!n){ toast('Put a name on it \u2014 anonymous trash talk is cowardice.'); nameEl.focus(); return; }
   if(!m && !att) return;                          /* a picture on its own is fine */
+  /* a pasted wall of text lands on every phone in the league and rides in the last-150 window
+     until a hundred more messages push it out */
+  if(m.length > 2000){ toast('Keep it under 2,000 characters.'); return; }
   store.set('ffl_chat_name', n);
   if(fbOk() && window.fbUser){
     const key = 'm'+Date.now()+Math.random().toString(36).slice(2,7);
@@ -10436,7 +10451,7 @@ function renderChatReplyBar(){
 function chatQuoteHTML(re){
   if(!re || typeof re !== 'object') return '';
   const who = re.uid ? managerNameFor(re.uid, re.n || '') : (re.n || 'Manager');
-  const jump = re.id ? ` onclick="chatJumpTo('${esc(String(re.id))}')" role="button" title="Jump to that message"` : '';
+  const jump = re.id ? ` onclick="chatJumpTo('${safeId(re.id)}')" role="button" title="Jump to that message"` : '';
   return `<div class="chat-quote"${jump}><b>${esc(who)}</b><span>${esc(re.m || '')}</span></div>`;
 }
 /* scroll the original into view and light it up for a moment; it may have been pruned */
@@ -10466,7 +10481,7 @@ function renderChat(){
     const when = new Date(x.t).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
     const mid = x._id || ('i'+i);
     return `<div class="chat-b${mine?' mine':''}" data-mid="${esc(mid)}" style="align-self:${mine?'flex-end':'flex-start'};max-width:85%">
-      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when} \u00B7 <a href="#" class="chat-reply" onclick="chatReplyTo('${esc(mid)}');return false">reply</a>${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${x._id}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
+      <div style="font-size:11px;color:var(--chalk-dim);margin:0 6px 2px;${mine?'text-align:right':''}">${esc(who)} \u00B7 ${when} \u00B7 <a href="#" class="chat-reply" onclick="chatReplyTo('${safeId(mid)}');return false">reply</a>${(isAdmin()&&x._id)?` \u00B7 <a href="#" onclick="deleteChat('${safeId(x._id)}');return false" style="color:var(--charge,#c60c30);text-decoration:none">delete</a>`:''}</div>
       <div style="background:${mine?'var(--turf)':'var(--panel-2)'};color:${mine?'var(--on-turf)':'var(--chalk)'};border-radius:12px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:break-word">${chatQuoteHTML(x.re)}${chatBodyHTML(x)}</div>
       ${((x._id||('i'+i))===lastMineId) ? seenLine(x.t, x.uid) : ''}
     </div>`;
@@ -11999,6 +12014,9 @@ if(!window._gcJumpBound){
 function waitForProj(key, redraw){
   const k = '_projWait_' + key;
   if(statsLoaded || window[k]) return;
+  /* A feed that is down rejects at once, the redraw re-arms the wait, and the page spins:
+     render, fetch, fail, render, for as long as the feed is out. One minute between tries. */
+  if(!statsLoading && window._careerFailAt && Date.now()-window._careerFailAt < 60000) return;
   window[k] = true;
   const done = ()=>{ window[k] = false; try{ redraw(); }catch(e){} };
   const tick = ()=>{
@@ -12349,6 +12367,9 @@ async function renderGameCenter(){
     gcSyncJump();
     return;                                                        /* every matchup stacked — nothing to scroll */
   }
+  /* The deck's position is read HERE, after the stat fetch, not before it: a swipe during a
+     three-minute refresh was undone the moment the render landed. */
+  const keepAt = sameView ? ((document.getElementById('gcScroll')||{}).scrollLeft || keepLeft) : 0;
   el.innerHTML = head + notice + `
     <div class="gc-wrap">
       <button class="gc-nav prev" onclick="gcScrollBy(-1)" aria-label="Previous matchup">◀</button>
@@ -12358,7 +12379,7 @@ async function renderGameCenter(){
     <div class="gc-dots">${games.map((g,i)=>`<button class="gc-dot${i===0?' on':''}" onclick="gcGoTo(${i})" aria-label="Matchup ${i+1}"></button>`).join('')}</div>`;
   const sc=document.getElementById('gcScroll');
   if(sc){
-    if(keepLeft){ sc.scrollLeft = keepLeft; }                       /* stay on the matchup you were reading */
+    if(keepAt){ sc.scrollLeft = keepAt; }                          /* stay on the matchup you were reading */
     const syncDots = ()=>{ const i=Math.round(sc.scrollLeft/Math.max(1,sc.clientWidth));
       document.querySelectorAll('.gc-dot').forEach((d,j)=>d.classList.toggle('on', j===i)); };
     sc.addEventListener('scroll', syncDots, {passive:true});
@@ -14801,8 +14822,12 @@ function realDraft(){
   try{ const raw = store.get('ffl_draft'); return raw? JSON.parse(raw) : {started:false,paused:false,picks:[],finished:false}; }catch(e){ return {picks:[]}; }
 }
 function saveRealDraft(d){
-  if(draftMode==='real'){ D = d; saveDraft(); }
-  else store.set('ffl_draft', JSON.stringify(d));
+  if(draftMode==='real'){ D = d; saveDraft(); return; }
+  /* A roster move made while this device is on the Mock board is still a real move - a trade
+     finalising on the pulse, a waiver settling. It was written to the real board's local copy
+     and never sent, so the league never saw it. */
+  store.set('ffl_draft', JSON.stringify(d));
+  pushRealDraft(d);
 }
 window.tradeSel = window.tradeSel || {a:0, b:1, pa:new Set(), pb:new Set(), ra:new Set(), rb:new Set(), pickYear:null};
 function tradeSetPickYear(y){ window.tradeSel.pickYear = +y; window.tradeSel.ra = new Set(); window.tradeSel.rb = new Set(); renderTradeCenter(); }
@@ -15060,7 +15085,7 @@ function tradeInvolvesUid(o, uid){
 /* ineligible votes never count, even if one was already sitting in the database */
 function vetoCount(id){
   const o = offersMap[id];
-  return Object.keys(vetoesFor(id)).filter(uid=>!tradeInvolvesUid(o, uid)).length;
+  return Object.keys(vetoesFor(id)).filter(uid=>!tradeInvolvesUid(o, uid) && uidHasTeam(uid)).length;
 }
 function tradeTimeLeft(o){
   const ms = reviewEndsAt(o) - Date.now();
@@ -15081,7 +15106,13 @@ function applyTradeParts(ai, bi, paIds, pbIds, raS, rbS, py, txKey, silent){
   const giveB = d.picks.filter(p=>p.teamIndex===bi && !p.cut && (pbIds||[]).includes(p.playerId));
   giveA.forEach(p=>{ p.teamIndex = bi; if(S.lineups[ai]) delete S.lineups[ai][p.playerId]; (S.lineups[bi]=S.lineups[bi]||{})[p.playerId]='BN'; });
   giveB.forEach(p=>{ p.teamIndex = ai; if(S.lineups[bi]) delete S.lineups[bi][p.playerId]; (S.lineups[ai]=S.lineups[ai]||{})[p.playerId]='BN'; });
-  if(giveA.length||giveB.length) saveRealDraft(d);
+  if(giveA.length||giveB.length){
+    saveRealDraft(d);
+    /* The slots have to reach the two teams' own nodes as well, or the teamData listener puts
+       the old lineup back and ensureLineup seeds the arriving player into whatever starting
+       slot happens to be open - on a Sunday that can be a game already under way. */
+    try{ pushTeamData(ai); pushTeamData(bi); }catch(e){}
+  }
   S.pickTrades = S.pickTrades||[];
   (raS||[]).forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===+r && t.from===nmA && pickYearOf(t)===py)) S.pickTrades.push({round:+r, from:nmA, to:nmB, year:py}); });
   (rbS||[]).forEach(r=>{ if(!S.pickTrades.some(t=>+t.round===+r && t.from===nmB && pickYearOf(t)===py)) S.pickTrades.push({round:+r, from:nmB, to:nmA, year:py}); });
@@ -15193,6 +15224,15 @@ function acceptOffer(id){
   if(clash){ const c=offersMap[clash];
     toast(`Too late \u2014 ${esc(c.aName)} \u21c4 ${esc(c.bName)} already took one of these.`);
     return; }
+  /* The card names the players from when the offer was written, and one of them may have been
+     dropped, cut by a waiver settlement, or traded on since. Accepting would apply the rest of
+     the deal one-sided, so it is closed instead. */
+  const stale = offerStale(o);
+  if(stale){
+    window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'void', closedAt:Date.now(), closedReason:stale}).catch(()=>{});
+    toast(stale);
+    return;
+  }
   /* reviewMs is stamped onto the offer so this deal keeps the window it was accepted under,
      whatever the commissioner changes the setting to afterwards */
   const rms = tradeReviewMs();
@@ -15288,9 +15328,32 @@ function toggleVeto(id){
   const o=offersMap[id]; if(!o||o.status!=='accepted') return;
   if(Date.now()>reviewEndsAt(o)){ toast('The review window has closed.'); return; }
   if(tradeInvolvesUid(o, window.fbUser.uid)){ toast("You're in this trade — you don't get a vote on it."); return; }
+  if(!uidHasTeam(window.fbUser.uid)){ toast('Only a manager with a team votes on trades.'); return; }
   const uid=window.fbUser.uid, has=!!vetoesFor(id)[uid];
   const p=`${vetoesPath()}/${id}/${uid}`;
   (has? window.FB.dbRemove(p) : window.FB.dbSet(p, true)).then(()=>toast(has?'Veto withdrawn':'Veto recorded')).catch(()=>toast('Could not record your vote.'));
+}
+/* What the offer promised, is it still true? Between the offer and the handshake - and again
+   across a two-day review window - a player can be dropped, cut by a waiver settlement, or sent
+   somewhere else in another deal, and a pick can be traded on. Applying what is left hands one
+   side something for nothing, so the deal is closed instead of half-executed. '' means whole. */
+function offerStale(o){
+  if(!o) return '';
+  const d = realDraft(), nm = ti => (S.teams[ti]||{}).name || ('Team '+(+ti+1));
+  const holds = (ti, ids) => (ids||[]).every(pid => d.picks.some(p=>p.teamIndex===+ti && String(p.playerId)===String(pid) && !p.cut));
+  if(!holds(o.a, o.pa)) return `${o.aName||nm(o.a)} no longer has everyone in this deal.`;
+  if(!holds(o.b, o.pb)) return `${o.bName||nm(o.b)} no longer has everyone in this deal.`;
+  const ownsAll = (name, rounds) => (rounds||[]).every(r => ownsPick(name, +r, +o.py));
+  if(!ownsAll(o.aName||nm(o.a), o.ra)) return `${o.aName||nm(o.a)} no longer owns those picks.`;
+  if(!ownsAll(o.bName||nm(o.b), o.rb)) return `${o.bName||nm(o.b)} no longer owns those picks.`;
+  return '';
+}
+/* a vote belongs to a team, not to an account: anyone can register, so counting every signed-in
+   uid let one manager veto a deal from a second and a third address */
+function uidHasTeam(uid){
+  if(!uid) return false;
+  const c = (typeof claimsMap!=='undefined' && claimsMap) || {};
+  return Object.keys(c).some(ti => c[ti]===uid);
 }
 /* finalize after review: enough vetoes kills it, otherwise the commissioner's browser applies it */
 function finalizeOffer(id, silent){
@@ -15302,7 +15365,14 @@ function finalizeOffer(id, silent){
     return;
   }
   if(!isAdmin()) return;                                  /* only the commissioner can write rosters */
-  const blocked = tradeCapBlocked(o.a,o.b,o.ra||[],o.rb||[],o.py); if(blocked){ if(!silent) toast(blocked); return; }
+  const blocked = offerStale(o) || tradeCapBlocked(o.a,o.b,o.ra||[],o.rb||[],o.py);
+  if(blocked){
+    /* Neither reason fixes itself by waiting, and leaving the offer 'accepted' asked every admin
+       device to retry it every minute for ever while both teams stayed frozen behind it. */
+    window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'void', closedAt:Date.now(), closedReason:blocked}).catch(()=>{});
+    if(!silent) toast(blocked);
+    return;
+  }
   applyTradeParts(o.a,o.b,o.pa,o.pb,o.ra,o.rb,o.py, id);
   window.FB.dbUpdate(`${offersPath()}/${id}`, {status:'executed', executedAt:Date.now()}).catch(()=>{});
   if(!silent) toast('Trade processed \uD83E\uDD1D');
@@ -15466,7 +15536,9 @@ function renderOffers(){
     if(reviewing && !over && uid){
       inTrade
         ? acts.push(`<span class="sub" style="margin:0">You're in this trade &mdash; no vote.</span>`)
-        : acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${o.id}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`);
+        : uidHasTeam(uid)
+        ? acts.push(`<button class="btn ${iVetoed?'danger':'ghost'}" onclick="toggleVeto('${safeId(o.id)}')">${iVetoed?'Withdraw veto':'Vote to veto'}</button>`)
+        : acts.push(`<span class="sub" style="margin:0">Claim a team to vote on trades.</span>`);
     }
     if(reviewing && over && isAdmin()) acts.push(`<button class="btn" onclick="finalizeOffer('${o.id}')">Process now</button>`);
     if(isAdmin()) acts.push(`<button class="btn danger" style="padding:3px 10px" title="Delete this trade (commissioner)" onclick="deleteOffer('${o.id}')">Delete</button>`);
@@ -16896,6 +16968,12 @@ function setSlot(ti, pid, slot){
     const used = Object.entries(lu).filter(([id,s2])=>s2==='IR' && id!==pid).length;
     if(used >= (+S.roster.IR||0)){ toast('IR slot is full.'); renderTeams(); return; }
   }
+  /* Coming off IR takes a roster spot back, and this was the one path that never checked:
+     every other way in (add, claim, swap, trade) enforces the limit, so a team could activate
+     an IR man and carry an extra player all week. */
+  if(slot!=='IR' && lu[pid]==='IR' && rosterCount(ti) >= rosterLimit()){
+    toast(`Roster is full (${rosterLimit()} max) — drop someone before activating him.`); renderTeams(); return;
+  }
   lu[pid]=slot; saveState(); pushTeamData(ti); renderTeams();
 }
 /* one-tap swap from the player popup: promote a bench player into `slot`, benching
@@ -16998,7 +17076,7 @@ function addPlayer(ti, pid){
   const d = realDraft();
   d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveRealDraft(d); pushTeamData(ti); pushMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});
-  logMove(ti,'add',{name:p.name, pos:p.pos, nfl:p.team});
+  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});   /* the id is what makes it undoable */
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
   toast(`Added ${p.name}`);
@@ -17049,7 +17127,7 @@ function swapPlayer(ti, dropPid, addPid){
   if(p) d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:addPid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true });
   saveRealDraft(d); saveState(); pushTeamData(ti);
   if(dropped) { pushMove(ti,'drop',dropped); logMove(ti,'drop',dropped); }
-  if(p) { pushMove(ti,'add',{playerId:addPid, name:p.name, pos:p.pos, nfl:p.team}); logMove(ti,'add',{name:p.name, pos:p.pos, nfl:p.team}); }
+  if(p) { pushMove(ti,'add',{playerId:addPid, name:p.name, pos:p.pos, nfl:p.team}); logMove(ti,'add',{playerId:addPid, name:p.name, pos:p.pos, nfl:p.team}); }
   const ov=document.getElementById('swapModal'); if(ov) ov.style.display='none';
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
@@ -17363,24 +17441,45 @@ function awardClaim(c, bid){
   const ti=+c.team, pid=String(c.pid);
   if(!Number.isInteger(ti) || !(S.teams||[])[ti]) return false;
   if(rosteredIds().has(pid)) return false;
-  const p=(typeof POOL!=='undefined'?POOL:[]).find(x=>x.id===pid) || (typeof POOL_MAP!=='undefined'&&POOL_MAP?POOL_MAP.get(pid):null);
+  /* the wire deliberately carries game-locked free agents who are not in the pool feed (the
+     backup who mopped up on Sunday), so this is the lookup the add path uses: pool, then the
+     players file, then the pick itself */
+  const p = findPlayerMeta(pid);
   if(!p) return false;
-  if(rosterCount(ti) >= rosterLimit() && !c.dropPid) return false;   /* no room and nothing named */
   const d=realDraft();
-  const dropped = c.dropPid ? cutPick(ti, String(c.dropPid), d) : null;
-  if(rosterCount(ti) >= rosterLimit()) return false;                 /* named drop was already gone */
-  d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl:p.team, auto:false, add:true, waiver:true });
+  /* Room is worked out BEFORE anything is cut. Cutting first and checking after meant a named
+     drop could be executed and the claim still fail - a real player off the roster, no drop
+     logged, nothing to undo, and the cut pushed league-wide by the next save. */
+  const lu = (S.lineups||{})[ti] || {};
+  const dp = c.dropPid ? d.picks.find(x=>x.teamIndex===ti && String(x.playerId)===String(c.dropPid) && !x.cut) : null;
+  const canDrop = !!dp && !isKeeperPick(dp);
+  const frees = (canDrop && lu[dp.playerId]!=='IR') ? 1 : 0;         /* an IR man is not in the count */
+  if(rosterCount(ti) - frees >= rosterLimit()) return false;
+  const dropped = canDrop ? cutPick(ti, String(c.dropPid), d) : null;
+  const nfl = p.team || p.nfl || '';
+  d.picks.push({ pickIndex:-1, teamIndex:ti, playerId:pid, name:p.name, pos:p.pos, nfl, auto:false, add:true, waiver:true });
   saveRealDraft(d); saveState(); pushTeamData(ti);
   if(dropped) logMove(ti,'drop',{...dropped, waiver:true});
-  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team, waiver:true, bid:+bid||0});
+  logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl, waiver:true, bid:+bid||0});
   return true;
 }
 function maybeProcessWaivers(){
   if(!waiversOn() || !isAdmin() || !fbOk() || !window.fbUser) return;
+  /* a claim is awarded out of the player feed: settling before it has loaded would fail every
+     claim as "could not be awarded" and clear the player to nobody */
+  if(typeof poolReady!=='undefined' && !poolReady) return;
   try{ maybeResetWaiverOrder(); }catch(e){}                    /* a new week reseeds the order before any claim is settled against it */
   const now=Date.now(), byPid=new Map();
   claimList().forEach(c=>{
-    if(c.status!=='pending' || now < (+c.clearsAt||0)) return;   /* still on the clock */
+    if(c.status!=='pending') return;
+    /* clearsAt is stamped when the claim is filed and the wire moves under it: a free agent
+       whose game kicks off is locked until Wednesday, so a claim filed before kickoff would
+       settle at the old Monday time - on its own, ahead of everyone who claimed him after -
+       and the player would go to whoever filed first instead of whoever is first in line. The
+       live wire entry is the authority; the stamp is only what the card shows. */
+    const w = wireEntry(c.pid);
+    const due = Math.max(+c.clearsAt||0, (w && +w.until) || 0);
+    if(now < due) return;                                        /* still on the clock */
     if(!byPid.has(c.pid)) byPid.set(c.pid, []);
     byPid.get(c.pid).push(c);
   });
@@ -17409,40 +17508,43 @@ function maybeProcessWaivers(){
      Managers never contend with each other here - each player already has exactly one winner and
      each roster is its own - so mixing their rankings in one sort is safe. */
   contests.sort((A,B)=> claimOrderOf(A[0])-claimOrderOf(B[0]) || (+A[0].at||0)-(+B[0].at||0));
-  /* budget already committed EARLIER IN THIS SAME PASS, which the log cannot know about yet */
-  const spentNow={};
   contests.forEach(claims=>{
-    const pricedOut=new Set();
+    /* Walk down the list until somebody can actually take him. A claim that cannot be filled -
+       priced out under FAAB, or a roster that filled up on a claim this manager ranked higher
+       in this same pass - is settled and passed over. It used to stand at the front and send
+       the player to nobody while everyone behind it was told it had lost.
+
+       The budget is read fresh each time round: logMove mirrors a win into the transaction log
+       synchronously, so faabLeft already counts what was spent earlier in this pass. Subtracting
+       a running total on top of that charged every bid twice. */
+    const done=new Set();
     let win=null;
-    if(faabOn()){
-      /* Walk down the bids. A manager is allowed to bid more in total than they hold, so the top
-         bid here may belong to someone who just spent the money on a claim they ranked higher.
-         The player then goes to the next best bid rather than nobody, which is what the rest of
-         the league bid for. */
-      for(const c of claims){
-        const ti=+c.team, need=faabBid(c), left=faabLeft(ti)-(spentNow[ti]||0);
+    for(const c of claims){
+      const ti=+c.team;
+      if(faabOn()){
+        const need=faabBid(c), left=faabLeft(ti);
         if(need>left){
-          pricedOut.add(c.id);
+          done.add(c.id);
           settleClaim(c.id,'failed',`Bid ${faabMoney(need)} with ${faabMoney(left)} left by the time this came up`);
           continue;
         }
-        win=c; break;
       }
-      if(!win) return;                       /* everyone priced out; each already settled */
-    } else win=claims[0];
-    const ok=awardClaim(win, faabOn()?faabBid(win):0);
-    if(ok && faabOn()) spentNow[+win.team]=(spentNow[+win.team]||0)+faabBid(win);
-    /* the old text named two specific causes and guessed at which; with ranking there is a third
-       - you spent the room on a claim you ranked higher */
-    settleClaim(win.id, ok?'won':'failed', ok ? '' : (rosterCount(win.team) >= rosterLimit()
-      ? 'No roster room left by the time this claim came up'
-      : 'Could not be awarded'));
-    if(ok && win.team===addTargetTeam()) playSound('waiver');   /* your claim came in */
+      if(awardClaim(c, faabOn()?faabBid(c):0)){ win=c; break; }
+      done.add(c.id);
+      /* the old text named two specific causes and guessed at which; with ranking there is a third
+         - you spent the room on a claim you ranked higher */
+      settleClaim(c.id,'failed', rosterCount(ti) >= rosterLimit()
+        ? 'No roster room left by the time this claim came up'
+        : 'Could not be awarded');
+    }
+    if(!win) return;                         /* nobody could take him; every claim is settled */
+    settleClaim(win.id,'won','');
+    if(win.team===addTargetTeam()) playSound('waiver');         /* your claim came in */
     const beatBy = faabOn()
       ? `${win.teamName||teamName(win.team)} bid ${faabMoney(faabBid(win))}`
       : `${win.teamName||teamName(win.team)} had waiver priority`;
-    claims.forEach(c=>{ if(c===win || pricedOut.has(c.id)) return; settleClaim(c.id,'lost',beatBy); });
-    if(ok){ moveToBackOfWaiverOrder(win.team); awarded=true; }
+    claims.forEach(c=>{ if(c===win || done.has(c.id)) return; settleClaim(c.id,'lost',beatBy); });
+    moveToBackOfWaiverOrder(win.team); awarded=true;
   });
   if(awarded){
     bustWire(); renderTeams(); refreshDraftUI();
@@ -18707,7 +18809,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-16 · injury alerts from the relay';
+const BUILD_STAMP = '2026-09-18 · audit fixes, first pass';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -18946,6 +19048,7 @@ function startNextSeason(){
   S.history.managers[String(y)] = rec;
   if(champ && !S.history.champions.some(c=>+c.year===y)) S.history.champions.unshift({ year:y, team:champ.name });
   S.draftYear = y+1;
+  S.seasonStartedAt = 0;      /* the new board is not under way: keepers, Undo and Reset unlock again */
   S.pickTrades = (S.pickTrades||[]).filter(t=>pickYearOf(t) > y);   /* this year's picks used up; future carry over */
   S.season = null; genSchedule();                                   /* fresh schedule for the new year */
   draftMode='real'; D = { started:false, paused:false, picks:[], finished:false }; saveDraft();
@@ -19131,6 +19234,16 @@ function importLeague(ev){
 /* =====================================================
    Utils & boot
 ===================================================== */
+/* An id that goes into an onclick is NOT protected by esc(): the HTML parser turns &#39;
+   back into a quote before the JavaScript is parsed, so a record key written by hand escapes
+   the attribute. Database keys are [A-Za-z0-9_-]; anything else was built to break out. */
+function safeId(s){ return /^[A-Za-z0-9_-]{1,64}$/.test(String(s||'')) ? String(s) : ''; }
+/* A message's picture is whatever another device wrote into the database. An inline image or an
+   https link is drawn; anything shaped to break out of the attribute is not. */
+function chatImgSrc(src){
+  const t = String(src||'');
+  return /^(data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=]+|https:\/\/[^\s"'<>]+)$/i.test(t) ? esc(t) : '';
+}
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 let toastTimer=null;
 let toastActFn = null;

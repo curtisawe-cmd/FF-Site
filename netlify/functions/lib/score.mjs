@@ -118,10 +118,13 @@ export async function pushOne(uid, title, message, url) {
   };
   if (url) payload.url = String(url).slice(0, 300);
   /* OneSignal issues two key formats and accepts only one scheme per format */
+  /* a stalled socket here would otherwise hold the invocation until Netlify killed it, and
+     every watcher after this one would be skipped for that run */
   const send = auth => fetch('https://api.onesignal.com/notifications', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: auth },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(6000)
   });
   let r = await send('Key ' + API_KEY);
   if (r.status === 401 || r.status === 403) r = await send('Basic ' + API_KEY);
@@ -148,9 +151,12 @@ export async function runScoreWatch(store) {
   if (!stats || !Object.keys(stats).length) return { skipped: 'no stats yet' };
 
   const key = `wm_${snap.season}_${snap.week}`;
-  const marks = (await store.get(key, { type: 'json' })) || {};
+  /* the blob store 5xxs now and then; these were the only two calls in the file outside a try,
+     and the throw escaped the whole scheduled run */
+  let marks = {};
+  try { marks = (await store.get(key, { type: 'json' })) || {}; } catch { return { skipped: 'marks read failed' }; }
   const pass = watchPass(snap, stats, marks);
-  await store.setJSON(key, pass.next);
+  try { await store.setJSON(key, pass.next); } catch { return { skipped: 'marks write failed' }; }
   if (pass.first) return { baseline: true, players: Object.keys(pass.next).length - 1 };
 
   let sent = 0;
