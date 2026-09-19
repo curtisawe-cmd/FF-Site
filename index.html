@@ -1399,6 +1399,9 @@ nav.tabs button{position:relative}
 .blockchip:hover{border-color:var(--gold);color:var(--gold)}
 .blockchip.on{background:var(--gold);border:1px solid var(--gold);color:#0e1114;border-style:solid}
 .blockchip.on:hover{color:#0e1114;opacity:.85}
+/* a sign hung since you last looked at the board */
+.tbk-new{margin-left:6px;font-family:var(--f-ui);font-weight:800;font-size:8.5px;letter-spacing:.09em;
+  text-transform:uppercase;background:var(--gold);color:#0e1114;border-radius:4px;padding:1px 4px;vertical-align:middle}
 /* the Trade Center's shop window */
 .tbk-team{border-bottom:1px solid var(--line);padding:9px 0}
 .tbk-team:last-child{border-bottom:none}
@@ -5440,6 +5443,7 @@ function startLeagueSync(){
       TD = {};
       if(m && typeof m==='object') Object.keys(m).forEach(k=>{ try{ TD[k]=(typeof m[k]==='string')?JSON.parse(m[k]):m[k]; }catch(e){} });
       reconcileTeamData(); reRenderLive();
+      try{ updateTradeBadge(); }catch(e){}       /* somebody just hung a sign out */
     }catch(e){}
     applyingRemote = false;
   });
@@ -8517,7 +8521,10 @@ function pushTeamData(ti){
   /* the block rides in the team's own node, which its manager already owns - no new database
      rule, and it reaches everyone through the teamData listener that is already running */
   const blk = ((TD[ti]||{}).block) || [];
-  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null, name: (S.teams[ti]||{}).name || null, block: blk })).catch(()=>{}); }catch(e){}
+  /* when each sign went up: the list alone cannot say what is new to somebody who looked
+     yesterday, and that is the whole of the notification */
+  const blkAt = ((TD[ti]||{}).blockAt) || {};
+  try{ window.FB.dbSet(`league/${LEAGUE_ID}/teamData/${ti}`, JSON.stringify({ lineup: (S.lineups||{})[ti]||{}, logo: (S.teams[ti]||{}).logo || null, name: (S.teams[ti]||{}).name || null, block: blk, blockAt: blkAt })).catch(()=>{}); }catch(e){}
 }
 /* ---------- the trade block ----------
    Players their manager has hung a sign on. Filtered against the roster on every read, so a
@@ -8532,11 +8539,32 @@ function blockList(ti){
 }
 function onBlock(ti, pid){ return blockList(ti).includes(String(pid)); }
 function blockCount(){ return (S.teams||[]).reduce((n,_,i)=>n+blockList(i).length, 0); }
+/* When a sign went up. A player put on the block before this was recorded has no stamp, so he
+   reads as 0 and never counts as new - nothing fires retroactively for signs already hanging. */
+function blockAtFor(ti, pid){ return +((((teamDataFor(ti)||{}).blockAt)||{})[String(pid)]) || 0; }
+function blockMaxTs(){
+  let mx = 0;
+  (S.teams||[]).forEach((_,i)=>blockList(i).forEach(id=>{ mx = Math.max(mx, blockAtFor(i, id)); }));
+  return mx;
+}
+/* Signs hung since you last opened the board. Your own are not news to you, and blockList()
+   already drops anyone who has since been dropped or traded away. */
+function blockNewCount(){
+  if(!window.fbUser) return 0;
+  const mine = myTeamIndex(), since = getSeen('block');
+  let n = 0;
+  (S.teams||[]).forEach((_,i)=>{ if(i===mine) return;
+    blockList(i).forEach(id=>{ if(blockAtFor(i, id) > since) n++; }); });
+  return n;
+}
 function toggleBlock(ti, pid){
   if(!requireTeam(ti)) return;
   const id = String(pid), cur = blockList(ti);
-  const next = cur.includes(id) ? cur.filter(x=>x!==id) : cur.concat([id]);
-  TD[ti] = {...(TD[ti]||{}), block: next};        /* mirror first: the chip flips before the round trip */
+  const adding = !cur.includes(id);
+  const next = adding ? cur.concat([id]) : cur.filter(x=>x!==id);
+  const at = {...(((TD[ti]||{}).blockAt)||{})};
+  if(adding) at[id] = Date.now(); else delete at[id];        /* taken down is not news; put back up is */
+  TD[ti] = {...(TD[ti]||{}), block: next, blockAt: at};   /* mirror first: the chip flips before the round trip */
   pushTeamData(ti);
   const p = (realDraft().picks||[]).find(x=>x.teamIndex===ti && String(x.playerId)===id);
   toast(next.includes(id) ? `${(p&&p.name)||'He'} is on the trade block`
@@ -11889,6 +11917,14 @@ function setTrTab(t){
     ? 'Every trade, add and drop in the league, newest first. Nothing here can be edited — it is the record.'
     : 'Commissioner-executed player trades. Per league rules: trades go to a league vote with a 2-day reject window — this page is the pen that signs them.';
   if(t==='moves') renderTransactions();
+  else {
+    /* What you had seen when you ARRIVED, so this visit can still tag what was new while the
+       badge clears. showView draws the board before it reaches here, so it is drawn again with
+       this visit's mark rather than the one left behind by the last one. */
+    window._blockSeenAt = getSeen('block');
+    markSeen('block', blockMaxTs());
+    try{ renderTradeCenter(); updateTradeBadge(); }catch(e){}
+  }
   updateGhost();
 }
 /* One flat sub-nav shared by Teams, Players and Trades. It replaced four separate rows —
@@ -15425,7 +15461,9 @@ function setTabBadge(btn, n){
    drawer are stamped: the drawer reuses class="tabs", so a single querySelector only ever found
    one of them. The sub-nav markup is repeated on three views, hence querySelectorAll there too. */
 function updateTradeBadge(){
-  const n = tradeAlertCount();
+  /* offers that need you, PLUS players newly hung on the trade block - the block board is the
+     top card of this tab, and a shop window nobody is told about is not a shop window */
+  const n = tradeAlertCount() + blockNewCount();
   document.querySelectorAll('nav.tabs button[data-view="teams"]').forEach(b=>setTabBadge(b, n));
   document.querySelectorAll('.subnav button[data-k="tr"]').forEach(b=>setTabBadge(b, n));
 }
@@ -15678,10 +15716,12 @@ function renderTradeCenter(){
         <div class="tbk-list">${ids.map(id=>{
           const p = picks.find(x=>String(x.playerId)===id) || {};
           const pos = String(p.pos||'');
+          /* new to YOU since you last opened this board - the same mark the tab badge counts */
+          const fresh = i!==mineIdx && blockAtFor(i, id) > (+window._blockSeenAt||0);
           return `<span class="tbk-p" title="${i===mineIdx?'On your block — take him off from My Team':'Start an offer with '+esc(t.name)}"
             onclick="tradeForBlocked(${i},'${id}')">
             <span class="postag pos-${esc(pos)}" style="--pc:var(--${esc(pos.toLowerCase())})">${esc(pos)}</span>
-            ${esc(p.name||'')}${p.nfl?` <span style="color:var(--chalk-dim);font-size:11px">${esc(p.nfl)}</span>`:''}</span>`;
+            ${esc(p.name||'')}${p.nfl?` <span style="color:var(--chalk-dim);font-size:11px">${esc(p.nfl)}</span>`:''}${fresh?`<span class="tbk-new">new</span>`:''}</span>`;
         }).join('')}</div>
       </div>`).join('')}
     </div>`;
@@ -18809,7 +18849,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-18 · audit fixes, first pass';
+const BUILD_STAMP = '2026-09-19 · the trade block tells you';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

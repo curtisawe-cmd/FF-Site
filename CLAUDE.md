@@ -769,6 +769,15 @@ nodes because a parent `.write` rule cannot cascade over per-user votes.
 - `applyTradeParts` ends with `pushTeamData` for **both** teams. Without it the teamData listener put
   the old lineup back and `ensureLineup` seeded the arriving player into whatever starting slot was
   open - on a Sunday, a game already under way.
+- **The trade block tells the league it moved.** A sign lives in the team's own node as
+  `block` (the player ids) beside `blockAt` (when each went up); `toggleBlock` stamps on the way
+  up and clears on the way down. `blockNewCount()` counts signs hung since your `seen/block`
+  mark, skipping your own team, and rides the Trades badge the way unvoted polls ride the Chat
+  badge (`updateTradeBadge` = offers that need you + new signs). Opening the Trades tab is
+  seeing them: `setTrTab` reads the old mark into `window._blockSeenAt`, moves the mark, then
+  redraws the board so this visit still tags what was new (`.tbk-new`) while the badge clears.
+  It is a badge only, deliberately - no push. A sign put up before `blockAt` existed has no
+  stamp, reads as 0, and never counts, so nothing fired retroactively when this shipped.
 - Accepting one offer voids competing offers for the same asset. `offerAssets()` keys
   players and picks, `offersConflict()` intersects two offers, and `conflictingLiveOffer()`
   finds an already-accepted deal that claims one of them.
