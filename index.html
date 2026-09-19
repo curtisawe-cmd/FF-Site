@@ -12430,6 +12430,14 @@ async function autoScoreWeek(wk, statSeason, silent){
   const season = +statSeason || +(S.season.year) || 2026;
   const games = S.season.schedule[wk] || [];
   if(!games.length){ if(!silent) toast('No matchups that week.'); return; }
+  /* Auto-score is for locking a FINISHED week in. Run mid-week it writes whatever is on the
+     board at that moment as the official result, and an official score outranks the live one
+     everywhere: every matchup reads Final, the standings count it, and the scoreboard stops
+     moving even though the live feed underneath keeps updating. That is a genuine use once in
+     a while - a week that ended early, a correction - so it asks rather than refuses. */
+  if(!silent && !weekIsOver(wk) && wk === currentNflWeek()){
+    if(!confirm(`Week ${wk} is still being played.\n\nLocking it in now records the half-played scoreboard as the official result: every matchup reads Final, the standings count it, and the live board stops moving until you clear it.\n\nScore week ${wk} anyway?`)) return;
+  }
   const btn = document.getElementById('autoScoreBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'Scoring…'; }
   try{
@@ -12810,6 +12818,25 @@ function setScore(wk,m,side,val){
   const cur = S.season.scores[wk][m] = S.season.scores[wk][m]||[null,null];
   cur[side] = (val===''||val===null)? null : +val;
   saveState(); renderMatchups(); renderTicker();
+}
+/* The undo for the button above. An official score outranks the live one, so a week scored
+   by accident stays frozen on the board for the whole league until it is taken off - and the
+   only way to do that used to be emptying twenty-four boxes by hand. This clears the week's
+   official scores, the projection pair frozen beside them, and the stamp that says when it was
+   run, which together is exactly what Auto-score wrote. Live scoring resumes on the next pulse. */
+function clearWeekScores(wk){
+  if(!requireAdmin()) return;
+  wk = +wk || 1;
+  const had = S.season && S.season.scores && S.season.scores[wk];
+  if(!had || !Object.keys(had).length){ toast(`Week ${wk} has no official scores.`); return; }
+  if(!confirm(`Clear the official scores for week ${wk}?\n\nThe board goes back to live scoring for the whole league, and the projections frozen beside those scores go with them. Nothing else is touched.`)) return;
+  delete S.season.scores[wk];
+  if(S.season.proj) delete S.season.proj[wk];
+  if(S.season.autoScored) delete S.season.autoScored[wk];
+  saveState();
+  if(window.currentView==='matchups') renderMatchups();
+  try{ renderTicker(); renderHome(); }catch(e){}
+  toast(`Week ${wk} is live again`);
 }
 function setMatchTeam(wk,m,side,ti){
   if(!requireAdmin()) return;
@@ -14698,6 +14725,8 @@ function renderMatchups(){
         <button class="btn" id="autoScoreBtn" onclick="autoScoreWeek(${wk}, document.getElementById('statSeason').value)">Auto-score from NFL stats</button>
         <label class="sub" style="margin:0">stats from</label>
         <select id="statSeason" style="max-width:100px">${[2026,2025,2024,2023].map(y=>`<option value="${y}"${y===(+((S.season&&S.season.year))||2026)?' selected':''}>${y}</option>`).join('')}</select>
+        ${(S.season.scores && S.season.scores[wk] && Object.keys(S.season.scores[wk]).length)
+          ? `<button class="btn ghost" onclick="clearWeekScores(${wk})" title="Take the official scores off this week and go back to live scoring">Clear week ${wk} scores</button>` : ''}
         <span class="sub" style="margin:0">Locks these in as the official scores.${(S.season.autoScored&&S.season.autoScored[wk])?` Last run ${timeAgo(S.season.autoScored[wk].at)} from ${S.season.autoScored[wk].season} stats.`:''}${liveStamp(wk)?` Live board updated ${timeAgo(liveStamp(wk))}.`:''}</span>
       </div>
       ${games.map((g,m)=>{
@@ -18889,7 +18918,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-19 · a trade says how it ended';
+const BUILD_STAMP = '2026-09-19 · unscore a week';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
