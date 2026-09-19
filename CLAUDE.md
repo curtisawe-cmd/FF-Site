@@ -841,6 +841,21 @@ Thu-Mon from `NFL_2026_WEEK1 = Sep 10 2026`. Fantasy pairings are league-vs-leag
 round-robin (`genSchedule`); the NFL schedule only drives week structure and labels.
 Matchups auto-generate at boot if `!S.season`.
 
+**One clock, and it is Eastern.** `etAt(y, mo, d, h, mi)` is the season's only date constructor:
+a UTC instant plus the Eastern offset, UTC-4 until `ET_DST_END` (2 AM, Sunday 1 November 2026) and
+UTC-5 after. `NFL_2026_KICKOFF`, `NFL_2026_WEEK1`, `nflWeekStart`, `weekGamesBegun` and
+`weekOverAt` all come from it. Built from local components, as they were, every boundary meant
+"4 AM wherever the phone is": a manager in Los Angeles rolled into the new week three hours after
+one in New York, so his lineups stayed locked while theirs unlocked and his waiver claims settled
+on a different schedule, and a phone in London rolled over during Monday Night Football.
+`currentNflWeek` now walks the marks instead of dividing elapsed time by seven days, which is what
+made it drift an hour against `weekIsOver` every Tuesday from November onwards. The week 7 to
+week 8 gap is 169 hours, not 168, and that is the clocks going back.
+
+`NFL_2026_WEEK1_NOON` is a separate anchor for PRINTING dates (`nflWeekRange`, the trade-deadline
+menu). The midnight one renders as the previous day in any zone west of Eastern, and a week's
+label has to read the same on every screen.
+
 **A week remembers who played it.** Every live post carries `starters: {ti: {playerId: slot}}`
 (`lineupSnapshot`), and `teamWeekDetail(ti, stats, played)` takes that map back
 (`playedStarters(wk, ti)`). A result is a set of lineups, not a pair of numbers: without the
