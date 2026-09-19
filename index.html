@@ -11531,8 +11531,26 @@ const REG_WEEKS = 14;
    NFL_2026_WEEK1 is the Thursday the weekly grid runs on. Every week after the first is Thu to
    Mon, so the grid has to stay anchored there - moving it back to the Wednesday would have
    relabelled all thirteen later weeks a day early to fix the one. */
-const NFL_2026_KICKOFF = new Date(2026, 8, 9, 20, 20);
-const NFL_2026_WEEK1   = new Date(2026, 8, 10);
+/* EASTERN TIME, not the phone's. Built from local components these were "4 AM wherever you
+   happen to be", so the league ran on twelve different clocks: a manager in Los Angeles rolled
+   into the new week three hours after one in New York - his lineups stayed locked while theirs
+   unlocked, his waiver claims settled on a different schedule - and a phone in London rolled
+   over during Monday Night Football. The season is one clock, and it is the league's.
+
+   Eastern is UTC-4 until 2 AM on Sunday 1 November 2026 and UTC-5 after, the only changeover
+   inside a season. Adding that offset to a UTC instant is exact for every mark this file sets:
+   none of them is a Sunday, so none can land in the changeover hour. */
+const ET_DST_END = Date.UTC(2026, 10, 1, 6);            /* 2 AM EDT, Sunday 1 November 2026 */
+function etAt(y, mo, d, h, mi){
+  const guess = Date.UTC(y, mo, d, h||0, mi||0);
+  return guess + (guess < ET_DST_END ? 4 : 5) * 3600000;
+}
+const NFL_2026_KICKOFF = new Date(etAt(2026, 8, 9, 20, 20));
+const NFL_2026_WEEK1   = new Date(etAt(2026, 8, 10));
+/* Noon Eastern on the same Thursday, for PRINTING a date and nothing else: the midnight anchor
+   above renders as the day before on a phone in Los Angeles, and a week's label has to read the
+   same on every screen in the league. */
+const NFL_2026_WEEK1_NOON = new Date(etAt(2026, 8, 10, 12));
 /* Sep 9 · 8:20 PM, for the countdown tile. Derived, so the label cannot drift from the clock. */
 function kickoffShort(){
   return NFL_2026_KICKOFF.toLocaleString('en-US',{month:'short',day:'numeric'})
@@ -11541,7 +11559,7 @@ function kickoffShort(){
 /* When week w actually begins. Week 1 is the Wednesday opener; the rest start on their Thursday. */
 function nflWeekStart(w){
   if(w <= 1) return NFL_2026_KICKOFF.getTime();
-  const d = new Date(NFL_2026_WEEK1); d.setDate(d.getDate() + (w-1)*7); return d.getTime();
+  return etAt(2026, 8, 10 + (w-1)*7);
 }
 /* Draft day. The commissioner sets it in Settings, because it moves every year and the old
    version of this was a constant in the page - which meant next August somebody had to edit the
@@ -11594,9 +11612,9 @@ function draftAtInputValue(){
 function nflWeekRange(w){
   /* the Monday is always four days off the grid Thursday; only the START of week one moves back
      to the Wednesday opener, so week 1 reads Sep 9-14 and every other week stays Thu to Mon */
-  const end = new Date(NFL_2026_WEEK1); end.setDate(end.getDate() + (w-1)*7 + 4);
-  const start = w<=1 ? new Date(NFL_2026_KICKOFF)
-    : (()=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+(w-1)*7); return d; })();
+  const end = new Date(NFL_2026_WEEK1_NOON); end.setDate(end.getDate() + (w-1)*7 + 4);
+  const start = w<=1 ? new Date(etAt(2026, 8, 9, 12))
+    : (()=>{ const d=new Date(NFL_2026_WEEK1_NOON); d.setDate(d.getDate()+(w-1)*7); return d; })();
   const mon = d => d.toLocaleString('en-US',{month:'short'});
   const label = start.getMonth()===end.getMonth()
     ? `${mon(start)} ${start.getDate()}–${end.getDate()}`
@@ -11661,13 +11679,16 @@ function currentNflWeek(){
      in the books the app is on the next one - its slate, its lineups, its waivers - rather than
      sitting on a finished week until the calendar reaches Thursday. */
   if(Date.now() < NFL_2026_KICKOFF.getTime()) return 0;
-  const ms = Date.now() - (weekOverAt(1) - 7*86400000);
-  const w = ms < 0 ? 1 : Math.floor(ms/(7*86400000)) + 1;
-  return (w>=1 && w<=REG_WEEKS) ? w : 0;
+  /* walked, not divided: a fixed seven-day step drifts an hour against the 4 AM marks the
+     moment the clocks go back in November, and for that hour every Tuesday the app was on the
+     next week while the last one was not yet over */
+  const now = Date.now();
+  for(let w=1; w<=REG_WEEKS; w++) if(now < weekOverAt(w)) return w;
+  return 0;
 }
 /* the latest week whose games have actually started - the one a stats page or a "how did he do"
    tap wants by default. On a Tuesday that is last week; from the Thursday kickoff it is this one. */
-function weekGamesBegun(wk){ return Date.now() >= NFL_2026_WEEK1.getTime() + (+wk-1)*7*86400000; }
+function weekGamesBegun(wk){ return Date.now() >= etAt(2026, 8, 10 + (+wk-1)*7); }
 function lastBegunWeek(){
   const cur = currentNflWeek(); if(!cur) return 0;
   return weekGamesBegun(cur) ? cur : Math.max(1, cur-1);
@@ -13432,12 +13453,7 @@ function weekProjPairs(wk){
    verdict. Calendar days, not 86,400,000s: the clocks go back in November and a millisecond
    count would land the flip at 11pm Monday, in the fourth quarter of Monday Night Football.
    Rescheduled Tuesday games are rare enough to wear. */
-function weekOverAt(wk){
-  const d = new Date(NFL_2026_WEEK1.getTime());
-  d.setDate(d.getDate() + (+wk-1)*7 + 5);
-  d.setHours(4, 0, 0, 0);
-  return d.getTime();
-}
+function weekOverAt(wk){ return etAt(2026, 8, 15 + (+wk-1)*7, 4); }   /* 4 AM Eastern, the Tuesday after */
 function weekIsOver(wk){
   wk = +wk; if(!(wk>=1)) return false;
   return Date.now() >= weekOverAt(wk);
@@ -18614,7 +18630,7 @@ function renderTradeReview(){
   const dl=document.getElementById('setTradeDeadline');
   if(dl){
     const cur=tradeDeadlineWk();
-    const wkLabel=w=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+(w-1)*7);
+    const wkLabel=w=>{ const d=new Date(NFL_2026_WEEK1_NOON); d.setDate(d.getDate()+(w-1)*7);
       return `Week ${w} · ${d.toLocaleDateString([], {month:'short', day:'numeric'})}`; };
     dl.innerHTML=`<option value="0"${cur?'':' selected'}>No deadline</option>`+
       Array.from({length:17},(_,k)=>k+1).map(w=>`<option value="${w}"${w===cur?' selected':''}>${wkLabel(w)}</option>`).join('');
@@ -19002,7 +19018,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-19 · a week remembers who played it';
+const BUILD_STAMP = '2026-09-19 · one clock for the whole league';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
@@ -19944,7 +19960,7 @@ function requireUnlockedBranding(ti){
 }
 function teamNamesLocked(){
   const start=NFL_2026_KICKOFF.getTime();
-  const end=(()=>{ const d=new Date(NFL_2026_WEEK1); d.setDate(d.getDate()+18*7); return d.getTime(); })();
+  const end=etAt(2026, 8, 10 + 18*7);
   const n=Date.now(); return n>=start && n<end;
 }
 function setLockBranding(on){
