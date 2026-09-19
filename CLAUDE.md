@@ -847,6 +847,17 @@ Matchups auto-generate at boot if `!S.season`.
 mid-week. `mScore` stays the live view for the board, ticker and Game Center; `playoffOdds` settles
 on the same rule inline.
 
+**An official score outranks the live one everywhere, which makes Auto-score a loaded gun
+mid-week.** `officialScore(wk,m)` on its own makes the matchups board print Final (the bar reads
+`weekIsOver(wk) || !!officialScore(wk,m)`), and `mScore` prefers it, so the whole league's board
+freezes on a half-played scoreboard while the live feed underneath keeps updating. The
+commissioner pressed Auto-score on a live week 2 on 2026-09-19 and every game read Final. Two
+guards now: `autoScoreWeek` confirms first when the week is not over and is the one being played,
+and `clearWeekScores(wk)` is the way back - it deletes that week's `S.season.scores`, the
+`S.season.proj` pair frozen beside it and the `S.season.autoScored` stamp, which together is
+exactly what Auto-score wrote. Its button sits next to Auto-score and appears only while that week
+has official scores. Before it existed the only undo was emptying twenty-four boxes by hand.
+
 **Standings order** (`seasonStandings`): wins, then - when Settings > League rules has
 "Standings tiebreaker: Head-to-head record" - the record among the teams tied on wins, then
 points-for. Any other tiebreak setting is plain wins then points-for. The bracket seeder
