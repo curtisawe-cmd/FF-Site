@@ -5456,6 +5456,7 @@ function startLeagueSync(){
   });
   window.FB.dbOn(recapsPath(), (m)=>{
     recapsMap = m||{};
+    try{ updateRecapBadge(); }catch(e){}            /* this week's write-up just landed */
     try{ renderHomeRecap(); }catch(e){}
     try{ if(window.currentView==='matchups') renderMatchups(); }catch(e){}
     try{ if(window.currentView==='recaps') renderRecaps(); }catch(e){}
@@ -5659,7 +5660,7 @@ setInterval(()=>{
   if(window.__noteFocus) return;
   try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
   try{ if(typeof maybeRefreshWeekProj==='function') maybeRefreshWeekProj(); }catch(e){}   /* this week's projections, 20m TTL, redraws only if they moved */
-  try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); updateWaiverBadge();
+  try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); updateWaiverBadge(); updateRecapBadge();
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
@@ -7819,7 +7820,7 @@ function onFbUser(user){
   }
   if(user){ startLeagueSync(); initClaims(); setTimeout(()=>{ try{ maybeAutoScore(); }catch(e){} }, 2500); }
   else { window.myClaim = null; }
-  try{ updateChatBadge(); updateTradeBadge(); updateWaiverBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
+  try{ updateChatBadge(); updateTradeBadge(); updateWaiverBadge(); updateRecapBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
   try{ syncNavLocks(); }catch(e){}
   /* signing out while standing on a page that needs an account must not leave it on screen */
   try{ if(!viewIsOpen(window.currentView)) showView('home'); }catch(e){}
@@ -8847,7 +8848,14 @@ function showView(v){
   if(v==='trades') renderTradeCenter();
   if(v==='history') renderHistory();
   if(v==='stats') renderStats();
-  if(v==='recaps') renderRecaps();
+  if(v==='recaps'){
+    /* read before the mark moves, so this visit can still mark which weeks are new while the
+       badge clears - the same fortnight-style floor the count uses, or the two disagree */
+    window._recapSeenAt = Math.max(getSeen('recaps'), Date.now() - 21*86400000);
+    markSeen('recaps', recapMaxTs());
+    renderRecaps();
+    try{ updateRecapBadge(); }catch(e){}
+  }
   if(v==='chat'){ markSeen('chat', chatMaxTs()); initChat(); updateChatBadge(); renderChatOnline(); }   /* opening = reading */
   /* no markSeen for trades: the badge is live status and only resolving a trade clears it */
   if(v==='trades') setTrTab(window.trTab||'trades');
@@ -10905,7 +10913,7 @@ function liveRecapsHTML(){
   return `<div class="card" style="max-width:860px;margin-bottom:18px">
     <div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <div class="eyebrow" style="margin:0">${esc(String(liveYr))} season · week by week · written ${esc(timeAgo(+r.at||0))}${r.rewritten?', rewritten by the commissioner':''}</div>
-      <select onchange="window.recapWeek=+this.value;renderRecaps()">${list.map(x=>`<option value="${x.wk}"${+x.wk===+r.wk?' selected':''}>Week ${x.wk}${x.title?' · '+esc(x.title):''}</option>`).join('')}</select>
+      <select onchange="window.recapWeek=+this.value;renderRecaps()">${list.map(x=>`<option value="${x.wk}"${+x.wk===+r.wk?' selected':''}>Week ${x.wk}${x.title?' · '+esc(x.title):''}${(+x.at||0) > (+window._recapSeenAt||0) ? ' · new' : ''}</option>`).join('')}</select>
     </div>
     <div class="recap-body">${esc(r.text)}</div>
     <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -13925,6 +13933,25 @@ function rcWarm(wk){
    the seed and overwrites for everyone. */
 function recapsPath(){ return `league/${LEAGUE_ID}/recaps`; }
 let recapsMap = {};
+/* The week's write-up lands on the Tuesday and then just sits there. It is the league's weekly
+   read and the easiest thing in the app to miss, so the Recaps button carries a count of the
+   ones written since you last opened it. Unread, like chat: opening it is reading it. Three
+   weeks back at most, so a device signing in for the first time in December does not open on a
+   badge of fourteen. */
+function recapAlertCount(){
+  if(!window.fbUser) return 0;
+  const since = Math.max(getSeen('recaps'), Date.now() - 21*86400000);
+  return Object.keys(recapsMap||{}).filter(k=>{ const r = recapsMap[k];
+    return r && r.text && (+r.at||0) > since; }).length;
+}
+function recapMaxTs(){
+  return Object.keys(recapsMap||{}).reduce((mx,k)=>Math.max(mx, +((recapsMap[k]||{}).at)||0), 0);
+}
+/* The three copies of the Stats / Recaps / History row, one per view that carries it */
+function updateRecapBadge(){
+  const n = recapAlertCount();
+  document.querySelectorAll('[data-sub="recaps"]').forEach(b=>setTabBadge(b, n));
+}
 const recapKey = (yr, wk) => `${yr}_w${wk}`;
 function recapFor(wk, yr){ yr = yr || (S.season && S.season.year) || curDraftYear(); return recapsMap[recapKey(yr, wk)] || null; }
 function latestRecap(){
@@ -19077,7 +19104,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-20 · the tab bar tells you';
+const BUILD_STAMP = '2026-09-20 · the recap knocks too';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

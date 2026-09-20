@@ -261,7 +261,7 @@ board and the push on the phone read the same line the same way. The snapshot ca
 
 ## Badges on the tab bar
 
-Five counters, in two flavours. **Unread** clears when you look: chat messages (`chatUnreadCount`)
+Six counters, in two flavours. **Unread** clears when you look: chat messages (`chatUnreadCount`)
 and settled waiver claims (`claimAlertCount`), both riding `getSeen`/`markSeen` marks that follow
 your account across devices. **Status** clears when the thing is resolved, not when you glance at
 it: trade offers waiting on you and deals in review (`tradeAlertCount`), players newly on the
@@ -274,6 +274,11 @@ not score (`lineupAlertCount`).
   half, `data-k="my"` the lineup half, so the number says where to go rather than only that
   something is wrong.
 - **Players tab** and its `pl-wv` sub-tab = your settled claims.
+- **Recaps button** (`[data-sub="recaps"]`, three copies, one per view carrying the Stats / Recaps
+  / History row) = weekly write-ups published since your mark, three weeks back at most. Opening
+  the view reads them, and the week picker marks the unread ones with " · new" off the same
+  `window._recapSeenAt` floor.
+
 
 `lineupAlertCount` is `lineupIssues(ti).total` for your own team, gated on `D.started` and being
 in season. Looking at a broken lineup must not clear it; fixing it does. It is recounted from
