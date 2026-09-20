@@ -5503,6 +5503,7 @@ function startLeagueSync(){
   window.FB.dbOn(`league/${LEAGUE_ID}/draftRequests`, (m)=>{ draftReqMap = m||{};
     try{ maybeApplyPickRequests(); }catch(e){} });
   window.FB.dbOn(`league/${LEAGUE_ID}/waiverClaims`, (m)=>{ wClaims = m||{};
+    try{ updateWaiverBadge(); }catch(e){}                      /* one of yours just settled */
     if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
     /* claims show as pending rows above the log, so that list is stale the moment one lands */
     if(window.currentView==='trades' && window.trTab==='moves') renderTransactions();
@@ -5658,7 +5659,7 @@ setInterval(()=>{
   if(window.__noteFocus) return;
   try{ if(typeof loadKickoffs==='function') loadKickoffs(); }catch(e){}   /* self-guards: in-season only, 6h TTL */
   try{ if(typeof maybeRefreshWeekProj==='function') maybeRefreshWeekProj(); }catch(e){}   /* this week's projections, 20m TTL, redraws only if they moved */
-  try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge();
+  try{ if(typeof maybeFinalizeTrades==='function') maybeFinalizeTrades(); updateTradeBadge(); updateChatBadge(); updateWaiverBadge();
   /* same beat runs the waiver deadlines, and redraws the wire so its countdowns tick */
   if(typeof maybeProcessWaivers==='function'){ bustWire(); maybeProcessWaivers(); }
   if(window.currentView==='players' && window.plTab==='wv') renderWaivers();
@@ -5992,7 +5993,17 @@ function setPlTab(t){
   if(wv)   wv.style.display   = t==='wv'  ? 'block':'none';
   if(pick) pick.style.display = t==='pick' ? 'block':'none';
   if(wkv)  wkv.style.display  = t==='week' ? 'block':'none';
-  if(t==='wv'){ bustWire(); renderWaivers(); }
+  if(t==='wv'){
+    bustWire();
+    /* Read before the mark moves, so this visit can still tag what settled while the badge
+       clears. The same fortnight floor claimAlertCount uses, or the tags and the number it
+       cleared would disagree: a claim from last month is not news on a device signing in for
+       the first time. */
+    window._claimSeenAt = Math.max(getSeen('claims'), Date.now() - 14*86400000);
+    markSeen('claims', claimMaxTs());
+    renderWaivers();
+    try{ updateWaiverBadge(); }catch(e){}
+  }
   if(t==='pick'){ bustWire(); renderPickups(); }
   if(t==='wv' || t==='pick' || t==='all') trendWarm();   /* who the rest of fantasy is chasing */
   if(t==='inj') renderInjuries();
@@ -7808,7 +7819,7 @@ function onFbUser(user){
   }
   if(user){ startLeagueSync(); initClaims(); setTimeout(()=>{ try{ maybeAutoScore(); }catch(e){} }, 2500); }
   else { window.myClaim = null; }
-  try{ updateChatBadge(); updateTradeBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
+  try{ updateChatBadge(); updateTradeBadge(); updateWaiverBadge(); }catch(e){}   /* clear badges on sign-out, recount on sign-in */
   try{ syncNavLocks(); }catch(e){}
   /* signing out while standing on a page that needs an account must not leave it on screen */
   try{ if(!viewIsOpen(window.currentView)) showView('home'); }catch(e){}
@@ -8546,6 +8557,7 @@ function touchScoreSnapshot(){
 }
 function pushTeamData(ti){
   try{ touchScoreSnapshot(); }catch(e){}   /* the relay's picture of the starters just moved */
+  try{ if(+ti===myTeamIndex()) updateTradeBadge(); }catch(e){}   /* your lineup just changed */
   if(!fbOk() || !canEditTeam(ti)) return;
   /* the block rides in the team's own node, which its manager already owns - no new database
      rule, and it reaches everyone through the teamData listener that is already running */
@@ -8693,7 +8705,7 @@ function finishClaims(){
       applyTeamTheme(myTeamTheme()); syncTeamPicker();
     }
     updateClaimBadge();
-    try{ updateTradeBadge(); }catch(e){}   /* badge depends on which team is yours */
+    try{ updateTradeBadge(); updateWaiverBadge(); }catch(e){}   /* badges depend on which team is yours */
     /* Which buttons a trade card shows depends on this claim, so anything already on screen
        was drawn without knowing the team and has to be redrawn. */
     try{ if(window.currentView==='trades') renderTradeCenter(); }catch(e){}
@@ -15571,14 +15583,17 @@ function tradeAlertCount(){
 /* Stamp a count onto a nav button, remembering its plain label so the badge can be taken off
    again. Shared by the chat and trade badges — both need the same "don't re-animate an
    unchanged number" behaviour. */
+/* The badge is added and removed on its own, and nothing else in the button is touched. It
+   used to be rebuilt from the button's TEXT, which threw away the icon paintTabIcons had
+   injected: the first trade offer of the season quietly stripped the Teams tab's glyph and the
+   whole row shifted. */
 function setTabBadge(btn, n){
   if(!btn) return;
-  if(!btn.dataset.label) btn.dataset.label = btn.textContent.trim();
-  const txt = n>99 ? '99+' : String(n);
   const cur = btn.querySelector('.tabbadge');
-  if(!n){ if(cur) btn.innerHTML = btn.dataset.label; return; }
-  if(cur && cur.textContent === txt) return;                    /* no needless re-animation */
-  btn.innerHTML = `${btn.dataset.label}<span class="tabbadge">${txt}</span>`;
+  if(!n){ if(cur) cur.remove(); return; }
+  const txt = n>99 ? '99+' : String(n);
+  if(cur){ if(cur.textContent !== txt) cur.textContent = txt; return; }   /* no needless re-animation */
+  btn.insertAdjacentHTML('beforeend', `<span class="tabbadge">${txt}</span>`);
 }
 /* Trades moved inside Teams, so the old target — nav.tabs button[data-view="trades"] — stopped
    existing and this badge had silently done nothing ever since. It now marks the Teams tab,
@@ -15587,10 +15602,14 @@ function setTabBadge(btn, n){
    one of them. The sub-nav markup is repeated on three views, hence querySelectorAll there too. */
 function updateTradeBadge(){
   /* offers that need you, PLUS players newly hung on the trade block - the block board is the
-     top card of this tab, and a shop window nobody is told about is not a shop window */
-  const n = tradeAlertCount() + blockNewCount();
-  document.querySelectorAll('nav.tabs button[data-view="teams"]').forEach(b=>setTabBadge(b, n));
-  document.querySelectorAll('.subnav button[data-k="tr"]').forEach(b=>setTabBadge(b, n));
+     top card of that tab, and a shop window nobody is told about is not a shop window */
+  const tr = tradeAlertCount() + blockNewCount();
+  const lu = lineupAlertCount();
+  /* The tab carries everything underneath it; each sub-tab carries only its own, so the number
+     says where to go rather than just that something is wrong somewhere. */
+  document.querySelectorAll('nav.tabs button[data-view="teams"]').forEach(b=>setTabBadge(b, tr + lu));
+  document.querySelectorAll('.subnav button[data-k="tr"]').forEach(b=>setTabBadge(b, tr));
+  document.querySelectorAll('.subnav button[data-k="my"]').forEach(b=>setTabBadge(b, lu));
 }
 let acceptedOfferIds = null;                 /* null until first load, so old trades don't all fire at once */
 const supersededSeen = new Set();            /* only tell you once that your offer was voided */
@@ -17096,6 +17115,22 @@ function lineupIssues(ti){
   out.total = out.empty.length + out.bye.length + out.out.length;
   return out;
 }
+/* The app already works out that your lineup will not score - an empty slot, a starter on a
+   bye, a starter who is out - and pushes you about it before kickoff. Nothing appeared on the
+   tab bar, so with push switched off, or a notification swiped away half asleep, there was no
+   second chance, and this is the one that actually costs points.
+
+   Status, not unread: looking at it must not clear it. Only fixing it does. Before the draft
+   every slot is empty and none of it is anybody's fault, which is the same gate the warning
+   banner uses. */
+function lineupAlertCount(){
+  try{
+    if(!D.started) return 0;
+    const ti = myTeamIndex(); if(!Number.isInteger(ti)) return 0;
+    if(!(currentNflWeek() || projWeekNow())) return 0;        /* out of season nothing is wrong yet */
+    return lineupIssues(ti).total || 0;
+  }catch(e){ return 0; }
+}
 /* One line saying what to fix. Empty first: a hole is worse than a bye, because a bye at least
    tells you the player exists. */
 function lineupWarningHTML(ti){
@@ -17359,6 +17394,28 @@ function swapPlayer(ti, dropPid, addPid){
    only let an admin write rosters and settings, so a manager's browser running this would be
    denied. Whichever commissioner device is open first after a deadline does the work. */
 function waiverPath(){ return `league/${LEAGUE_ID}/waiverClaims`; }
+/* A claim settles at four in the morning: the result and the reason go into the database and
+   nothing on screen says so. You may have gained a player, dropped the one you named, or lost a
+   bid, and every one of those changes the lineup you are about to play. Unread, like chat -
+   opening the wire is reading it. Only your own team's claims, and only a fortnight back, so a
+   device signing in for the first time in November does not open on a badge of forty. */
+function claimAlertCount(){
+  if(!window.fbUser) return 0;
+  const ti = myTeamIndex(); if(!Number.isInteger(ti)) return 0;
+  const since = Math.max(getSeen('claims'), Date.now() - 14*86400000);
+  return claimList().filter(c=>c && +c.team===ti && c.status && c.status!=='pending' && (+c.closedAt||0) > since).length;
+}
+function claimMaxTs(){
+  const ti = myTeamIndex(); if(!Number.isInteger(ti)) return 0;
+  return claimList().reduce((mx,c)=>(c && +c.team===ti) ? Math.max(mx, +c.closedAt||0) : mx, 0);
+}
+/* NOT updateClaimBadge - that name is already the claim-your-TEAM button's, the same trap the
+   comment below this one warns about for wClaims */
+function updateWaiverBadge(){
+  const n = claimAlertCount();
+  document.querySelectorAll('nav.tabs button[data-view="players"]').forEach(b=>setTabBadge(b, n));
+  document.querySelectorAll('.subnav button[data-k="pl-wv"]').forEach(b=>setTabBadge(b, n));
+}
 /* NOT claimsMap - that name is already the team-claim map (which uid owns which team) */
 let wClaims = {};
 /* ===================== FAAB =====================
@@ -17979,9 +18036,11 @@ function renderWaivers(){
       const tag = c.status==='won' ? `<span class="divtag">won</span>`
                 : c.status==='cancelled' ? `<span class="divtag" style="opacity:.7">withdrawn</span>`
                 : `<span class="divtag" style="opacity:.7">${esc(c.status)}</span>`;
+      /* settled since you last opened this tab - the same mark the badge counts */
+      const fresh = mine!==null && +c.team===mine && (+c.closedAt||0) > (+window._claimSeenAt||0);
       return `<div class="faRow" style="${c.status==='won'?'':'opacity:.7;'}">
         <span class="faName">${esc(c.teamName||teamName(c.team))} — ${esc(c.name)}</span>
-        ${tag}${c.reason?`<span class="pmeta">${esc(c.reason)}</span>`:''}
+        ${tag}${fresh?`<span class="tbk-new">new</span>`:''}${c.reason?`<span class="pmeta">${esc(c.reason)}</span>`:''}
       </div>`;
     }).join('')}</div>`;
 
@@ -19018,7 +19077,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-19 · one clock for the whole league';
+const BUILD_STAMP = '2026-09-20 · the tab bar tells you';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

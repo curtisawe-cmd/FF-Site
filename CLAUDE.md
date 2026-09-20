@@ -259,7 +259,41 @@ board and the push on the phone read the same line the same way. The snapshot ca
   180 characters with the clause intact.
 - Setting `S.injuryAlerts` (default on). The Cloudflare copy does not have it.
 
+## Badges on the tab bar
+
+Five counters, in two flavours. **Unread** clears when you look: chat messages (`chatUnreadCount`)
+and settled waiver claims (`claimAlertCount`), both riding `getSeen`/`markSeen` marks that follow
+your account across devices. **Status** clears when the thing is resolved, not when you glance at
+it: trade offers waiting on you and deals in review (`tradeAlertCount`), players newly on the
+trade block (`blockNewCount`, which is unread-shaped but resolves itself), and a lineup that will
+not score (`lineupAlertCount`).
+
+- **Chat tab** = unread messages + unvoted polls. Polls live inside Chat, so a badge nobody can
+  see from another view is not a notification.
+- **Teams tab** = trades + block + lineup. Its sub-tabs split it: `data-k="tr"` carries the trade
+  half, `data-k="my"` the lineup half, so the number says where to go rather than only that
+  something is wrong.
+- **Players tab** and its `pl-wv` sub-tab = your settled claims.
+
+`lineupAlertCount` is `lineupIssues(ti).total` for your own team, gated on `D.started` and being
+in season. Looking at a broken lineup must not clear it; fixing it does. It is recounted from
+`pushTeamData`, which every lineup write already calls, and on the minute pulse.
+
+`claimAlertCount` counts only your team's claims, only those closed since your mark, and only a
+fortnight back, so a device signing in for the first time in November does not open on a badge of
+forty. `setPlTab('wv')` reads the old mark into `window._claimSeenAt` **with the same fortnight
+floor** before moving it, so the wire can tag that visit's arrivals (`.tbk-new`) while the badge
+clears. Tag and badge must use the same floor or they disagree.
+
+`setTabBadge` adds and removes a `.tabbadge` span and touches nothing else in the button. It used
+to rebuild the button from its own `textContent`, which threw away the icon `paintTabIcons`
+injects: the first trade offer of the season quietly stripped the Teams tab's glyph.
+
+**Name trap:** `updateClaimBadge` is the claim-your-TEAM button, nothing to do with waivers. The
+waiver one is `updateWaiverBadge`. Same trap the `wClaims` vs `claimsMap` comment warns about.
+
 ## PWA and mobile
+
 
 Mobile is the layout that matters - the league uses this on phones. Installed via Add to
 Home Screen; on iOS that step is **mandatory**, since Safari tabs cannot receive push at
