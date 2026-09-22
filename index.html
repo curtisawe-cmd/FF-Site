@@ -12498,6 +12498,13 @@ async function renderGameCenter(){
        different thing entirely */
     const A=teamWeekDetail(g[0],stats, finalWeek ? playedStarters(wk, g[0]) : null),
           B=teamWeekDetail(g[1],stats, finalWeek ? playedStarters(wk, g[1]) : null);
+    /* A finished week's number is the one on RECORD - the same one the matchups board and the
+       standings print - never a recomputation. Without a recorded lineup teamWeekDetail can only
+       fall back to today's starters, and this header (and the bar under it) moved every time
+       somebody rearranged a roster, while the board beside it stood still. */
+    if(finalWeek){ const rs = mScore(wk, m);
+      if(rs[0]!=null) A.total = +rs[0];
+      if(rs[1]!=null) B.total = +rs[1]; }
     const tA=S.teams[g[0]], tB=S.teams[g[1]];
     const aWin=A.total>B.total, bWin=B.total>A.total;
     const pp = projPair(g[0], g[1]);
@@ -19407,7 +19414,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-22 · the relay remembers the lineup too';
+const BUILD_STAMP = '2026-09-22 · a finished week keeps its number';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

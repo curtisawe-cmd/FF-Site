@@ -933,7 +933,16 @@ roster, and a starter traded away on the Tuesday took his points with him. Every
 a finished week now passes the record - `postLiveScores` (which also carries the recorded
 starters forward rather than re-recording, so a post made after the roll can correct the numbers
 without touching who played), `autoScoreWeek`, the Game Center headers and the recap's extras.
+**A finished week's Game Center number is the one on record, never a recomputation.** The cards
+overwrite `A.total`/`B.total` with `mScore(wk, m)` when `finalWeek`. Without that, a week with no
+recorded lineup (week 1) had `teamWeekDetail` falling back to today's starters, so the header and
+the bar under it moved every time somebody rearranged a roster while the matchups board beside it,
+which has always read `mScore`, stood still. Curtis reported it as week 1 changing when he set his
+week 3 lineup. The rows on such a week are still today's roster - that is what the `.gc-nolineup`
+note is for - but the number no longer follows them.
+
 A week from before this existed has no record and falls back to the current lineup, and says so on
+
 the card (`.gc-nolineup`) rather than letting the board quietly claim somebody started who did not.
 
 **The relay records the lineup too, so a week survives nobody opening the app.** `liveScores` is
