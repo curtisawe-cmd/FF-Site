@@ -12239,6 +12239,18 @@ async function renderGameCenter(){
        and the rows disagreed with the header total, which already read from the record. */
     const rec = finalWeek ? playedStarters(wk, ti) : null;
     const l = lu(ti), roster = teamRoster(ti);
+    if(finalWeek && !rec){
+      /* No record of who started: the week was played before lineups were recorded and the
+         relay has nothing for it either. A Starters / Bench split would be a fiction - it was
+         today's lineup wearing last week's numbers, and the rows never added up to the score
+         on record above them. So the card shows the roster as it stood when the week closed,
+         every man with what he scored, and claims nothing about who was in the lineup. */
+      let all = []; try{ all = rosterAsOf(ti, weekOverAt(wk)); }catch(e){}
+      if(!all.length) all = roster;
+      const ord = { QB:0, RB:1, WR:2, TE:3, K:4, DEF:5 };
+      all = all.slice().sort((a,b)=> ((ord[a.pos]??9)-(ord[b.pos]??9)) || ((ptsOf(b)||0)-(ptsOf(a)||0)));
+      return { unrec:true, all, bySlot:[], starters:[], bench:[], ir:[] };
+    }
     if(rec){
       const byS = {};
       playedStarterIds(rec).forEach(id=>{ const sl = rec[id]; (byS[sl] = byS[sl] || []).push(id); });
@@ -12438,6 +12450,16 @@ async function renderGameCenter(){
   };
   const h2hBlock = (ax, bx, A_, B_, bar) => {
     const A = teamLists(ax), B = teamLists(bx);
+    if(A.unrec || B.unrec){
+      /* one side, or both, with no lineup on record: the rosters face off as flat lists, with
+         the position as the chip, and nothing between them claims a slot */
+      const la = A.unrec ? A.all : A.starters.concat(A.bench, A.ir);
+      const lb = B.unrec ? B.all : B.starters.concat(B.bench, B.ir);
+      let out = h2hHead(ax, bx, A_, B_, bar) + `<div class="gc-band">Roster · who started is not on file</div>`;
+      const cnt = Math.max(la.length, lb.length);
+      for(let i=0;i<cnt;i++){ const p = la[i] || lb[i]; out += h2hRow(p ? p.pos : '', la[i], lb[i]); }
+      return `<div class="gc-h2h">${out}</div>`;
+    }
     let out = h2hHead(ax, bx, A_, B_, bar)
       + (showProj ? `<div class="h2h-key">Score · projection below</div>` : '')
       + `<div class="gc-band">Starters</div>`;
@@ -12462,7 +12484,8 @@ async function renderGameCenter(){
        is starting now. The head-to-head layout was already right - it labels rows from the
        canonical slot sequence rather than from the lineup. */
     const recSlots = finalWeek ? playedStarters(wk, ti) : null;
-    const slotAt = pid => (recSlots && recSlots[String(pid)]) || l[pid] || '';
+    const unrecCol = finalWeek && !recSlots;                 /* no lineup on record: chip the position, not a slot */
+    const slotAt = pid => unrecCol ? '' : ((recSlots && recSlots[String(pid)]) || l[pid] || '');
     const rowsFor = (list, live) => list.map(p=>{
       /* with stats in hand a blank means "did not play"; with none at all it just means 0.0 */
       const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
@@ -12484,7 +12507,11 @@ async function renderGameCenter(){
     const hrow = showProj
       ? `<tr class="gc-hrow"><td class="gc-slot"></td><td></td><td class="gc-proj">Proj</td><td class="gc-pts">Pts</td></tr>`
       : '';
-    const { starters, bench, ir } = teamLists(ti);   /* shared with the head-to-head layout */
+    const { starters, bench, ir, unrec, all } = teamLists(ti);   /* shared with the head-to-head layout */
+    if(unrec) return `<div class="gc-col">
+      <div class="gc-band">Roster · who started is not on file</div>
+      ${all.length?`<table class="gc-tbl">${hrow}${rowsFor(all)}</table>`:`<div class="gc-none">No roster on record.</div>`}
+    </div>`;
     return `<div class="gc-col">
       <div class="gc-band">Starters</div>
       ${starters.length?`<table class="gc-tbl">${hrow}${rowsFor(starters, true)}</table>`:`<div class="gc-none">No starters set.</div>`}
@@ -12502,7 +12529,12 @@ async function renderGameCenter(){
        standings print - never a recomputation. Without a recorded lineup teamWeekDetail can only
        fall back to today's starters, and this header (and the bar under it) moved every time
        somebody rearranged a roster, while the board beside it stood still. */
-    if(finalWeek){ const rs = mScore(wk, m);
+    if(finalWeek){
+      /* NOT m: Game Center moves your own matchup to the front of `games`, so the index here
+         is the display order, and mScore is keyed by the schedule's. Reading by m put another
+         matchup's final on this card - 156.9 v 199.5 on a game the record had at 173.1 v 90.2. */
+      const mi = sched.findIndex(x=>x && x[0]===g[0] && x[1]===g[1]);
+      const rs = mi>=0 ? mScore(wk, mi) : [null,null];
       if(rs[0]!=null) A.total = +rs[0];
       if(rs[1]!=null) B.total = +rs[1]; }
     const tA=S.teams[g[0]], tB=S.teams[g[1]];
@@ -12523,7 +12555,7 @@ async function renderGameCenter(){
         const miss = [g[0], g[1]].filter(t=>!playedStarters(wk, t));
         if(!miss.length) return '';
         const who = miss.length===2 ? 'Both lineups' : `${esc((S.teams[miss[0]]||{}).name||'One lineup')}'s lineup`;
-        return `<p class="gc-nolineup">${who} here ${miss.length===2?'are':'is'} the roster as it stands now: this week was played before lineups were recorded, so who started is not on file. The score is the one that counts.</p>`;
+        return `<p class="gc-nolineup">${who} here ${miss.length===2?'are':'is'} shown as a roster, not a lineup: this week was played before lineups were recorded, so who started is not on file and no slots are claimed. The score above is the one on record.</p>`;
       })()}
       <div class="wp-desk">${bar}</div>
       <div class="gc-grid">${col(g[0])}${col(g[1])}</div>
@@ -13075,52 +13107,6 @@ function rosterAsOf(ti, at){
   return [...has.values()];
 }
 
-/* The one legal lineup whose total is `target`, or null when none or more than one is.
-   Everything is in TENTHS so the arithmetic is exact: the app rounds each player to a decimal
-   place and then rounds the sum, and that is the number that was recorded.
-
-   Two assignments of the SAME set of players - the third running back in RB2 or in FLEX - are
-   one answer, not two, because the question is who played. Only genuinely different sets make
-   it ambiguous. */
-function lineupForTotal(pool, tenthsOf, target){
-  const req = starterReq(), seq = [];
-  ['QB','RB','WR','TE','FLEX','K','DEF'].forEach(sl=>{ for(let k=0;k<(+req[sl]||0);k++) seq.push(sl); });
-  const n = seq.length; if(!n || pool.length < n) return null;
-  const cand = pool.map(p=>({ p, v: tenthsOf(p), pos: String(p.pos||'').toUpperCase() }));
-  const desc = cand.map(c=>c.v).slice().sort((a,b)=>b-a);
-  const asc  = cand.map(c=>c.v).slice().sort((a,b)=>a-b);
-  const maxR=[0], minR=[0];
-  for(let k=1;k<=n;k++){ maxR[k]=maxR[k-1]+(desc[k-1]||0); minR[k]=minR[k-1]+(asc[k-1]||0); }
-  const fits = (c, sl) => sl==='FLEX' ? ['RB','WR','TE'].includes(c.pos) : c.pos===sl;
-  const used = new Array(cand.length).fill(false);
-  const cur = [], sets = new Set();
-  let found = null, steps = 0;
-  const walk = (si, sum, lastIdx) => {
-    if(sets.size > 1 || steps > 300000) return;
-    steps++;
-    if(si === n){
-      if(sum === target){
-        const key = cur.map(x=>x.pid).slice().sort().join(',');
-        if(!sets.has(key)){ sets.add(key); if(sets.size===1) found = cur.slice(); }
-      }
-      return;
-    }
-    const need = n - si;
-    if(sum + maxR[need] < target) return;          /* even the best left cannot reach it */
-    if(sum + minR[need] > target) return;          /* even the worst left overshoots it */
-    const sl = seq[si];
-    const from = (si>0 && seq[si-1]===sl) ? lastIdx+1 : 0;   /* RB2 after RB1: no mirror images */
-    for(let i=from;i<cand.length;i++){
-      if(used[i] || !fits(cand[i], sl)) continue;
-      used[i]=true; cur.push({ pid:String(cand[i].p.playerId), slot: sl });
-      walk(si+1, sum + cand[i].v, i);
-      cur.pop(); used[i]=false;
-      if(sets.size > 1 || steps > 300000) return;
-    }
-  };
-  walk(0, 0, -1);
-  return sets.size===1 ? found : null;
-}
 
 /* how many teams in a finished, scored week still have no recorded lineup */
 function backfillNeeded(wk){
@@ -13193,49 +13179,29 @@ async function backfillLineups(wk){
   if(!games.length){ toast(`No matchups in week ${wk}.`); return; }
   const need = backfillNeeded(wk);
   if(!need){ toast(`Week ${wk} already has every lineup on record.`); return; }
-  if(!confirm(`Rebuild the lineups for week ${wk}?\n\nEach team's recorded total is matched against that week's stats to work out which players were started. A team whose total two different lineups could produce is left alone rather than guessed at, and nothing already on record is touched.`)) return;
-  const yr = +((S.season||{}).year) || curDraftYear();
-  /* the relay's own copy first - it is the lineup itself, not a deduction from the total */
+  if(!pushRelay()){ toast('There is no relay to ask. Set the relay URL in Settings first.'); return; }
   toast(`Asking the relay about week ${wk}…`);
-  let fromRelay = 0; try{ fromRelay = await fillLineupsFromRelay(wk); }catch(e){}
-  if(fromRelay && !backfillNeeded(wk)){
-    if(window.currentView==='matchups'){ window._gcKey=null; renderMatchups(); try{ renderGameCenter(); }catch(e){} }
-    toast(`Week ${wk}: ${fromRelay} lineup${fromRelay===1?'':'s'} recovered from the relay, all on file now`);
-    return;
-  }
-  toast(`Reading week ${wk} stats…`);
-  let stats; try{ stats = await fetchWeekStats(yr, wk, true); }catch(e){ stats = null; }
-  if(!stats || !Object.keys(stats).length){ toast(`No ${yr} week ${wk} stats to work from.`); return; }
-  const tenths = p => { const st = stats[p.playerId]; return st ? Math.round((scoreWeekStats(st, p.pos)||0)*10) : 0; };
-  const at = weekOverAt(wk);
-  const out = {}, solved = [], stuck = [];
-  games.forEach((g,m)=>{
-    const sc = mScore(wk, m);
-    [0,1].forEach(side=>{
-      const ti = g[side], total = sc[side];
-      if(total==null || playedStarters(wk, ti)) return;       /* nothing to match, or already known */
-      const pool = rosterAsOf(ti, at);
-      const sol = lineupForTotal(pool, tenths, Math.round(+total*10));
-      if(sol){ const map = {}; sol.forEach(x=>map[x.pid] = x.slot); out[ti] = map; solved.push(teamName(ti)); }
-      else stuck.push(teamName(ti));
-    });
-  });
-  if(!Object.keys(out).length){
-    toast(fromRelay ? `Week ${wk}: ${fromRelay} recovered from the relay; the rest could not be pinned down from the totals.`
-                    : `Week ${wk}: no lineup could be pinned down. Nothing changed.`);
-    console.warn('[BBL backfill] week '+wk+' unresolved:', stuck);
-    return;
-  }
-  const prev = (liveScoresMap && liveScoresMap[wk]) || null;
-  const node = prev ? { ...prev } : { at: Date.now(), by: (window.fbUser&&window.fbUser.uid)||'', season: yr };
-  if(!node.season) node.season = yr;
-  node.starters = { ...(node.starters||{}), ...out };         /* never overwrite what is recorded */
-  try{ await window.FB.dbSet(`${livePath()}/${wk}`, node); }
-  catch(e){ toast('Could not save the rebuilt lineups.'); return; }
-  liveScoresMap = liveScoresMap || {}; liveScoresMap[wk] = node;
+  let got = 0; try{ got = await fillLineupsFromRelay(wk); }catch(e){}
+  const left = backfillNeeded(wk);
   if(window.currentView==='matchups'){ window._gcKey=null; renderMatchups(); try{ renderGameCenter(); }catch(e){} }
-  console.log('[BBL backfill] week '+wk+' rebuilt:', solved, 'left alone:', stuck);
-  toast(`Week ${wk}: ${fromRelay?fromRelay+' from the relay, ':''}${solved.length} worked out from the totals${stuck.length?`, ${stuck.length} left alone (more than one lineup fits)`:''}`);
+  if(got && !left) toast(`Week ${wk}: ${got} lineup${got===1?'':'s'} recovered from the relay, all on file now`);
+  else if(got) toast(`Week ${wk}: ${got} recovered from the relay, ${left} still not on record`);
+  else toast(`The relay has nothing for week ${wk}. Lineups were only recorded from 19 September, so nothing earlier can be recovered.`);
+}
+/* The undo. Safe for any week the relay recorded, because the relay fills a gap back in from
+   its own exact copy on the next pulse; for a week it did not record, this returns the cards
+   to the honest roster view with no starters claimed. The scores are not touched. */
+async function clearWeekLineups(wk){
+  if(!requireAdmin()) return;
+  wk = +wk || 0;
+  const node = (liveScoresMap && liveScoresMap[wk]) || null;
+  if(!node || !node.starters || !Object.keys(node.starters).length){ toast(`Week ${wk} has no recorded lineups.`); return; }
+  if(!confirm(`Clear the recorded lineups for week ${wk}?\n\nThe scores stay as they are. If the relay recorded this week it fills the lineups back in from its own copy within a few minutes; otherwise the cards show the roster with no starters claimed.`)) return;
+  const next = { ...node }; delete next.starters;
+  try{ await window.FB.dbSet(`${livePath()}/${wk}`, next); }catch(e){ toast('Could not clear them.'); return; }
+  liveScoresMap[wk] = next; _luFillAt = 0;
+  if(window.currentView==='matchups'){ window._gcKey=null; renderMatchups(); try{ renderGameCenter(); }catch(e){} }
+  toast(`Week ${wk} lineups cleared`);
 }
 function clearWeekScores(wk){
   if(!requireAdmin()) return;
@@ -15155,7 +15121,10 @@ function renderMatchups(){
         ${(S.season.scores && S.season.scores[wk] && Object.keys(S.season.scores[wk]).length)
           ? `<button class="btn ghost" onclick="clearWeekScores(${wk})" title="Take the official scores off this week and go back to live scoring">Clear week ${wk} scores</button>` : ''}
         ${(()=>{ const nd = backfillNeeded(wk); return nd
-          ? `<button class="btn ghost" onclick="backfillLineups(${wk})" title="Work out which players each team started from its recorded total, for a week played before lineups were recorded">Rebuild week ${wk} lineups (${nd} missing)</button>` : ''; })()}
+          ? `<button class="btn ghost" onclick="backfillLineups(${wk})" title="Ask the relay for the lineups it recorded for this week">Recover week ${wk} lineups (${nd} missing)</button>` : ''; })()}
+        ${(()=>{ const nd = liveScoresMap && liveScoresMap[wk] && liveScoresMap[wk].starters && Object.keys(liveScoresMap[wk].starters).length;
+          return (nd && (weekIsOver(wk) || (currentNflWeek()>0 && wk < currentNflWeek())))
+          ? `<button class="btn ghost" onclick="clearWeekLineups(${wk})" title="Remove this week's recorded lineups; the scores stay">Clear week ${wk} lineups</button>` : ''; })()}
         <span class="sub" style="margin:0">Locks these in as the official scores.${(S.season.autoScored&&S.season.autoScored[wk])?` Last run ${timeAgo(S.season.autoScored[wk].at)} from ${S.season.autoScored[wk].season} stats.`:''}${liveStamp(wk)?` Live board updated ${timeAgo(liveStamp(wk))}.`:''}</span>
       </div>
       ${games.map((g,m)=>{
@@ -19414,7 +19383,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-22 · a finished week keeps its number';
+const BUILD_STAMP = '2026-09-22 · no record, no fiction';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

@@ -934,12 +934,18 @@ a finished week now passes the record - `postLiveScores` (which also carries the
 starters forward rather than re-recording, so a post made after the roll can correct the numbers
 without touching who played), `autoScoreWeek`, the Game Center headers and the recap's extras.
 **A finished week's Game Center number is the one on record, never a recomputation.** The cards
-overwrite `A.total`/`B.total` with `mScore(wk, m)` when `finalWeek`. Without that, a week with no
+overwrite `A.total`/`B.total` with `mScore(wk, mi)` when `finalWeek` - and `mi` is looked up in the
+schedule (`sched.findIndex`), NOT the `m` of `games.map`: Game Center moves your own matchup to the
+front, so `m` is display order and `mScore` is keyed by schedule order. Reading by `m` put another
+matchup's final on the card (156.9 v 199.5 on a game the record had at 173.1 v 90.2). Without that, a week with no
 recorded lineup (week 1) had `teamWeekDetail` falling back to today's starters, so the header and
 the bar under it moved every time somebody rearranged a roster while the matchups board beside it,
 which has always read `mScore`, stood still. Curtis reported it as week 1 changing when he set his
-week 3 lineup. The rows on such a week are still today's roster - that is what the `.gc-nolineup`
-note is for - but the number no longer follows them.
+week 3 lineup. A week with no lineup on record is drawn as a ROSTER, not a lineup: `teamLists` returns
+`{unrec:true, all}` - the roster as it stood when the week closed (`rosterAsOf`), position-sorted -
+and both layouts print one "Roster · who started is not on file" band with the position as the chip
+and no Starters / Bench split. The split was today's lineup wearing last week's numbers, and its
+rows never added up to the score on record above them.
 
 A week from before this existed has no record and falls back to the current lineup, and says so on
 
@@ -963,7 +969,13 @@ nothing missing. `POST {recordNow:true}` runs the recorder on demand.
 This is EXACT: it is the lineup itself. The search below is the fallback for weeks played before
 the recorder existed.
 
-**Backfilling an old week, and why it only half works.**
+**The total-based deduction is gone.** It recovered a third of lineups and could, with a wrong
+candidate pool (an add logged by name before ids were recorded), write a wrong lineup that happened
+to sum right - and once written it looked like a record. `backfillLineups` now only asks the relay,
+which is exact; `clearWeekLineups(wk)` is the undo (scores untouched; a relay-recorded week refills
+itself on the next pulse). What follows is kept for the record of why.
+
+**Backfilling an old week, and why it only half worked.**
  `backfillLineups(wk)` takes each team's
 recorded total and searches that week's stat file for the legal lineup that adds up to it
 (`lineupForTotal`, a pruned walk over the slot sequence in TENTHS so the arithmetic is exact, with
