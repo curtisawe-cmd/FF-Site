@@ -935,6 +935,19 @@ starters forward rather than re-recording, so a post made after the roll can cor
 without touching who played), `autoScoreWeek`, the Game Center headers and the recap's extras.
 A week from before this existed has no record and falls back to the current lineup, as before.
 
+The record is the WHOLE lineup, bench and reserve included, not just the starters
+(`lineupSnapshot`), because who sat is a fact about that Sunday too. `playedStarterIds(rec)` is
+the started half and is what scores - `teamWeekDetail` must filter, or it would total a team's
+entire roster. Game Center's rows read the record as well: `teamLists` builds `bySlot` from it on
+a finished week, and the desktop column's slot chip comes from `slotAt(pid)` rather than today's
+lineup. Reading the chip from today's lineup printed the exact opposite of the truth - the man who
+actually started was chipped BN because he has since been benched, and the one who sat was chipped
+QB because he is starting now, which is the bug Curtis reported on 2026-09-22. The head-to-head
+layout was always right: it labels rows from `starterSlotSeq`, not from the lineup. `benchLeft`
+takes the recorded lineup too, so the Home shame report, the season bench tally, the recap extras
+and Game Center's bench card all judge a finished week by the bench it actually had.
+
+
 **The week that just ended keeps being scored for six hours.** `maybeAutoScore` posts the live
 week and, until `weekOverAt(prev) + 6h`, the one before it. Nothing re-posted a week once the
 clock moved on, so whatever the last open app happened to see - a Monday-night third quarter

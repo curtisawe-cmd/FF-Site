@@ -6429,11 +6429,18 @@ function starterPicks(ti){
    roster: a starter traded away on Tuesday took his points with him, and the board, the recap
    and the shame report all drifted away from the standings. `lineupSnapshot` is what gets
    recorded beside each live score; `playedStarters` reads it back. */
+/* The whole lineup, bench and reserve included, not only the starters. Who STARTED settles the
+   score; who sat settles what Game Center can honestly show for a week already played, and the
+   bench damage it prints beside it. Records written before this carry starters only, and
+   everything below treats a missing BN/IR as "not known", so they keep working. */
 function lineupSnapshot(ti){
   const lu = ensureLineup(ti), out = {};
-  teamRoster(ti).forEach(p=>{ const s = lu[p.playerId];
-    if(s && s!=='BN' && s!=='IR') out[String(p.playerId)] = s; });
+  teamRoster(ti).forEach(p=>{ const s = lu[p.playerId]; if(s) out[String(p.playerId)] = s; });
   return out;
+}
+/* the started half of a recorded lineup - the only half that scores */
+function playedStarterIds(rec){
+  return Object.keys(rec||{}).filter(id=>{ const s = rec[id]; return s && s!=='BN' && s!=='IR'; });
 }
 function playedStarters(wk, ti){
   const w = (typeof liveScoresMap!=='undefined' && liveScoresMap) ? liveScoresMap[wk] : null;
@@ -6449,7 +6456,9 @@ function teamWeekDetail(ti, stats, played){
   let list;
   if(played && typeof played==='object' && Object.keys(played).length){
     const all = (realDraft().picks) || [];
-    list = Object.keys(played).map(id=>{
+    /* starters ONLY: the record now carries the bench too, and scoring it would count a team's
+       whole roster */
+    list = playedStarterIds(played).map(id=>{
       const p = all.find(x=>String(x.playerId)===id && !x.cut)
              || all.find(x=>String(x.playerId)===id) || findPlayerMeta(id);
       return p ? { playerId:id, name:p.name||'', pos:p.pos||'', nfl:p.nfl||p.team||'' } : null;
@@ -8990,7 +8999,7 @@ async function renderHomeShame(){
     if(!stats || !Object.keys(stats).length) return;
     let worst = null;
     (S.teams||[]).forEach((t,i)=>{
-      const b = benchLeft(i, stats, false);
+      const b = benchLeft(i, stats, false, playedStarters(wk, i));   /* that week's lineup, not today's */
       if(b && b.left > 0 && (!worst || b.left > worst.left)) worst = {ti:i, ...b};
     });
     if(worst && worst.left >= 10 && el.style.display !== 'none')
@@ -10226,7 +10235,7 @@ async function receiptsData(ti){
     if(need.length){
       const stats = await Promise.all(need.map(w=>fetchWeekStats(yr, w).catch(()=>null)));
       need.forEach((w,i)=>{ const st = stats[i]; if(!st || !Object.keys(st).length) return; counted++;
-        const b = benchLeft(ti, st, false); if(b && b.left>0){ total += b.left; if(!worst || b.left>worst.left) worst = { w, left:b.left, who:b.missed[0]?b.missed[0].name:'' }; } });
+        const b = benchLeft(ti, st, false, playedStarters(w, ti)); if(b && b.left>0){ total += b.left; if(!worst || b.left>worst.left) worst = { w, left:b.left, who:b.missed[0]?b.missed[0].name:'' }; } });
     }
     if(counted) L.push(`bench crimes: ${total.toFixed(1)} left on the bench this year${worst?` · worst wk ${worst.w}, ${worst.left.toFixed(1)}${worst.who?` (${worst.who} sat)`:''}`:''}`);
   }catch(e){}
@@ -12210,8 +12219,40 @@ async function renderGameCenter(){
   const starterSlotSeq = [];
   slotOrder.forEach(s=>{ const cap=+S.roster[s]||0; for(let k=0;k<cap;k++) starterSlotSeq.push(s); });
   /* one source of truth for a team's three lists, shared by both layouts */
+  /* A recorded player may have been traded, dropped or cut since the week he played in, so he
+     is looked for across the whole board and then, failing that, in the player feed. */
+  const gcPickOf = (id) => {
+    const all = realDraft().picks || [];
+    const p = all.find(x=>String(x.playerId)===String(id) && !x.cut) || all.find(x=>String(x.playerId)===String(id));
+    if(p) return p;
+    const m = findPlayerMeta(String(id));
+    return m ? { playerId:String(id), name:m.name||'', pos:m.pos||'', nfl:m.nfl||m.team||'' } : null;
+  };
   const teamLists = (ti) => {
+    /* A FINISHED week reads the lineup it was played with. Lineups unlock at the Tuesday roll,
+       so by Wednesday today's lineup is a different thing: a manager who benched his quarterback
+       on the Sunday and started him again on the Wednesday saw him starting last Sunday too,
+       and the rows disagreed with the header total, which already read from the record. */
+    const rec = finalWeek ? playedStarters(wk, ti) : null;
     const l = lu(ti), roster = teamRoster(ti);
+    if(rec){
+      const byS = {};
+      playedStarterIds(rec).forEach(id=>{ const sl = rec[id]; (byS[sl] = byS[sl] || []).push(id); });
+      const bySlot = [];
+      slotOrder.forEach(sl=>{ const cap=+S.roster[sl]||0; const ids=(byS[sl]||[]).slice(0, cap);
+        for(let k=0;k<cap;k++) bySlot.push(ids[k] ? gcPickOf(ids[k]) : null); });
+      /* the bench as recorded, when the record has one; otherwise whoever is on the roster now
+         and did not start, which is the closest an older record can get */
+      const satIds = Object.keys(rec).filter(id=>rec[id]==='BN');
+      const irIds  = Object.keys(rec).filter(id=>rec[id]==='IR');
+      const started = new Set(playedStarterIds(rec).map(String));
+      const knows = satIds.length || irIds.length;
+      return { bySlot, starters: bySlot.filter(Boolean),
+        bench: knows ? satIds.map(gcPickOf).filter(Boolean)
+                     : roster.filter(p=>!started.has(String(p.playerId)) && l[p.playerId]!=='IR'),
+        ir:    knows ? irIds.map(gcPickOf).filter(Boolean)
+                     : roster.filter(p=>l[p.playerId]==='IR') };
+    }
     /* Two views of the same starters, and the difference matters. bySlot runs parallel to
        starterSlotSeq - one entry per slot, null where nobody is in it. starters is the same
        list with the holes closed.
@@ -12401,7 +12442,8 @@ async function renderGameCenter(){
     if(bn){ out += `<div class="gc-band">Bench</div>`;
       for(let i=0;i<bn;i++) out += h2hRow('BN', A.bench[i], B.bench[i]); }
     /* the phone layout faces the two teams off, so their bench damage faces off too */
-    { const la = benchLeftHTML(ax, stats, noStats), lb = benchLeftHTML(bx, stats, noStats);
+    { const rl = t => finalWeek ? playedStarters(wk, t) : null;
+      const la = benchLeftHTML(ax, stats, noStats, rl(ax)), lb = benchLeftHTML(bx, stats, noStats, rl(bx));
       if(la || lb) out += `<div class="gc-bench-pair">${la||'<div></div>'}${lb||'<div></div>'}</div>`; }
     const irn = Math.max(A.ir.length, B.ir.length);
     if(irn){ out += `<div class="gc-band">Reserve (IR)</div>`;
@@ -12410,12 +12452,19 @@ async function renderGameCenter(){
   };
   const col = (ti) => {
     const l = lu(ti), roster = teamRoster(ti);
+    /* The chip beside a name says which slot he filled. Read from today's lineup on a finished
+       week it printed the exact opposite of the truth: the man who actually started was chipped
+       BN because he has since been benched, and the one on the bench was chipped QB because he
+       is starting now. The head-to-head layout was already right - it labels rows from the
+       canonical slot sequence rather than from the lineup. */
+    const recSlots = finalWeek ? playedStarters(wk, ti) : null;
+    const slotAt = pid => (recSlots && recSlots[String(pid)]) || l[pid] || '';
     const rowsFor = (list, live) => list.map(p=>{
       /* with stats in hand a blank means "did not play"; with none at all it just means 0.0 */
       const st = stats[p.playerId], pts = st ? (scoreWeekStats(st,p.pos)||0) : (noStats ? 0 : null);
       const line = statLine(st, p.pos);
       return `<tr>
-        <td class="gc-slot">${slotTag(l[p.playerId]||p.pos, p.pos)}</td>
+        <td class="gc-slot">${slotTag(slotAt(p.playerId)||p.pos, p.pos)}</td>
         <td><div class="row" style="gap:7px;align-items:flex-start;flex-wrap:nowrap">${playerFace(p,26)}
             <div style="min-width:0;flex:1">
               <div class="gc-pl pstat" onclick="openGameScore('${p.playerId}',${wk},${season})" title="How he scored this game">${esc(p.name)}${injBadgeFor(p)}</div>
@@ -12436,7 +12485,7 @@ async function renderGameCenter(){
       <div class="gc-band">Starters</div>
       ${starters.length?`<table class="gc-tbl">${hrow}${rowsFor(starters, true)}</table>`:`<div class="gc-none">No starters set.</div>`}
       ${bench.length?`<div class="gc-band">Bench</div><table class="gc-tbl">${hrow}${rowsFor(bench)}</table>`:''}
-      ${benchLeftHTML(ti, stats, noStats)}
+      ${benchLeftHTML(ti, stats, noStats, finalWeek ? playedStarters(wk, ti) : null)}
       ${ir.length?`<div class="gc-band">Reserve (IR)</div><table class="gc-tbl">${hrow}${rowsFor(ir)}</table>`:''}
     </div>`;
   };
@@ -13935,7 +13984,7 @@ async function rcExtras(wk){
       let worst = null, best = null;
       const margins = {}; games.forEach((g,m)=>{ const [pa,pb] = mScore(String(wk), m); if(pa!=null && pb!=null && pa!==pb){ const l = pa<pb ? g[0] : g[1]; margins[l] = Math.abs(pa-pb); } });
       (S.teams||[]).forEach((t,i)=>{
-        const b = benchLeft(i, stats, false);
+        const b = benchLeft(i, stats, false, playedStarters(wk, i));   /* the week as played */
         if(b && b.left > 0){
           const missed = b.missed[0] ? b.missed[0].name : '';
           X.benchByName[nameOf(i)] = { left: b.left, missed };
@@ -16338,11 +16387,14 @@ function renderPickups(){
 /* What the week actually cost you: the best lineup the roster could have produced, scored on
    the real numbers, minus what was actually started. Retrospective on purpose - locks and
    kickoff times are irrelevant to what you COULD have had. */
-function benchLeft(ti, stats, noStats){
+function benchLeft(ti, stats, noStats, played){
   if(noStats || !stats || !Object.keys(stats).length) return null;
   if(!Number.isInteger(ti) || !((S.teams||[])[ti])) return null;
   const pts = p => { const st = stats[p.playerId]; return st ? (scoreWeekStats(st, p.pos)||0) : 0; };
-  const lu = (S.lineups||{})[ti] || {};
+  /* `played` is the recorded lineup for a finished week: who a manager left on his bench is a
+     fact about that Sunday, not about what his roster looks like today */
+  const lu = (played && typeof played==='object' && Object.keys(played).length)
+    ? played : ((S.lineups||{})[ti] || {});
   const roster = teamRoster(ti);
   const startedIds = roster.filter(p=>{ const s=lu[p.playerId]; return s && s!=='BN' && s!=='IR'; })
                            .map(p=>p.playerId);
@@ -16393,8 +16445,8 @@ async function renderBenchWatch(){
     </div>`;
   }catch(e){ el.innerHTML=''; }
 }
-function benchLeftHTML(ti, stats, noStats){
-  const b = benchLeft(ti, stats, noStats);
+function benchLeftHTML(ti, stats, noStats, played){
+  const b = benchLeft(ti, stats, noStats, played);
   if(!b) return '';
   if(b.left <= 0.05) return `<div class="gc-bench-left best">✓ Best possible lineup — nothing left on the bench</div>`;
   const who = b.missed.slice(0,2).map(p=>esc(p.name)).join(', ');
@@ -19137,7 +19189,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-22 · touchdowns and field goals only';
+const BUILD_STAMP = '2026-09-22 · last week shows last week';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
