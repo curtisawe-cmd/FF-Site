@@ -61,11 +61,54 @@ export function scoreWeek(st, pos, R) {
 }
 
 /* word for word what the in-app watcher says, so an alert reads the same whichever half sent it */
+/* ============================================================
+   WHAT COUNTS AS SCORING.
+
+   A buzz used to mean "this starter has gained six points since I last looked", which fired on
+   an afternoon of quiet catches and said nothing about what had actually happened. It is now a
+   scoring PLAY: a touchdown, or a kicker's made field goal. Nothing else buzzes - not yardage,
+   not receptions, not an extra point, not a two-point conversion (the touchdown that set it up
+   has already been announced).
+
+   A passing touchdown counts. It is not the quarterback carrying it in, but it is the moment
+   his owner wants the phone to go off, and leaving it out would mean a quarterback owner is
+   told almost nothing all afternoon.
+
+   The mark per player is this tally, not a points total, so the comparison is "how many more
+   has he scored" rather than "how much has he gained". A tally that goes DOWN is a stat
+   correction: it is recorded and nothing is sent.
+   ============================================================ */
+function scorePlays(st){
+  const g = k => +((st||{})[k]) || 0;
+  return { pass:g('pass_td'), rush:g('rush_td'), rec:g('rec_td'),
+           ret:g('kr_td')+g('pr_td')+g('st_td'), def:g('def_td'),
+           fg:g('fgm_0_19')+g('fgm_20_29')+g('fgm_30_39')+g('fgm_40_49'), fg50:g('fgm_50p') };
+}
+const PLAY_KINDS = ['rush','rec','pass','ret','def','fg50','fg'];
+/* only what is NEW since the last look, or null when nothing is */
+function playDelta(now, was){
+  const d = {}; let any = 0;
+  PLAY_KINDS.forEach(k=>{ const v = (now[k]||0) - ((was && was[k])||0); if(v > 0){ d[k] = v; any += v; } });
+  return any ? d : null;
+}
+/* the words for the phone: "rushing TD", "2 receiving TDs", "field goal from 50+" */
+function playWords(d){
+  const bits = [];
+  const add = (k, one, many) => { const v = (d||{})[k]||0; if(v>0) bits.push(v===1 ? one : v+' '+many); };
+  add('rush','rushing TD','rushing TDs');
+  add('rec','receiving TD','receiving TDs');
+  add('pass','passing TD','passing TDs');
+  add('ret','return TD','return TDs');
+  add('def','defensive TD','defensive TDs');
+  add('fg50','field goal from 50+','field goals from 50+');
+  add('fg','field goal','field goals');
+  return bits.join(' and ');
+}
 export function alertText(hits, total) {
   const one = hits.length === 1;
-  const list = hits.map(h => h.name + ' +' + h.gain.toFixed(1)).join(', ');
+  const list = hits.map(h => h.name + ' ' + h.what).join(', ');
   return {
-    title: one ? hits[0].name + ' +' + hits[0].gain.toFixed(1) : hits.length + ' of yours just scored',
+    title: one ? hits[0].name + ': ' + hits[0].what : hits.length + ' of yours just scored',
     body: one ? "You're on " + total.toFixed(1) : list + " — you're on " + total.toFixed(1)
   };
 }
@@ -80,23 +123,21 @@ export function alertText(hits, total) {
 export function watchPass(snapshot, stats, marks) {
   const first = !marks || !marks.__seen;
   const next = { __seen: 1 };
-  const min = Number(snapshot.min) > 0 ? Number(snapshot.min) : 6;
   const out = [];
   (snapshot.teams || []).forEach(team => {
     const hits = [];
     let total = 0;
     (team.players || []).forEach(pl => {
-      const raw = scoreWeek(stats[pl.id], pl.pos, snapshot.scoring);
-      const pts = Math.round((+raw || 0) * 10) / 10;
-      total += pts;
-      const was = (marks && marks[pl.id] !== undefined) ? +marks[pl.id] : 0;
-      const gain = Math.round((pts - was) * 10) / 10;
-      if (!first && gain >= min) {
-        hits.push({ name: pl.name, gain, pts });
-        next[pl.id] = pts;
-      } else {
-        next[pl.id] = first ? pts : was;
-      }
+      const st = stats[pl.id];
+      total += Math.round((+scoreWeek(st, pl.pos, snapshot.scoring) || 0) * 10) / 10;
+      const now = scorePlays(st);
+      const was = (marks && marks[pl.id] && typeof marks[pl.id] === 'object') ? marks[pl.id] : null;
+      next[pl.id] = now;
+      /* nothing to compare against: a first run, a player who has just arrived, or a mark left
+         by the old points-based watcher. Record where he is and say nothing. */
+      if (first || !was) return;
+      const d = playDelta(now, was);
+      if (d) hits.push({ name: pl.name, what: playWords(d) });
     });
     total = Math.round(total * 10) / 10;
     if (hits.length && team.uid) out.push({ uid: team.uid, hits, total });

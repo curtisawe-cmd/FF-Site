@@ -128,7 +128,8 @@ gated on team identity must re-render when the claim arrives.
 
 Ten triggers only, and nothing else should be added without asking: **new chat message**
 (everyone but the authors, batched 4s), **trade offer** (the recipient only), **trade
-accepted** (everyone), **score alerts** (a manager's own starter scores, from the scheduled
+accepted** (everyone), **score alerts** (a manager's own starter scores a touchdown or kicks a
+field goal, from the scheduled
 watcher), **lineup alerts** (a manager's own starter is out / on bye / not projected, or a
 slot is empty, `lineupLead` hours before kickoff - added 2026-09-06, see Lineup alerts below)
 **swing alerts** (a matchup's live odds move 25 points in 20 minutes while a game is on,
@@ -189,7 +190,36 @@ the app open. Moving the trigger server-side is the known fix and is not done ye
 Changing `push/cloudflare-worker.js` does nothing until it is **pasted into the Cloudflare
 dashboard and deployed by hand**. Pushing to git does not deploy it.
 
+### Score alerts: a scoring PLAY, not a points threshold
+
+A buzz used to mean "this starter has gained `scoreAlertMin` points since I last looked", default
+6. That fired on an afternoon of quiet catches and the message said nothing about what had
+happened. From 2026-09-22 it is a scoring play instead: a touchdown, or a kicker's made field
+goal. Nothing else - not yardage, not receptions, not an extra point, not a two-point conversion,
+whose touchdown has already been announced. A **passing** touchdown counts: it is not the
+quarterback carrying it in, but it is the moment his owner wants the phone to go off, and without
+it a quarterback owner hears almost nothing all afternoon.
+
+`scorePlays(st)` tallies `pass_td`, `rush_td`, `rec_td`, the three return TDs as one `ret`,
+`def_td`, the four field-goal buckets as one `fg`, and `fgm_50p` as `fg50`. The watermark per
+player is that tally, not a points total, so the question is "how many more has he scored". A
+tally that goes DOWN is a stat correction: it is recorded and nothing is sent, and if the score
+is re-awarded it fires once. `playDelta` returns only what is new, `playWords` turns it into
+"rushing TD" / "2 receiving TDs" / "field goal from 50+".
+
+It is a PORT, like `scoreWeek`: `scorePlays` / `playDelta` / `playWords` exist in both index.html
+and `netlify/functions/lib/score.mjs` and must stay in step, or the relay and the in-app fallback
+would describe the same afternoon differently. Checked by importing the module in the preview
+browser and walking both watchers through the same seven stat files: identical titles and bodies
+at every step.
+
+A mark that is not an object is ignored and re-baselined - that covers a player who has just
+arrived on the roster, and every watermark left by the old points-based watcher, so nobody got a
+burst of notifications on the deploy. `S.scoreAlertMin`, the "Buzz at (points)" setting and
+`snapshot.min` are all gone.
+
 ### Lineup alerts
+
 
 `runLineupWatch` in `netlify/functions/lib/score.mjs`, run by `score-watch.mjs` on the same
 two-minute cron as the score watcher and on demand with `POST {lineupNow:true}` (Settings >

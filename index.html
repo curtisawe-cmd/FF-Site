@@ -3501,7 +3501,6 @@ table.gc-tbl .gc-hrow .gc-pts,table.gc-tbl .gc-hrow .gc-proj{font-size:9px;color
       <div class="setrow"><label>OneSignal App ID</label><input type="text" id="setPushApp" placeholder="00000000-0000-0000-0000-000000000000" style="max-width:260px" onchange="setPushApp(this.value)"></div>
       <div class="setrow"><label title="Your Cloudflare Worker URL. Holds the REST key so the browser never has to.">Relay URL</label><input type="text" id="setPushRelay" placeholder="https://bbl-push.you.workers.dev" style="max-width:260px" onchange="setPushRelay(this.value)"></div>
       <div class="setrow"><label title="Buzz a manager when one of their starters scores. Only starters count, and only that manager is told. Sending happens on a commissioner device, so these go out while one of them has the app open.">Player scoring alerts</label><label class="cswitch"><input type="checkbox" id="setScoreAlerts" onchange="setScoreAlerts(this.checked)"><span class="track"></span><span class="lbl" id="scoreAlertsLbl">Off</span></label></div>
-      <div class="setrow"><label title="How many points a starter has to gain before it is worth a buzz. 6 is about a touchdown. Smaller gains are not thrown away - they add up until they clear this, so a quiet afternoon of catches still lands as one notification.">Buzz at (points)</label><input type="number" step="1" min="1" max="50" id="setScoreAlertMin" style="max-width:110px" onchange="setScoreAlertMin(this.value)"></div>
       <div class="setrow"><label title="Let the relay do the watching on a schedule, so alerts arrive with every app in the league shut. Needs push/score-watch.js deployed to the worker with a KV binding named BBL and a cron trigger. With this off, alerts only go out while a commissioner has the app open.">Send from the relay</label><label class="cswitch"><input type="checkbox" id="setScoreRelay" onchange="setScoreRelay(this.checked)"><span class="track"></span><span class="lbl" id="scoreRelayLbl">Off</span></label></div>
       <div class="setrow"><label title="Before kickoff, buzz a manager whose lineup has a starter who is out, on IR, suspended, on bye, or not projected to play - or an empty slot. Each manager hears only about their own team, once per problem per week. Sent from the relay, so it needs 'Send from the relay' on.">Lineup alerts</label><label class="cswitch"><input type="checkbox" id="setLineupAlerts" onchange="setLineupAlerts(this.checked)"><span class="track"></span><span class="lbl" id="lineupAlertsLbl">Off</span></label></div>
       <div class="setrow"><label title="How long before a player's kickoff the warning goes out. A bye or an empty slot is warned about before the next game of the week.">Warn (hours before kickoff)</label><input type="number" step="1" min="1" max="48" id="setLineupLead" style="max-width:110px" onchange="setLineupLead(this.value)"></div>
@@ -3709,7 +3708,6 @@ const DEFAULTS = {
   pushAppId: '',         /* OneSignal App ID — public by design; the REST key never lives here */
   pushRelay: '',         /* Cloudflare Worker URL that holds the REST key and forwards sends */
   scoreAlerts: true,     /* push a manager when one of their starters scores */
-  scoreAlertMin: 6,      /* points a starter has to gain before it is worth a buzz - a TD */
   lineupAlerts: true,    /* push a manager before kickoff when a starter is out, on bye, or a slot is empty */
   lineupLead: 2,         /* hours before kickoff to say so */
   recapToChat: false,    /* drop the week's auto-written recap into chat from a commissioner device */
@@ -8162,7 +8160,7 @@ const SETTING_LABELS={
   txFeeAdd:'transaction fees', txFeeDrop:'transaction fees',
   waiverHours:'waiver period', waiverOrder:'waiver priority', faabBudget:'FAAB budget',
   waiversRulePrev:'league rules', faabResetAt:'FAAB budgets',
-  scoreAlerts:'score alerts', scoreAlertMin:'score alerts', scoreRelay:'score alerts',
+  scoreAlerts:'score alerts', scoreRelay:'score alerts',
   lineupAlerts:'lineup alerts', lineupLead:'lineup alerts', recapToChat:'weekly recaps', swingAlerts:'swing alerts', benchAlerts:'bench alerts', injuryAlerts:'injury alerts',
   feesResetAt:'dues ledger', feesPaidAt:'dues ledger',
   buyInPaid:'buy-ins', sounds:'sounds',
@@ -12634,7 +12632,6 @@ async function postLiveScores(wk, season){
 const SCORE_ALERT_EVERY_MS = 90*1000;
 let _scoreAlertAt = 0, _scoreAlertBusy = false;
 function scoreAlertsOn(){ return S.scoreAlerts !== false; }
-function scoreAlertMin(){ const n=+S.scoreAlertMin; return Number.isFinite(n) && n>0 ? n : 6; }
 function scoreWatchKey(yr, wk){ return 'ffl_scorewatch_'+yr+'_'+wk; }
 function scoreWatchRead(yr, wk){
   try{ const v=JSON.parse(store.get(scoreWatchKey(yr,wk))||'{}'); return (v && typeof v==='object') ? v : {}; }
@@ -12642,11 +12639,54 @@ function scoreWatchRead(yr, wk){
 }
 function scoreWatchWrite(yr, wk, m){ try{ store.set(scoreWatchKey(yr,wk), JSON.stringify(m)); }catch(e){} }
 /* the message a team's manager gets, kept out of the async so it can be tested on its own */
+/* ============================================================
+   WHAT COUNTS AS SCORING.
+
+   A buzz used to mean "this starter has gained six points since I last looked", which fired on
+   an afternoon of quiet catches and said nothing about what had actually happened. It is now a
+   scoring PLAY: a touchdown, or a kicker's made field goal. Nothing else buzzes - not yardage,
+   not receptions, not an extra point, not a two-point conversion (the touchdown that set it up
+   has already been announced).
+
+   A passing touchdown counts. It is not the quarterback carrying it in, but it is the moment
+   his owner wants the phone to go off, and leaving it out would mean a quarterback owner is
+   told almost nothing all afternoon.
+
+   The mark per player is this tally, not a points total, so the comparison is "how many more
+   has he scored" rather than "how much has he gained". A tally that goes DOWN is a stat
+   correction: it is recorded and nothing is sent.
+   ============================================================ */
+function scorePlays(st){
+  const g = k => +((st||{})[k]) || 0;
+  return { pass:g('pass_td'), rush:g('rush_td'), rec:g('rec_td'),
+           ret:g('kr_td')+g('pr_td')+g('st_td'), def:g('def_td'),
+           fg:g('fgm_0_19')+g('fgm_20_29')+g('fgm_30_39')+g('fgm_40_49'), fg50:g('fgm_50p') };
+}
+const PLAY_KINDS = ['rush','rec','pass','ret','def','fg50','fg'];
+/* only what is NEW since the last look, or null when nothing is */
+function playDelta(now, was){
+  const d = {}; let any = 0;
+  PLAY_KINDS.forEach(k=>{ const v = (now[k]||0) - ((was && was[k])||0); if(v > 0){ d[k] = v; any += v; } });
+  return any ? d : null;
+}
+/* the words for the phone: "rushing TD", "2 receiving TDs", "field goal from 50+" */
+function playWords(d){
+  const bits = [];
+  const add = (k, one, many) => { const v = (d||{})[k]||0; if(v>0) bits.push(v===1 ? one : v+' '+many); };
+  add('rush','rushing TD','rushing TDs');
+  add('rec','receiving TD','receiving TDs');
+  add('pass','passing TD','passing TDs');
+  add('ret','return TD','return TDs');
+  add('def','defensive TD','defensive TDs');
+  add('fg50','field goal from 50+','field goals from 50+');
+  add('fg','field goal','field goals');
+  return bits.join(' and ');
+}
 function scoreAlertText(hits, total){
   const one = hits.length===1;
-  const list = hits.map(h=>h.name+' +'+h.gain.toFixed(1)).join(', ');
+  const list = hits.map(h=>h.name+' '+h.what).join(', ');
   return {
-    title: one ? hits[0].name+' +'+hits[0].gain.toFixed(1)
+    title: one ? hits[0].name+': '+hits[0].what
                : hits.length+' of yours just scored',
     body:  one ? "You're on "+total.toFixed(1)
                : list+" — you're on "+total.toFixed(1)
@@ -12654,7 +12694,7 @@ function scoreAlertText(hits, total){
 }
 /* Works out who scored since the last look. Pure: hands back the buzzes to send and the new
    marks to store, so the whole rule can be checked without a network or a notification. */
-function scoreAlertPass(stats, seen, minGain){
+function scoreAlertPass(stats, seen){
   const first = !seen || !seen.__seen;
   const next = { __seen: 1 };
   const out = [];
@@ -12662,15 +12702,14 @@ function scoreAlertPass(stats, seen, minGain){
     let det; try{ det = teamWeekDetail(ti, stats); }catch(e){ return; }
     const hits = [];
     (det.rows||[]).forEach(r=>{
-      const pts = Math.round((+r.pts||0)*10)/10;
-      const was = (seen && seen[r.playerId]!==undefined) ? +seen[r.playerId] : 0;
-      const gain = Math.round((pts - was)*10)/10;
-      if(!first && gain >= minGain){
-        hits.push({ name:r.name, gain, pts });
-        next[r.playerId] = pts;          /* cleared the bar, so the mark moves up to here */
-      } else {
-        next[r.playerId] = first ? pts : was;   /* otherwise it stays put and small gains accrue */
-      }
+      const now = scorePlays(r.st);
+      const was = (seen && seen[r.playerId] && typeof seen[r.playerId]==='object') ? seen[r.playerId] : null;
+      next[r.playerId] = now;
+      /* no tally to compare against - a first run, or a player who has just arrived on the
+         roster, or a mark left by the old points-based watcher. Record where he is, say nothing. */
+      if(first || !was) return;
+      const d = playDelta(now, was);
+      if(d) hits.push({ name:r.name, what:playWords(d) });
     });
     if(hits.length) out.push({ ti, hits, total: det.total });
   });
@@ -12712,7 +12751,7 @@ function buildScoreSnapshot(){
   /* this week's matchups by team index, so the swing watch knows who faces whom */
   const games = wk ? ((S.season && S.season.schedule && (S.season.schedule[String(wk)] || S.season.schedule[wk])) || []).map(g=>[g[0], g[1]]) : [];
   return { on: scoreAlertsOn() && scoreRelayOn(), season: yr, week: wk || 0,
-           min: scoreAlertMin(), scoring: S.scoring || {},
+           scoring: S.scoring || {},
            /* the lineup half: the week a lineup is being set for (week 1 all preseason, so the
               Thursday-night opener gets its warning), and how far ahead to give it */
            lineup: lineupAlertsOn() && scoreRelayOn(), lineupWeek: projWeekNow() || 0, lead: lineupLeadHours(),
@@ -12781,7 +12820,7 @@ async function checkScoreAlerts(){
     const stats = await fetchWeekStats(yr, wk);          /* its own TTL: this never hammers the feed */
     if(!stats || !Object.keys(stats).length) return;
     _scoreAlertAt = Date.now();
-    const pass = scoreAlertPass(stats, scoreWatchRead(yr, wk), scoreAlertMin());
+    const pass = scoreAlertPass(stats, scoreWatchRead(yr, wk));
     scoreWatchWrite(yr, wk, pass.next);
     if(pass.first) return;                                /* baseline only, nobody is told */
     for(const b of pass.teams){
@@ -19044,15 +19083,9 @@ function setScoreAlerts(on){
   S.scoreAlerts = !!on; saveState(); renderScoreAlertSetting();
   toast(on ? 'Scoring alerts on' : 'Scoring alerts off');
 }
-function setScoreAlertMin(v){
-  const n = Math.max(1, Math.min(50, Math.round(+v||0)));
-  S.scoreAlertMin = n; saveState(); renderScoreAlertSetting();
-  toast('Buzzing at +'+n+' points');
-}
 function renderScoreAlertSetting(){
   const cb=document.getElementById('setScoreAlerts'); if(cb) cb.checked=scoreAlertsOn();
   const lb=document.getElementById('scoreAlertsLbl'); if(lb) lb.textContent=scoreAlertsOn()?'On':'Off';
-  const mn=document.getElementById('setScoreAlertMin'); if(mn) mn.value=String(scoreAlertMin());
   const rc=document.getElementById('setScoreRelay'); if(rc) rc.checked=scoreRelayOn();
   const rl=document.getElementById('scoreRelayLbl'); if(rl) rl.textContent=scoreRelayOn()?'On':'Off';
   const la=document.getElementById('setLineupAlerts'); if(la) la.checked=lineupAlertsOn();
@@ -19075,8 +19108,8 @@ function renderScoreAlertSetting(){
     : !pushRelay()
     ? 'Set the relay URL above first — without it nothing can be sent.'
     : scoreRelayOn()
-    ? 'The relay watches on its own schedule, so these arrive with every app in the league shut. Each manager hears only about their own starters, at +'+scoreAlertMin()+' points or more. Needs push/score-watch.js on the worker with a KV binding named BBL and a cron trigger.'
-    : 'Each manager is told only about their own starters, at +'+scoreAlertMin()+' points or more. Smaller gains add up until they clear that. Sent from a commissioner device, so they only go out while one has the app open.')
+    ? 'The relay watches on its own schedule, so these arrive with every app in the league shut. Each manager hears only about their own starters, and only when one scores a touchdown or kicks a field goal. Needs push/score-watch.js on the worker with a KV binding named BBL and a cron trigger.'
+    : 'Each manager is told only about their own starters, and only when one scores a touchdown or kicks a field goal. Sent from a commissioner device, so they only go out while one has the app open.')
     + lineupNote;
 }
 function setPushRelay(v){
@@ -19104,7 +19137,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-20 · the recap knocks too';
+const BUILD_STAMP = '2026-09-22 · touchdowns and field goals only';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
