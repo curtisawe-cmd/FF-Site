@@ -145,6 +145,63 @@ export function watchPass(snapshot, stats, marks) {
   return { first, next, sends: out };
 }
 
+/* ============================================================
+   THE LINEUP RECORDER - a week is written down whether or not anybody opens the app.
+
+   liveScores, and with it the record of who started, is written by an open app. On a Sunday when
+   nobody opens one, nothing is written, and that week then reads as today's roster for ever.
+
+   The relay cannot write to the database - it deliberately holds no credential and is not going
+   to be given one - but it is awake every two minutes and every snapshot it receives already
+   carries each team's whole lineup, slots included. So it keeps its own copy in the blob store
+   and hands it back on request; the next app to open fills the gap in the database from it.
+
+   A STALE SNAPSHOT IS THE RIGHT ANSWER. If nobody opened the app all weekend then the last one
+   posted before kickoff is the lineup that played, because lineups lock at each player's
+   kickoff. That is exactly what should be recorded.
+
+   WHEN IT CLOSES. The app rolls to the next week at 4 AM Eastern on the Tuesday, which is also
+   when lineups unlock. So the first snapshot that names a LATER week closes the one before it,
+   and a closed record is never written again. That is what stops Wednesday's rearranging from
+   reaching back into last week, and it needs no clock of its own and no extra fetch.
+   ============================================================ */
+export async function runLineupRecord(store) {
+  if (!store) return { skipped: 'no blob store' };
+  let snap;
+  try { snap = await store.get('snapshot', { type: 'json' }); } catch { return { skipped: 'store read failed' }; }
+  if (!snap) return { skipped: 'no snapshot yet - open the league app once' };
+  const season = +snap.season || 0, week = +snap.week || 0;
+  if (!season || !week) return { skipped: 'no live week' };
+
+  /* the week before this one is finished business now: close it where it stands */
+  let closed = null;
+  if (week > 1) {
+    const prevKey = `lu_${season}_${week - 1}`;
+    try {
+      const prev = await store.get(prevKey, { type: 'json' });
+      if (prev && !prev.closed) { await store.setJSON(prevKey, { ...prev, closed: true, closedAt: Date.now() }); closed = week - 1; }
+    } catch { /* a close that does not land is retried on the next run */ }
+  }
+
+  const key = `lu_${season}_${week}`;
+  let cur = null;
+  try { cur = await store.get(key, { type: 'json' }); } catch {}
+  if (cur && cur.closed) return { week, skipped: 'already closed', closed };
+
+  const teams = {};
+  (snap.teams || []).forEach(t => {
+    const ti = +t.ti;
+    if (!Number.isInteger(ti)) return;
+    const map = {};
+    (t.roster || []).forEach(p => { if (p && p.id && p.slot) map[String(p.id)] = String(p.slot); });
+    if (Object.keys(map).length) teams[String(ti)] = map;
+  });
+  if (!Object.keys(teams).length) return { week, skipped: 'snapshot carries no lineups', closed };
+  try { await store.setJSON(key, { season, week, at: Date.now(), from: +snap.at || 0, teams, closed: false }); }
+  catch { return { week, skipped: 'store write failed', closed }; }
+  return { week, teams: Object.keys(teams).length, closed };
+}
+
 /* ---- OneSignal ---- */
 export async function pushOne(uid, title, message, url) {
   const APP_ID = String(process.env.ONESIGNAL_APP_ID || '').trim();

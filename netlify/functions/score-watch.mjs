@@ -14,7 +14,7 @@
    ============================================================ */
 
 import { getStore } from '@netlify/blobs';
-import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch, runInjuryWatch } from './lib/score.mjs';
+import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch, runInjuryWatch, runLineupRecord } from './lib/score.mjs';
 
 export default async () => {
   let store = null;
@@ -36,9 +36,13 @@ export default async () => {
   /* and the Monday morning bench crime, which is one read of the store until its hour comes */
   let bench;
   try { bench = await runBenchWatch(store); } catch (e) { bench = { error: String(e && e.message || e) }; }
+  /* and the lineup recorder, which is two blob calls and no fetch at all: it is what makes a
+     week's lineup survive nobody opening the app on a Sunday */
+  let record;
+  try { record = await runLineupRecord(store); } catch (e) { record = { error: String(e && e.message || e) }; }
   /* Netlify keeps these in the function log, which is where to look when a Sunday goes quiet */
-  console.log('[BBL score-watch]', JSON.stringify({ ...result, lineup, swing, injury, bench }));
-  return new Response(JSON.stringify({ ...result, lineup, swing, injury, bench }), { headers: { 'Content-Type': 'application/json' } });
+  console.log('[BBL score-watch]', JSON.stringify({ ...result, lineup, swing, injury, bench, record }));
+  return new Response(JSON.stringify({ ...result, lineup, swing, injury, bench, record }), { headers: { 'Content-Type': 'application/json' } });
 };
 
 export const config = { schedule: '*/2 * * * *' };

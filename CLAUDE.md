@@ -936,7 +936,26 @@ without touching who played), `autoScoreWeek`, the Game Center headers and the r
 A week from before this existed has no record and falls back to the current lineup, and says so on
 the card (`.gc-nolineup`) rather than letting the board quietly claim somebody started who did not.
 
-**Backfilling an old week, and why it only half works.** `backfillLineups(wk)` takes each team's
+**The relay records the lineup too, so a week survives nobody opening the app.** `liveScores` is
+written only by an open app, so a Sunday when nobody opens one leaves the week with no lineup at
+all. `runLineupRecord` (in the two-minute watcher, two blob calls and no fetch) keeps the relay's
+own copy in `lu_{season}_{week}`, built from `snap.teams[].roster`, which already carries every
+slot. A STALE SNAPSHOT IS THE RIGHT ANSWER here: lineups lock at each player's kickoff, so if
+nobody opened the app all weekend the last snapshot posted before it is the lineup that played.
+
+It closes on the week rolling, not on a clock of its own: the first snapshot naming a LATER week
+marks the one before it `closed`, and a closed record is never written again, which is what stops
+Wednesday's rearranging reaching back. `POST {lineupsFor:{season,week}}` hands it back;
+`fillLineupsFromRelay(wk)` writes it into the database for the teams that have none, never over
+one that does. `maybeFillLineups` runs it on the pulse for the last two finished weeks, throttled
+15 minutes per device and self-limiting - once one device has filled the gap every other finds
+nothing missing. `POST {recordNow:true}` runs the recorder on demand.
+
+This is EXACT: it is the lineup itself. The search below is the fallback for weeks played before
+the recorder existed.
+
+**Backfilling an old week, and why it only half works.**
+ `backfillLineups(wk)` takes each team's
 recorded total and searches that week's stat file for the legal lineup that adds up to it
 (`lineupForTotal`, a pruned walk over the slot sequence in TENTHS so the arithmetic is exact, with
 `rosterAsOf(ti, at)` rewinding the transaction log to the roster of the day). Two assignments of

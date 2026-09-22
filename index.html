@@ -5674,6 +5674,7 @@ setInterval(()=>{
   if(window.currentView==='polls') renderPolls();                  /* poll countdowns tick */
   if(window.currentView==='trades') renderOffers();
   maybeAutoScore();
+  try{ maybeFillLineups(); }catch(e){}     /* a week the database missed, recovered from the relay */
   try{ checkScoreAlerts(); }catch(e){}      /* who on your team just scored */
   try{ maybeWriteRecap(); }catch(e){}       /* the week's write-up, once the games are over */
   try{ maybeWriteDraftRecap(); }catch(e){}  /* and the draft's, for a device that was not in the room when it ended */
@@ -13126,6 +13127,58 @@ function backfillNeeded(wk){
   return need;
 }
 
+/* The relay keeps its own copy of every week's lineup, built from the snapshots the app posts
+   it, and it is awake on the cron whether or not anybody has the app open. When the database
+   never got a week - nobody opened the app while the games were on - this is where the truth
+   is, and it is the lineup ITSELF rather than a deduction from the total. */
+async function relayLineups(wk){
+  const relay = pushRelay(); if(!relay) return null;
+  const yr = +((S.season||{}).year) || curDraftYear();
+  try{
+    const r = await fetch(relay, { method:'POST', headers:{'Content-Type':'application/json'},
+                                   body: JSON.stringify({ lineupsFor:{ season: yr, week: +wk } }) });
+    if(!r.ok) return null;
+    const j = await r.json();
+    return (j && j.teams && Object.keys(j.teams).length) ? j : null;
+  }catch(e){ return null; }
+}
+/* fill in the teams the database is missing, and only those - nothing recorded is overwritten */
+async function fillLineupsFromRelay(wk){
+  if(!fbOk() || !window.fbUser) return 0;
+  const rec = await relayLineups(wk); if(!rec) return 0;
+  const add = {};
+  Object.keys(rec.teams||{}).forEach(k=>{
+    const ti = +k; if(!Number.isInteger(ti) || playedStarters(wk, ti)) return;
+    const map = rec.teams[k];
+    if(map && typeof map==='object' && Object.keys(map).length) add[ti] = map;
+  });
+  if(!Object.keys(add).length) return 0;
+  const yr = +((S.season||{}).year) || curDraftYear();
+  const prev = (liveScoresMap && liveScoresMap[wk]) || null;
+  const node = prev ? { ...prev } : { at: Date.now(), by:(window.fbUser&&window.fbUser.uid)||'', season: yr };
+  if(!node.season) node.season = yr;
+  node.starters = { ...(node.starters||{}), ...add };
+  try{ await window.FB.dbSet(`${livePath()}/${wk}`, node); }catch(e){ return 0; }
+  liveScoresMap = liveScoresMap || {}; liveScoresMap[wk] = node;
+  return Object.keys(add).length;
+}
+/* Self-heal, quietly. A finished week with gaps and a relay that probably has them: the first
+   device to notice fills it in and every other device then finds nothing missing, so this
+   settles itself rather than twelve phones racing. Throttled per device either way. */
+let _luFillAt = 0;
+async function maybeFillLineups(){
+  if(!fbOk() || !window.fbUser || !pushRelay()) return;
+  if(Date.now() - _luFillAt < 15*60000) return;
+  const cur = currentNflWeek(); if(!cur) return;
+  for(let w = Math.max(1, cur-2); w < cur; w++){
+    if(!backfillNeeded(w)) continue;
+    _luFillAt = Date.now();
+    const got = await fillLineupsFromRelay(w);
+    if(got && window.currentView==='matchups'){ window._gcKey=null; try{ renderGameCenter(); renderMatchups(); }catch(e){} }
+    return;
+  }
+  _luFillAt = Date.now();
+}
 async function backfillLineups(wk){
   if(!requireAdmin()) return;
   wk = +wk || 0;
@@ -13135,6 +13188,14 @@ async function backfillLineups(wk){
   if(!need){ toast(`Week ${wk} already has every lineup on record.`); return; }
   if(!confirm(`Rebuild the lineups for week ${wk}?\n\nEach team's recorded total is matched against that week's stats to work out which players were started. A team whose total two different lineups could produce is left alone rather than guessed at, and nothing already on record is touched.`)) return;
   const yr = +((S.season||{}).year) || curDraftYear();
+  /* the relay's own copy first - it is the lineup itself, not a deduction from the total */
+  toast(`Asking the relay about week ${wk}…`);
+  let fromRelay = 0; try{ fromRelay = await fillLineupsFromRelay(wk); }catch(e){}
+  if(fromRelay && !backfillNeeded(wk)){
+    if(window.currentView==='matchups'){ window._gcKey=null; renderMatchups(); try{ renderGameCenter(); }catch(e){} }
+    toast(`Week ${wk}: ${fromRelay} lineup${fromRelay===1?'':'s'} recovered from the relay, all on file now`);
+    return;
+  }
   toast(`Reading week ${wk} stats…`);
   let stats; try{ stats = await fetchWeekStats(yr, wk, true); }catch(e){ stats = null; }
   if(!stats || !Object.keys(stats).length){ toast(`No ${yr} week ${wk} stats to work from.`); return; }
@@ -13153,7 +13214,8 @@ async function backfillLineups(wk){
     });
   });
   if(!Object.keys(out).length){
-    toast(`Week ${wk}: no lineup could be pinned down. Nothing changed.`);
+    toast(fromRelay ? `Week ${wk}: ${fromRelay} recovered from the relay; the rest could not be pinned down from the totals.`
+                    : `Week ${wk}: no lineup could be pinned down. Nothing changed.`);
     console.warn('[BBL backfill] week '+wk+' unresolved:', stuck);
     return;
   }
@@ -13166,7 +13228,7 @@ async function backfillLineups(wk){
   liveScoresMap = liveScoresMap || {}; liveScoresMap[wk] = node;
   if(window.currentView==='matchups'){ window._gcKey=null; renderMatchups(); try{ renderGameCenter(); }catch(e){} }
   console.log('[BBL backfill] week '+wk+' rebuilt:', solved, 'left alone:', stuck);
-  toast(`Week ${wk}: ${solved.length} lineup${solved.length===1?'':'s'} rebuilt${stuck.length?`, ${stuck.length} left alone (more than one lineup fits)`:''}`);
+  toast(`Week ${wk}: ${fromRelay?fromRelay+' from the relay, ':''}${solved.length} worked out from the totals${stuck.length?`, ${stuck.length} left alone (more than one lineup fits)`:''}`);
 }
 function clearWeekScores(wk){
   if(!requireAdmin()) return;
@@ -19345,7 +19407,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-22 · rebuild an old week from its total';
+const BUILD_STAMP = '2026-09-22 · the relay remembers the lineup too';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;

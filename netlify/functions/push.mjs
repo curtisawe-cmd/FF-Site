@@ -9,6 +9,7 @@
      {swingNow: true}     run the swing watch this second and report the odds it sees
      {benchNow: true}     run the bench watch this second and report who it would shame
      {injuryNow: true}    run the injury watch this second and report who it would tell
+     {lineupsFor:{season,week}}  hand back the lineups the recorder kept for that week
      {diag: true}         say what is configured, without ever revealing the key
 
    Why this exists at all: OneSignal refuses to be sent from a browser, and the REST key must
@@ -25,7 +26,7 @@
    ============================================================ */
 
 import { getStore } from '@netlify/blobs';
-import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch, runInjuryWatch } from './lib/score.mjs';
+import { runScoreWatch, runLineupWatch, runSwingWatch, runBenchWatch, runInjuryWatch, runLineupRecord } from './lib/score.mjs';
 
 const SEGMENTS = ['Total Subscriptions', 'Active Subscriptions', 'Subscribed Users', 'All'];
 
@@ -83,6 +84,23 @@ export default async (request) => {
   if (body && body.injuryNow === true) {
     const res = await runInjuryWatch(store());
     return json({ ran: true, ...res });
+  }
+  /* run the recorder on demand, for proving the chain out of season */
+  if (body && body.recordNow === true) {
+    const res = await runLineupRecord(store());
+    return json({ ran: true, ...res });
+  }
+  /* What the recorder kept for a week. The app asks for this when the database never got that
+     week's lineups, which is what happens if nobody opened the app while the games were on. */
+  if (body && body.lineupsFor) {
+    const season = +body.lineupsFor.season || 0, week = +body.lineupsFor.week || 0;
+    if (!season || !week) return json({ error: 'season and week required' }, 400);
+    const s = store();
+    if (!s) return json({ error: 'blob store unavailable' }, 500);
+    let rec = null;
+    try { rec = await s.get(`lu_${season}_${week}`, { type: 'json' }); } catch {}
+    if (!rec) return json({ ran: true, none: true, season, week });
+    return json({ ran: true, season, week, closed: !!rec.closed, at: rec.at || 0, teams: rec.teams || {} });
   }
 
   if (!API_KEY || !APP_ID) {
