@@ -933,7 +933,23 @@ roster, and a starter traded away on the Tuesday took his points with him. Every
 a finished week now passes the record - `postLiveScores` (which also carries the recorded
 starters forward rather than re-recording, so a post made after the roll can correct the numbers
 without touching who played), `autoScoreWeek`, the Game Center headers and the recap's extras.
-A week from before this existed has no record and falls back to the current lineup, as before.
+A week from before this existed has no record and falls back to the current lineup, and says so on
+the card (`.gc-nolineup`) rather than letting the board quietly claim somebody started who did not.
+
+**Backfilling an old week, and why it only half works.** `backfillLineups(wk)` takes each team's
+recorded total and searches that week's stat file for the legal lineup that adds up to it
+(`lineupForTotal`, a pruned walk over the slot sequence in TENTHS so the arithmetic is exact, with
+`rosterAsOf(ti, at)` rewinding the transaction log to the roster of the day). Two assignments of
+the same SET of players count as one answer; two different sets make it ambiguous, and an
+ambiguous team is left alone rather than guessed at. Nothing already recorded is overwritten.
+
+Measured against real week-2 stats over a twelve-team league: about a third of lineups come back
+exactly, and none ever came back wrong. The rest are genuinely undecidable - any two players who
+scored the same, and above all the several who scored 0.0, are interchangeable without changing
+the total, so no algorithm can tell them apart. The information was not kept and cannot be
+recovered from what was. The button only appears when a finished, scored week still has lineups
+missing, and it says how many it could not settle.
+
 
 The record is the WHOLE lineup, bench and reserve included, not just the starters
 (`lineupSnapshot`), because who sat is a fact about that Sunday too. `playedStarterIds(rec)` is
