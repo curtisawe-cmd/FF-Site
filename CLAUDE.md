@@ -773,6 +773,21 @@ top. `logMove` mirrors a win into the transaction log synchronously, so `faabSpe
 was spent earlier in the same pass; the old running total charged every bid twice, and a manager with
 $100 who won a $60 claim was told he had -$20 for his next one.
 
+### A claim spends the spot
+
+`claimRoomFor(ti)` is the room a **new** claim can count on: the open roster spots minus the pending
+claims that name no drop, or name one that would not free a spot (gone from the roster since, a keeper,
+on IR: `dropFreesSpot`, the same test `awardClaim` applies at settlement). `claimWaiver` and
+`openClaimModal` ask for a drop when that is zero, not when the roster is full. Ben had one open spot (a
+man on IR) and filed three claims, and none was made to name a drop; two of them would have failed on the
+deadline for want of room, with nobody there to ask. When the roster itself has a spot the modal says why
+("1 open spot and 1 claim already waiting on it"), and a man already named as the drop in another of your
+claims is tagged in its list. `strandedClaims(ti)` walks a team's claims in the manager's own order (the
+walk-down's order) and returns the ones with nowhere to land; the Your claims card marks them **no room**
+with the fix (withdraw, re-file naming a drop), and a direct add that takes the spot a claim was waiting
+on says so in its toast. A named drop is executed on a win whether or not the claim ahead of it lost, as
+on ESPN and Yahoo.
+
 ## Waiver priority resets every Tuesday
 
 The league rule reads "1 day, resets to inverse standings", and the app now does what ESPN, Yahoo

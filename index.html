@@ -1400,6 +1400,7 @@ nav.tabs button{position:relative}
 .blockchip.on{background:var(--gold);border:1px solid var(--gold);color:#0e1114;border-style:solid}
 .blockchip.on:hover{color:#0e1114;opacity:.85}
 /* a sign hung since you last looked at the board */
+.wv-noroom{margin-left:6px;font-family:var(--f-ui);font-weight:800;font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--danger);border:1px solid var(--danger);border-radius:999px;padding:1px 6px;white-space:nowrap}
 .tbk-new{margin-left:6px;font-family:var(--f-ui);font-weight:800;font-size:8.5px;letter-spacing:.09em;
   text-transform:uppercase;background:var(--gold);color:#0e1114;border-radius:4px;padding:1px 4px;vertical-align:middle}
 /* the Trade Center's shop window */
@@ -17632,7 +17633,9 @@ function addPlayer(ti, pid){
   logMove(ti,'add',{playerId:pid, name:p.name, pos:p.pos, nfl:p.team});   /* the id is what makes it undoable */
   renderTeams(); refreshDraftUI();
   if(window.currentView==='players') renderPlayers();
-  toast(`Added ${p.name}`);
+  /* the spot may have been the one a waiver claim of yours was waiting on */
+  let strand=[]; try{ strand=strandedClaims(ti); }catch(e){}
+  toast(strand.length ? `Added ${p.name}. Your claim on ${strand[0].name} has no room now \u2014 withdraw it and put it in again naming a drop.` : `Added ${p.name}`);
 }
 /* add-with-drop: if there's room just add; if full, force a drop to make room (roster stays at the limit) */
 function addWithDrop(ti, pid){
@@ -17936,6 +17939,41 @@ function myPendingClaims(){
   return claimList().filter(c=>c.team===ti && c.status==='pending')
     .sort((a,b)=> claimOrderOf(a)-claimOrderOf(b) || (+a.at||0)-(+b.at||0));
 }
+/* A CLAIM SPENDS THE SPOT. A pending claim that names no drop takes a roster spot if it wins, so
+   the room a NEW claim can count on is the open spots minus those claims, not the open spots
+   alone. Ben had one open spot - a man on IR - and filed three claims, and none of them was made
+   to name a drop, because only the roster was being counted. Two of the three would then have
+   failed on the deadline for want of room, with nobody there to ask.
+   A claim whose named drop would free a spot is a swap and costs nothing here. One whose named
+   drop would not - gone from the roster since, a keeper, on IR - counts as if it named nobody,
+   which is exactly how awardClaim will treat it when it settles. */
+function claimRoomFor(ti){
+  const d = realDraft();
+  const open = rosterLimit() - rosterCount(ti);
+  const waiting = claimList().filter(c=> +c.team===ti && c.status==='pending' && !dropFreesSpot(ti, c.dropPid, d)).length;
+  return { open, waiting, room: open - waiting };
+}
+/* whether cutting this man on a win would free a roster spot: on the roster, not a keeper and
+   not on IR (an IR man is not in the count, so cutting him frees nothing). awardClaim applies
+   this same test when the claim settles, so what was asked for at filing and what is checked
+   at settlement cannot disagree. */
+function dropFreesSpot(ti, pid, d){
+  if(!pid) return false;
+  d = d || realDraft();
+  const dp = d.picks.find(x=>x.teamIndex===ti && String(x.playerId)===String(pid) && !x.cut);
+  return !!dp && !isKeeperPick(dp) && ((S.lineups||{})[ti]||{})[dp.playerId]!=='IR';
+}
+/* A team's pending claims, in that manager's own order, that have nowhere to land: each claim
+   without a drop that would free a spot takes an open one, and once those are spoken for the
+   rest are stranded unless a claim above them loses. That is the walk-down's order too, so
+   this is a true preview of what settles as "no roster room". A claim gets here by being filed
+   before the room was counted, or by a direct add taking the spot it was waiting on. */
+function strandedClaims(ti){
+  const d = realDraft(); let spare = rosterLimit() - rosterCount(ti);
+  return claimList().filter(c=> +c.team===ti && c.status==='pending')
+    .sort((a,b)=> claimOrderOf(a)-claimOrderOf(b) || (+a.at||0)-(+b.at||0))
+    .filter(c=>{ if(dropFreesSpot(ti, c.dropPid, d)) return false; if(spare>0){ spare--; return false; } return true; });
+}
 /* Arrows, not a typed rank: the draft order learned this the hard way. A number you type has to
    be validated, rejected and bounced back, and the bounce reads as the app ignoring you. */
 function moveClaim(id, dir){
@@ -17971,9 +18009,11 @@ function claimWaiver(pid, dropPid, bidRaw){
   const w=wireEntry(pid);
   if(!w){ toast('That player is not on waivers.'); return; }
   if(myClaimFor(pid)){ toast('You already have a claim in on him.'); return; }
-  /* A full roster has to name its drop up front. The claim processes on a deadline with nobody
-     watching, so there is no one to ask at the time - an unanswered question would just fail. */
-  const full = rosterCount(ti) >= rosterLimit();
+  /* A roster with no room to spare has to name its drop up front: full, or every open spot
+     already spoken for by a claim of yours waiting on it (claimRoomFor). The claim processes on a
+     deadline with nobody watching, so there is no one to ask at the time - an unanswered
+     question would just fail. */
+  const full = claimRoomFor(ti).room <= 0;
   /* under FAAB the bid has to be collected too, so the modal opens for every claim, not just
      the ones that need a drop named */
   if((full && !dropPid) || (faabOn() && bidRaw===undefined)){ openClaimModal(pid); return; }
@@ -18025,10 +18065,10 @@ function awardClaim(c, bid){
   /* Room is worked out BEFORE anything is cut. Cutting first and checking after meant a named
      drop could be executed and the claim still fail - a real player off the roster, no drop
      logged, nothing to undo, and the cut pushed league-wide by the next save. */
-  const lu = (S.lineups||{})[ti] || {};
   const dp = c.dropPid ? d.picks.find(x=>x.teamIndex===ti && String(x.playerId)===String(c.dropPid) && !x.cut) : null;
   const canDrop = !!dp && !isKeeperPick(dp);
-  const frees = (canDrop && lu[dp.playerId]!=='IR') ? 1 : 0;         /* an IR man is not in the count */
+  const frees = dropFreesSpot(ti, c.dropPid, d) ? 1 : 0;   /* an IR man is not in the count - and it is
+                                                             the test the claim was filed against */
   if(rosterCount(ti) - frees >= rosterLimit()) return false;
   const dropped = canDrop ? cutPick(ti, String(c.dropPid), d) : null;
   const nfl = p.team || p.nfl || '';
@@ -18137,8 +18177,11 @@ function openClaimModal(pid){
   /* keepers are not on the table, so they are not in the list */
   const roster=realDraft().picks.filter(x=>x.teamIndex===ti && !x.cut && (S.lineups[ti]||{})[x.playerId]!=='IR'
                                         && !isKeeperPick(x));
-  const full=rosterCount(ti) >= rosterLimit();
+  const rm=claimRoomFor(ti), full=rm.room <= 0;
   if(full && !roster.length){ toast('Roster is full and everyone droppable is a keeper \u2014 no room to claim into.'); return; }
+  /* a man already named as the drop in another of your claims: allowed, since that claim may
+     lose, but said out loud, because if both win the second has nobody left to cut and fails */
+  const namedIn={}; claimList().forEach(c=>{ if(+c.team===ti && c.status==='pending' && c.dropPid && c.pid!==String(pid)) namedIn[String(c.dropPid)]=c.name||''; });
   const money=faabOn(), left=money?faabLeft(ti):0;
   let ov=document.getElementById('claimModal');
   if(!ov){ ov=document.createElement('div'); ov.id='claimModal'; ov.className='pmodal-overlay';
@@ -18158,15 +18201,15 @@ function openClaimModal(pid){
     </div>` : '';
   ov.innerHTML=`<div class="pmodal" style="max-width:460px">
     <button class="pmodal-x" onclick="closeClaimModal()">✕</button>
-    <h2 style="margin:0 0 4px">${full?`Roster full, ${rosterLimit()} max`:'Put a bid in'}</h2>
+    <h2 style="margin:0 0 4px">${full ? (rm.open>0 ? 'No room to spare' : `Roster full, ${rosterLimit()} max`) : 'Put a bid in'}</h2>
     <p class="sub" style="margin:0 0 12px">${money?'Bidding on':'Claiming'} <b>${esc(w.name)}</b>${full
-      ? `. Name who you drop if it wins, applied at ${esc(waiverClearLabel(w.until))}:`
+      ? `. ${rm.open>0 ? `You have ${rm.open} open spot${rm.open===1?'':'s'} and ${rm.waiting} claim${rm.waiting===1?'':'s'} already waiting on ${rm.open===1?'it':'them'}, so this one names a drop too; he goes if this claim wins, whichever way the others settle. ` : ''}Name who you drop if it wins, applied at ${esc(waiverClearLabel(w.until))}:`
       : `, settles in ${esc(waiverClearLabel(w.until))}.`}</p>
     ${bidBlock}
     ${full ? `<div style="max-height:44vh;overflow-y:auto">${roster.map(r=>`
       <div class="faRow">${playerFace(r,30)}
         <span class="postag pos-${r.pos}" style="--pc:var(--${String(r.pos||'').toLowerCase()})">${r.pos}</span>
-        <span class="faName">${esc(r.name)}</span><span class="pmeta">${r.nfl||''}</span>
+        <span class="faName">${esc(r.name)}</span><span class="pmeta">${r.nfl||''}${namedIn[String(r.playerId)]!==undefined?` \u00B7 already your drop for ${esc(namedIn[String(r.playerId)])}`:''}</span>
         <button class="btn danger" style="padding:3px 11px;font-size:13px" onclick="claimWaiver('${w.pid}','${r.playerId}',${money?'faabBidInput()':'undefined'})">Drop</button>
       </div>`).join('')}</div>`
       : `<button class="btn" onclick="claimWaiver('${w.pid}','',faabBidInput())">Put bid in</button>`}
@@ -18327,13 +18370,17 @@ function renderWaivers(){
   const mineClaims = myPendingClaims();
   /* One claim has no order to set, so the ranking only appears once there is a choice to make */
   const rank = mineClaims.length > 1;
+  /* the ones with nowhere to land - filed before the room was counted, or after a direct add took
+     the spot. They fail on the deadline unless put in again naming a drop, so they are told now. */
+  const stranded = new Set(mine===null ? [] : strandedClaims(mine).map(c=>c.id));
   const mineHTML = !mineClaims.length ? '' : `<div class="card"><h2>Your claims</h2>
+    ${stranded.size?`<p class="sub" style="margin:0 0 10px;color:var(--danger)">A claim marked <b>no room</b> has no spot to land in: the open spots are spoken for by the claims above it. Withdraw it and put it in again naming a drop, or it fails when it settles.</p>`:''}
     ${rank?`<p class="sub" data-note="wv-mine" style="margin:0 0 10px">Your order, top first. They cannot all land — a won claim sends you to the back of the league order, and your roster only has so much room — so put the one you actually want at the top.</p>`:''}${
     mineClaims.map((c,k)=>`<div class="wv-item"><div class="faRow wv-mine">
       ${rank?`<span class="wv-rank">${k+1}</span>`:''}
       <span class="faName">${esc(c.name)}</span>
       <span class="pmeta">${esc(c.pos||'')} ${esc(c.nfl||'')}${c.dropName?` · dropping ${esc(c.dropName)}`:''}</span>
-      <span class="statpill">${esc(waiverClearLabel(c.clearsAt))}</span>
+      <span class="statpill">${esc(waiverClearLabel(c.clearsAt))}</span>${stranded.has(c.id)?`<span class="wv-noroom" title="No spot to land in unless a claim above loses. Withdraw it and put it in again naming a drop.">no room</span>`:''}
       ${rank?`<span class="wv-move">
         <button class="btn ghost" ${k===0?'disabled':''} title="Move up" onclick="moveClaim('${c.id}',-1)">▲</button>
         <button class="btn ghost" ${k===mineClaims.length-1?'disabled':''} title="Move down" onclick="moveClaim('${c.id}',1)">▼</button>
@@ -18388,7 +18435,7 @@ function renderWaivers(){
         <dt>Bidding big</dt>
         <dd data-note="faab-over">You are allowed to have more bids in than you could actually pay for. They settle in the order you rank them, and the first one your budget cannot cover fails, with the rest of your money untouched. That player then goes to the next highest bidder rather than to nobody, so put your claims in the order you actually want them.</dd>
         <dt>Roster full</dt>
-        <dd data-note="faab-drop">Name who you would drop at the moment you bid. Claims settle on a deadline with nobody watching, so a question asked then would have nobody to answer it and the claim would simply fail.</dd>
+        <dd data-note="faab-drop">Name who you would drop at the moment you bid. Claims settle on a deadline with nobody watching, so a question asked then would have nobody to answer it and the claim would simply fail. A spot one of your claims is already waiting on counts as taken, so with one open spot your second claim names a drop too.</dd>
       </dl>
     </div>`;
 
@@ -19383,7 +19430,7 @@ function renderPushState(){
 }
 /* "I pushed but don't see it" has bitten twice — this makes the running build visible and
    gives a one-tap way to blow away the offline cache and reload. */
-const BUILD_STAMP = '2026-09-22 · no record, no fiction';
+const BUILD_STAMP = '2026-09-23 · a claim spends the spot';
 function renderBuildStamp(){
   const el=document.getElementById('buildStamp'); if(!el) return;
   el.textContent = 'Running build: ' + BUILD_STAMP;
